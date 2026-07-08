@@ -1,0 +1,36 @@
+{
+  "$comment": [
+    "MERGE this into ~/.claude/settings.json — deep-merge under the existing 'hooks' key; do NOT replace the file.",
+    "Paths must be ABSOLUTE: exec-form args are passed to node with no shell, so '~' or '$HOME' would be taken literally and the hook would never load.",
+    "Replace <ABSOLUTE_HOME> below with your absolute home directory — e.g. /Users/alice (macOS) or /home/alice (Linux). Run `echo $HOME` to find it.",
+    "${CLAUDE_PROJECT_DIR} is also wrong here — it resolves to the CURRENT project, never ~/.claude.",
+    "Install, verify, and rollback steps: global/README.md."
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["<ABSOLUTE_HOME>/.claude/hooks/guard.mjs"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["<ABSOLUTE_HOME>/.claude/hooks/stop-gate.mjs"],
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  }
+}

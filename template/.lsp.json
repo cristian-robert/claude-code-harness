@@ -1,0 +1,13 @@
+{
+  "$comment": "Language servers for type-aware DIAGNOSTICS (native Claude Code). Keep only the ones whose binary you have installed; /harness-init prunes to your detected stack. These give the agent compile/type errors automatically — complementary to the codebase-search MCP (symbol navigation).",
+  "typescript": {
+    "command": "typescript-language-server",
+    "args": ["--stdio"],
+    "extensionToLanguage": { ".ts": "typescript", ".tsx": "typescriptreact", ".js": "javascript", ".jsx": "javascriptreact" }
+  },
+  "python": {
+    "command": "pyright-langserver",
+    "args": ["--stdio"],
+    "extensionToLanguage": { ".py": "python" }
+  }
+}

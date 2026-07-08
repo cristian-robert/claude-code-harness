@@ -1,0 +1,9 @@
+{
+  "$comment": "Symbol-search MCP. Requires `uv` on PATH (fetches the `mcp` package ephemerally). Python-only (AST). For other languages, LSP diagnostics via .lsp.json. /harness-init wires/removes this per your stack.",
+  "mcpServers": {
+    "codebase-search": {
+      "command": "uv",
+      "args": ["run", "--with", "mcp", "python3", "${CLAUDE_PROJECT_DIR}/.claude/tooling/codebase_search.py"]
+    }
+  }
+}
