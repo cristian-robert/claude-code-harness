@@ -47,6 +47,7 @@ Plan and Implement run in **separate sessions** (`/clear` between): a fresh cont
 - Knowledge skills: consult **architecture-map** BEFORE placing new code; **debugging-this-repo** BEFORE diagnosing any bug or test failure.
 - Touching the harness itself (hooks/rules/skills)? Read `.claude/references/harness-maintenance.md` FIRST.
 - **Navigate by symbol, not grep**: the `codebase-search` MCP (`where_is`/`find_references`/`outline`, Python) + LSP diagnostics (`.lsp.json`) come before text search — `.claude/references/symbol-navigation.md`.
+- **Doc-grounded work**: building against an external tool/library? Consult its docs for your pinned version — `wiki/stack/<tool>/` first, else `/research` (context7 + official docs). Never code an API from memory.
 
 ## Compact instructions
 
@@ -56,4 +57,3 @@ When compacting, always preserve: the active plan path (`plans/*.md`), the last 
 
 - <Rule Claude got wrong once — the ratchet: every line here traces to a real failure.>
 - <Non-obvious gotcha, e.g. "route order matters in <file>: static before dynamic".>
-- <Env/tooling quirk, e.g. "DB tests hit the live staging DB — ask before running".>

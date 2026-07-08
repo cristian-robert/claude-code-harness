@@ -26,6 +26,7 @@ Every brief has four elements — objective · output format + size cap · tool 
 | Locate/trace a SYMBOL (def, callers, module API) | `codebase-search` MCP (`where_is`/`find_references`/`outline`) if wired; LSP diagnostics for type errors — NOT grep (see `.claude/references/symbol-navigation.md`) |
 | Locate files / text / patterns | built-in Explore (haiku-class; skips CLAUDE.md) |
 | Understand / synthesize | `scout` (sonnet) |
+| External tool/library docs & how-to | `/research <tool>[@version]` — cache-first at `wiki/stack/<tool>/`, then context7 + official docs (dispatches `research-gatherer`); never code an external API from memory |
 | Implement | general-purpose — model per the plan's hint |
 | Code review | `code-reviewer` (opus floor — never downgrade a reviewer) |
 | Runtime check (drive the app) | `qa-evaluator` |
