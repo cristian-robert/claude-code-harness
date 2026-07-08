@@ -65,7 +65,25 @@ Universal: `type`, `updated: YYYY-MM-DD`, lowercase-hyphenated `tags`. Types: `i
 Mature notes converged on two richer fields the schema under-documents — use them:
 
 - `sources:` — exact repo file-path provenance list. Makes a note re-verifiable against code.
+- `doc-sources:` — documentation provenance (URL + version) for `research`/`reference` notes. Distinct
+  from `sources:` (code paths); a doc-research note uses `doc-sources:` and usually leaves `sources:` empty.
 - `related:` — `[[wikilink]]` list. Builds the graph that makes notes findable later.
+
+## Doc-grounded tool research — `wiki/stack/<tool>/`
+
+External-tool knowledge (Supabase, Stripe, a framework) is inherently cross-project, so it gets a
+tool-keyed evergreen home: **`wiki/stack/<tool>/`**, the durable cache the reuse decision keys off
+(tool + major version). `/research <tool>[@version] [focus]` is the loop: check that cache first; on a
+miss/stale/version-mismatch, fetch CURRENT docs (context7 MCP + official docs), verify, write raw to
+`inbox/research/<tool>.md` (staging), then distil to `wiki/stack/<tool>/`. Agents never code an external
+API from training memory — they consult the cache or current docs for the version the project pins.
+Detail: `.claude/references/research-and-docs.md`.
+
+**Two harvest triggers, cleanly divided.** `/evolve` remains THE trigger for **session lessons**
+(`inbox/`/`projects/ → wiki/`, ask-first). `/research` is the built-in harvest for **external-tool
+knowledge**, which — being inherently cross-project — writes straight to `wiki/stack/<tool>/` (skipping
+`projects/`) as part of its own run, so it is not a "harvest later" anyone must remember. Both keep the
+Index Law and the sole-source-of-truth / no-mirror doctrine.
 
 ## Claude Code auto-memory — complement, not replacement
 
