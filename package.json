@@ -12,7 +12,7 @@
     "type": "git",
     "url": "git+https://github.com/cristian-robert/claude-code-harness.git"
   },
-  "files": ["cli/", "template/", "docs/*.md", "README.md"],
+  "files": ["cli/", "template/", "tools/context-ledger.mjs", "docs/*.md", "README.md"],
   "scripts": {
     "test:init": "node cli/init-backup.test.js",
     "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js",
