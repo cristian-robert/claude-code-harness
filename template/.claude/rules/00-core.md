@@ -4,10 +4,8 @@ Always-on rules beyond CLAUDE.md. Each traces to a real failure.
 
 ## Context economy
 
-- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent. It burns tokens in its own window and returns a summary; your window stays clean.
-- `/clear` between unrelated tasks — leftover context biases the next one.
-- Long task hitting context pressure → `/handoff` then `/clear` beats compacting: compaction loses paths-scoped rules + subdirectory CLAUDE.md.
-- Two failed corrections on the same issue → stop patching the conversation. `/clear`, rewrite the prompt with what you learned, restart.
+- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent: it burns tokens in its own window and returns a summary. `/clear` between unrelated tasks — leftover context biases the next.
+- Long task under context pressure → `/handoff` then `/clear` (beats compacting — that loses paths-scoped rules + subdir CLAUDE.md). Two failed corrections on one issue → stop patching; `/clear` and restart with a rewritten prompt.
 
 ## Task routing
 
