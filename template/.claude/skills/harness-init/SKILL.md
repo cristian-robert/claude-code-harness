@@ -53,7 +53,7 @@ Ask ONLY what detection cannot know, all in one round:
 | Check | Must show |
 |---|---|
 | `node .claude/hooks/smoke-test.mjs` | Green — paste the real output |
-| `node <PHE>/tools/context-ledger.mjs .` (path to your PHE checkout) | Total vs budget — paste the real output |
+| `npx claude-code-harness file-size-check` | Total vs budget — paste the real output |
 | `grep -rnE "<(placeholder|cmd|Project Name|backend-dir|frontend-dir|One sentence|Rule |Non-obvious|Env/)" CLAUDE.md .claude/rules/ .claude/skills/architecture-map/ .claude/skills/debugging-this-repo/ \|\| true` | Prints NOTHING — the template's whole placeholder grammar, not just the literal `<placeholder>` (other skills legitimately contain these strings) |
 | `grep -n "workTracking" .claude/harness.json` | Prints the line with the chosen backend + method |
 | `ls ~/.claude/agents/architect-agent/AGENT.md ~/.claude/agents/tester-agent/AGENT.md 2>&1` | Presence check — see the notice below |

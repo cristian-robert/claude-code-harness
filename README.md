@@ -28,24 +28,17 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 3. **Loops** (state on disk): PIV+E pipeline — `/plan → /implement → /validate → /review → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work, and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
 4. **Knowledge** (cross-project): pointer-block wiring to an Obsidian vault; doc-grounded work via `/research` (tool docs cached once at `wiki/stack/<tool>/`, reused everywhere, always current for your pinned version); `/evolve` harvests session lessons and prunes.
 
-## Adopt in a project
+## Install
 
 ```bash
-cp template/CLAUDE.md <your-project>/            # greenfield: no existing CLAUDE.md
-mkdir -p <your-project>/.claude && cp -R template/.claude/. <your-project>/.claude/   # merges; avoids nested .claude/.claude
-cp -R template/plans template/reports template/examples <your-project>/
-cp template/.mcp.json template/.lsp.json <your-project>/          # symbol search (codebase-search MCP) + LSP diagnostics
-cd <your-project>
-claude                                   # then type: /harness-init
+# in your project directory
+npx claude-code-harness init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up)
+npx claude-code-harness update    # updates the payload, preserving your customizations (three-way merge)
 ```
 
-`/harness-init` is the guided setup: it interviews the repo, fills every `CLAUDE.md`
-placeholder, arms the stop gate in `.claude/harness.json`, asks the work-tracking questions
-(kanban or scrum; files or GitHub Issues backend), gitignores `.claude/state/`,
-and verifies with the hook smoke test + context ledger. Manual fallback: `$EDITOR
-CLAUDE.md .claude/harness.json`, then `node .claude/hooks/smoke-test.mjs`.
+Then open Claude Code and run **`/harness-init`** — it detects your stack, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
 
-Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. Requirements: Node ≥18 on PATH; the superpowers plugin installed (skills degrade to inline fallbacks without it).
+Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. The superpowers plugin is the execution discipline inside each stage (skills degrade to inline fallbacks without it).
 
 ## Maintain
 
