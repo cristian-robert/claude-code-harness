@@ -91,6 +91,8 @@ Register every new project in `[[projects/_index|projects/_index.md]]`. When a p
 
 `wiki/` is the post-graduation home for knowledge that outlives any single project. Harvest into it after a project teaches you something general. Organize by topic subfolders (each gets an `_index.md`). If a lesson is specifically about *building agents*, it belongs in `agent-kb/` instead.
 
+External-tool/library docs live tool-keyed under `wiki/stack/<tool>/`, cached and reused across projects via `/research` (see the repo's `.claude/references/research-and-docs.md`).
+
 ## Agent-KB Doctrine
 
 `agent-kb/` compounds your agent-building expertise across projects:
@@ -114,6 +116,7 @@ The frontmatter contract for every note type lives in `[[system/schemas/frontmat
 - `type:` — `index` | `project-index` | `note` | `research` | `snippet` | `reference` | `adr`.
 - Project index adds: `status:` (`active` | `paused` | `shipped` | `archived`), `kind:` (`app` | `agent` | `library` | `service`), `repo:`.
 - `updated:` — `YYYY-MM-DD`, bumped on every meaningful edit.
+- `doc-sources:` — documentation provenance (URL+version) for `research`/`reference` notes; distinct from `sources:` (repo file paths).
 
 ## Maintenance
 

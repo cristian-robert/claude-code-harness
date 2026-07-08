@@ -17,6 +17,8 @@ tags:
 
 _Empty. Organize by topic subfolders — each subfolder gets its own `_index.md` (Index Law). Example topics: `stack/`, `patterns/`, `howtos/`, `references/`._
 
+- [[wiki/stack/_index|stack/]] — tool-keyed external-docs cache (populated by /research).
+
 ## Agent SOP
 
 1. Before reinventing something, search here first.
