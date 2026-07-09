@@ -1,0 +1,25 @@
+{
+  "name": "claude-code-harness",
+  "version": "1.0.0",
+  "description": "The harness around Claude Code that makes it reliable — tested hooks, two-tier context, a PIV+E pipeline with an agile delivery layer, doc-grounded research reuse, and a vault-linked knowledge loop. Installs a hardened .claude/ payload.",
+  "bin": {
+    "claude-code-harness": "cli/index.js"
+  },
+  "keywords": ["claude", "claude-code", "harness", "agentic", "piv-loop", "context-engineering", "obsidian"],
+  "author": "Cristian-Robert Iosef",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cristian-robert/claude-code-harness.git"
+  },
+  "files": ["cli/", "template/", "tools/context-ledger.mjs", "docs/*.md", "README.md"],
+  "scripts": {
+    "test:init": "node cli/init-backup.test.js",
+    "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js",
+    "test:hooks": "node template/.claude/hooks/smoke-test.mjs",
+    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node template/.claude/hooks/smoke-test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

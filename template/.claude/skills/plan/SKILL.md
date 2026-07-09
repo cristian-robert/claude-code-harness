@@ -46,6 +46,7 @@ Match the work against this repo's knowledge skills (architecture-map etc.) and 
 ## 4. Explore the codebase
 
 - Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `model: sonnet` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
+- External tools/services the plan builds against (major frameworks & services — NOT transitive deps): read `wiki/stack/<tool>/` frontmatter for version + freshness; on a miss/stale/version-mismatch run `/research <tool>@<pinned>`. Cite the `wiki/stack/<tool>/` path in the plan's Context. Never plan tool usage from memory. Detail: `.claude/references/research-and-docs.md`.
 - Read directly only what the plan will name: files to be modified (real line numbers), the closest existing analogue, relevant rules/context modules.
 
 ## 5. Draft (Architect hat) — superpowers:writing-plans

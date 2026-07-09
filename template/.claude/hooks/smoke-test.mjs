@@ -43,6 +43,27 @@ check("denies Read of .env.production", denies(runHook("guard.mjs", { ...base, t
 check("allows Read of .env.example", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.example" } })));
 check("allows Read of normal file", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/src/app.ts" } })));
 check("denies Bash cat .env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env" } })));
+// Bash key-file parity with the Read branch — these were silently ALLOWED before.
+check("denies Bash cat *.pem", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat server.pem" } })));
+check("denies Bash cat id_rsa", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat ~/.ssh/id_rsa" } })));
+check("denies Bash cat credentials.json", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat config/credentials.json" } })));
+check("denies Bash reading a secrets/ file", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat secrets/prod.json" } })));
+// .env template variants are NOT secrets — allowed on Bash too (matches Read).
+check("allows Bash cat .env.sample", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env.sample" } })));
+check("allows Bash cat .env.template", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env.template" } })));
+// A quoted secret read inside $()/backtick substitution must NOT slip through.
+check("denies Bash secret via $() substitution", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "loaded: $(cat ~/.ssh/id_rsa)"' } })));
+check("denies Bash secret via backticks", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "X=`cat server.pem`" } })));
+check("denies Bash secret via process substitution <()", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "diff <(cat server.pem) b" } })));
+check("denies Bash secret glued to a redirect", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat id_rsa>/tmp/x" } })));
+check("denies Bash secret via sh -c wrapper", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'bash -c "cat ~/.ssh/id_rsa"' } })));
+check("denies Bash secret via python -c wrapper", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "python3 -c \"print(open('config/credentials.json').read())\"" } })));
+// Fail-safe: a secret FILENAME anywhere (even prose) is denied — we cannot tell a
+// real path from prose without shell semantics, and over-blocking is the safe side.
+check("denies secret filename in prose (fail-safe)", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "rotate server.pem now"' } })));
+// Guard against over-blocking ordinary, non-secret commands.
+check("allows Bash cat package.json", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat package.json" } })));
+check("allows Bash normal echo", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo hello world" } })));
 check("denies Bash rm -rf", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "rm -rf build" } })));
 check("denies Bash find -delete", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "find . -name '*.tmp' -delete" } })));
 check("allows Bash rm single file", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "rm build/out.js" } })));
@@ -352,6 +373,50 @@ console.log("agent frontmatter");
     const keys = m ? [...m[1].matchAll(/^([A-Za-z][\w-]*)\s*:/gm)].map(x => x[1]) : [];
     const bad = keys.filter(k => !AGENT_KEYS.has(k));
     check(`${f}: frontmatter keys all in documented schema`, m && bad.length === 0, bad.length ? `unknown: ${bad.join(", ")}` : "no frontmatter");
+  }
+}
+
+// The checks above run each hook directly; this block asserts the actual
+// settings.json WIRING (referenced files exist, timeouts are sane, SubagentStop
+// matcher names a real agent) so a broken path/timeout/matcher can't ship green.
+console.log("settings.json wiring");
+{
+  const claudeDir = dirname(HOOKS);
+  let settings = {};
+  try { settings = JSON.parse(readFileSync(join(claudeDir, "settings.json"), "utf8")); }
+  catch (e) { check("settings.json parses", false, e.message); }
+  let harness = {};
+  try { harness = JSON.parse(readFileSync(join(claudeDir, "harness.json"), "utf8")); } catch { /* optional */ }
+  const lifecycles = settings.hooks || {};
+
+  let missing = "";
+  for (const lc of Object.keys(lifecycles)) {
+    for (const entry of lifecycles[lc] || []) {
+      for (const h of entry.hooks || []) {
+        // Scan every arg (not just the last) for a hook script — robust if a
+        // future entry appends trailing CLI args after the .mjs path.
+        for (const arg of h.args || []) {
+          const m = /([^/\\]+\.mjs)$/.exec(arg);
+          if (m && !existsSync(join(HOOKS, m[1]))) missing = m[1];
+        }
+      }
+    }
+  }
+  check("every settings.json hook file exists on disk", !missing, missing && `missing ${missing}`);
+
+  // A hook killed by its outer timeout fails silently. Stop must outlast the gate
+  // budget; PostToolUse must outlast post-edit's internal smoke-test budget (60s).
+  const stopTimeout = lifecycles.Stop?.[0]?.hooks?.[0]?.timeout ?? 0;
+  check("Stop timeout outlasts harness stopGateTotalSec", stopTimeout >= (harness.stopGateTotalSec ?? 0),
+    `Stop ${stopTimeout}s < stopGateTotalSec ${harness.stopGateTotalSec}s`);
+  const postTimeout = lifecycles.PostToolUse?.[0]?.hooks?.[0]?.timeout ?? 0;
+  check("PostToolUse timeout outlasts post-edit smoke budget (60s)", postTimeout >= 60,
+    `PostToolUse ${postTimeout}s < 60s (post-edit.mjs runs the smoke test with a 60s budget)`);
+
+  const subMatcher = lifecycles.SubagentStop?.[0]?.matcher;
+  if (subMatcher) {
+    check(`SubagentStop matcher '${subMatcher}' names a real agent`,
+      existsSync(join(claudeDir, "agents", subMatcher + ".md")));
   }
 }
 

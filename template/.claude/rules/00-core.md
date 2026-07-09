@@ -4,10 +4,8 @@ Always-on rules beyond CLAUDE.md. Each traces to a real failure.
 
 ## Context economy
 
-- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent. It burns tokens in its own window and returns a summary; your window stays clean.
-- `/clear` between unrelated tasks — leftover context biases the next one.
-- Long task hitting context pressure → `/handoff` then `/clear` beats compacting: compaction loses paths-scoped rules + subdirectory CLAUDE.md.
-- Two failed corrections on the same issue → stop patching the conversation. `/clear`, rewrite the prompt with what you learned, restart.
+- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent: it burns tokens in its own window and returns a summary. `/clear` between unrelated tasks — leftover context biases the next.
+- Long task under context pressure → `/handoff` then `/clear` (beats compacting — that loses paths-scoped rules + subdir CLAUDE.md). Two failed corrections on one issue → stop patching; `/clear` and restart with a rewritten prompt.
 
 ## Task routing
 
@@ -26,6 +24,7 @@ Every brief has four elements — objective · output format + size cap · tool 
 | Locate/trace a SYMBOL (def, callers, module API) | `codebase-search` MCP (`where_is`/`find_references`/`outline`) if wired; LSP diagnostics for type errors — NOT grep (see `.claude/references/symbol-navigation.md`) |
 | Locate files / text / patterns | built-in Explore (haiku-class; skips CLAUDE.md) |
 | Understand / synthesize | `scout` (sonnet) |
+| External tool/library docs & how-to | `/research <tool>[@version]` — cache-first at `wiki/stack/<tool>/`, then context7 + official docs (dispatches `research-gatherer`); never code an external API from memory |
 | Implement | general-purpose — model per the plan's hint |
 | Code review | `code-reviewer` (opus floor — never downgrade a reviewer) |
 | Runtime check (drive the app) | `qa-evaluator` |

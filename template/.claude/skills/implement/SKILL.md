@@ -46,6 +46,7 @@ Dispatcher rules for subagent-driven mode:
 
 - Implementer subagents get the task text **verbatim** plus the closest `CLAUDE.md` and scoped rules — no paraphrasing; pass `model:` explicitly per the plan's hint (default opus).
 - File-mutating subagents run **sequentially** (parallel worktree agents have collided and leaked edits). Parallelize read-only research only. Sole exception: Wave mode.
+- Building against an external tool/library? Consult its `wiki/stack/<tool>/` cache or current docs (the plan should name it) BEFORE writing tool-specific code — do not code the API from memory. Missing/stale → `/research <tool>@<pinned>` first.
 
 Wave mode (plan marks `Wave: N`): tasks in a wave MAY run as parallel dispatches, each in an isolated worktree. Preflight: verify the wave's `Files:` lists are pairwise disjoint — any overlap collapses the wave to sequential. Waves run in order; run the full gate after each.
 

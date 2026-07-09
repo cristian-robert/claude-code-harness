@@ -6,7 +6,19 @@ disable-model-invocation: true
 
 # /harness-init — fit the copied template to THIS project
 
-Run once, right after copying the template in. Goal: zero `<placeholder>` left, stop gate armed, hooks proven. Adapt files in place — smallest diffs, never rewrite from scratch.
+Run once, right after copying the template in. Goal: zero `<placeholder>` left, stop gate armed, hooks proven, and — if you adopted over an existing harness — your prior config folded back in. Adapt files in place — smallest diffs, never rewrite from scratch.
+
+## 0 · RECONCILE (only when adopting over an existing harness)
+
+Skip entirely if `.claude/.init-meta.json` is absent — fresh project, nothing to reconcile.
+
+`settings.json` is already merged: `init`/`update` deep-union your prior hooks + permissions with the framework's. You reconcile only the PROSE the CLI backed up but can't merge by rule — `CLAUDE.md` and `.claude/rules/*.md`. For each `backedUpFiles` entry that is one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
+
+- Carry the user's substance into PHE's shape: product one-liner, Commands rows, every incident-traced Convention/rule, protected-dir and live-infra rules.
+- On a shared discipline, PHE's wording wins; keep the user's traceable specifics.
+- Smallest diffs; never rewrite. A backed-up file PHE does NOT ship already survived untouched (no collision) — leave it.
+
+After merging, smoke-test the unioned `settings.json`: flag any merged hook whose target script is missing (a stale hook from the old harness) for the user to prune, and surface the unioned `permissions.allow` for their review. Keep every `.backup` until the user confirms, then offer to delete them.
 
 ## 1 · DETECT (read first, ask second, write nothing yet)
 
@@ -27,8 +39,9 @@ Ask ONLY what detection cannot know, all in one round:
 2. Confirm/correct the detected commands (dev / test / lint / typecheck).
 3. Protected dirs or live-infra commands needing an ASK-first rule (e.g. "tests hit the staging DB").
 4. Known past incidents worth a rule — the ratchet: no incident, no rule.
-5. Vault wiring: offer the pointer block (The Vault: `system/pointer-block.md`) or skip.
-6. Work tracking — one set: backend `none` / `files` / `GitHub issues`? Method Kanban (default) / Scrum? Kanban only: WIP limit (default 3)?
+5. Vault: detect one (a pasted pointer block, or ask for its path). None + wanted → offer to scaffold a fresh vault from `.claude/references/vault-scaffold/` at a path they choose. Existing → just wire the pointer block. Or skip vault wiring entirely.
+6. Docs: add the context7 MCP to `.mcp.json` for live doc-fetch in `/research`? (default yes; it needs `npx`.)
+7. Work tracking — one set: backend `none` / `files` / `GitHub issues`? Method Kanban (default) / Scrum? Kanban only: WIP limit (default 3)?
 
 ## 3 · GENERATE (smallest diffs; adapt in place)
 
@@ -40,7 +53,9 @@ Ask ONLY what detection cannot know, all in one round:
 - `examples/`: copy `frontend.CLAUDE.md` / `backend.CLAUDE.md` into real subdirs only where a dir has local traps; delete `examples/` if unused.
 - Symbol navigation: `.lsp.json` → keep only language servers whose binary is installed (`command -v typescript-language-server`, `pyright-langserver`, …), delete the rest; `.mcp.json` codebase-search → keep if the repo has Python AND `uv` is on PATH, else delete it (it is Python-AST-only). Tell the user which are active.
 - `.gitignore`: add `.claude/state/` — runtime state (compact snapshots, gate verdicts) never commits.
-- Work tracking from question 6 (backend `none`: skip all of this):
+- Vault (from question 5): scaffold chosen → copy `.claude/references/vault-scaffold/` to the target path, then in that copy's `system/pointer-block.md` replace `<ABSOLUTE_VAULT_PATH>` with the target's absolute path; paste that pointer block's fenced content into the repo `CLAUDE.md` (the marked slot), filling `<project-name>`. Existing vault → just paste + fill its pointer block. Index Law already holds in the scaffold. Skipped → leave the `CLAUDE.md` vault comment as-is.
+- context7 (from question 6): yes → add `"context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }` to `.mcp.json` `mcpServers`. No → leave `.mcp.json` as-is (codebase-search only).
+- Work tracking from question 7 (backend `none`: skip all of this):
   - `.claude/harness.json`: set `workTracking` — `backend` + `method` (+ `wipLimit` in kanban).
   - Create `backlog/` with a `.gitkeep`; scrum also creates `sprints/` with a `.gitkeep`.
   - `github` backend: `gh auth status` AND a resolvable GitHub remote must both succeed, then run the Label bootstrap block from `.claude/references/work-tracking.md` VERBATIM (type:* + status:backlog..done + priority:P0..P2 — no status:accepted label; closed = accepted; idempotent, `-f` tolerates existing). ANY other failure (no gh, no auth, no remote, network) → set `backend: files` instead and tell the user why.
@@ -50,7 +65,7 @@ Ask ONLY what detection cannot know, all in one round:
 | Check | Must show |
 |---|---|
 | `node .claude/hooks/smoke-test.mjs` | Green — paste the real output |
-| `node <PHE>/tools/context-ledger.mjs .` (path to your PHE checkout) | Total vs budget — paste the real output |
+| `npx claude-code-harness file-size-check` | Total vs budget — paste the real output |
 | `grep -rnE "<(placeholder|cmd|Project Name|backend-dir|frontend-dir|One sentence|Rule |Non-obvious|Env/)" CLAUDE.md .claude/rules/ .claude/skills/architecture-map/ .claude/skills/debugging-this-repo/ \|\| true` | Prints NOTHING — the template's whole placeholder grammar, not just the literal `<placeholder>` (other skills legitimately contain these strings) |
 | `grep -n "workTracking" .claude/harness.json` | Prints the line with the chosen backend + method |
 | `ls ~/.claude/agents/architect-agent/AGENT.md ~/.claude/agents/tester-agent/AGENT.md 2>&1` | Presence check — see the notice below |

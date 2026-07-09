@@ -13,8 +13,8 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 | `docs/` | The distilled discipline: layer model, context engineering, enforcement vs guidance, loops, model policy, knowledge layer, sources |
 | `template/` | **The payload** — copy into any project: `CLAUDE.md`, `.claude/` (hooks, rules, skills, agents, references, `statusline.mjs`), `plans/`, `reports/`. `.claude/state/` holds runtime snapshots — gitignored by `/harness-init` |
 | `template/.claude/hooks/` | 6 tested Node hooks (guard, post-edit + hook self-test, stop-gate + verdict persistence, session-start, pre-compact, verdict-gate) + `smoke-test.mjs` |
-| `template/.claude/agents/` | `scout` (read-only exploration), `code-reviewer` (project memory across reviews), `qa-evaluator` (drives the running app) |
-| `template/.claude/skills/` | PIV+E pipeline + `/handoff` (reset-with-artifact) + `/harness-init` (guided adoption) + agile layer (`/backlog`, `/sprint`, `/accept`) + 2 knowledge skills (`architecture-map`, `debugging-this-repo`) |
+| `template/.claude/agents/` | `scout` (read-only exploration), `code-reviewer` (project memory across reviews), `qa-evaluator` (drives the running app), `research-gatherer` (doc-grounded research for `/research`) |
+| `template/.claude/skills/` | PIV+E pipeline + `/research` (doc-grounded) + `/handoff` (reset-with-artifact) + `/harness-init` (guided adoption) + agile layer (`/backlog`, `/sprint`, `/accept`) + 2 knowledge skills (`architecture-map`, `debugging-this-repo`) |
 | `template/.claude/references/` | Load-on-cite: plan template, harness maintenance, `dispatch-protocol`, `output-contract`, `item-template`, `work-tracking`, `autonomous-mode` |
 | `backlog/` + `sprints/` (convention) | Optional work tracking in adopted projects: one item per `backlog/<id>-<slug>.md`, `sprints/<n>.md` in scrum mode; the board is derived by grep, never committed (`docs/06-delivery-org.md`) |
 | `loop/` | Ralph-style autonomous loop driver (`loop.mjs`) + prompt template + doctrine |
@@ -26,26 +26,21 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 1. **Session context** (advisory, tiered — Tier 0 always → Tier 3 explicit, per `docs/01`): root `CLAUDE.md` ≤60 lines; unscoped rules; two model-invoked knowledge skills; `paths:`-scoped rules and subdirectory `CLAUDE.md` load lazily; references load only when cited.
 2. **Enforcement** (deterministic): PreToolUse guard (secrets, recursive deletes, protected branches — survives `--dangerously-skip-permissions`); advisory post-edit lint that also self-tests hook edits; a Stop gate that blocks a turn from ending red and persists its verdict; a PreCompact snapshot so plan/gate state survives compaction; a SubagentStop verdict gate on the reviewer; `statusline.mjs` shows branch, context pressure, and gate state at a glance.
 3. **Loops** (state on disk): PIV+E pipeline — `/plan → /implement → /validate → /review → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work, and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
-4. **Knowledge** (cross-project): pointer-block wiring to an Obsidian vault; `/evolve` is the harvest trigger.
+4. **Knowledge** (cross-project): pointer-block wiring to an Obsidian vault; doc-grounded work via `/research` (tool docs cached once at `wiki/stack/<tool>/`, reused everywhere, always current for your pinned version); `/evolve` harvests session lessons and prunes.
 
-## Adopt in a project
+## Install
 
 ```bash
-cp template/CLAUDE.md <your-project>/            # greenfield: no existing CLAUDE.md
-mkdir -p <your-project>/.claude && cp -R template/.claude/. <your-project>/.claude/   # merges; avoids nested .claude/.claude
-cp -R template/plans template/reports template/examples <your-project>/
-cp template/.mcp.json template/.lsp.json <your-project>/          # symbol search (codebase-search MCP) + LSP diagnostics
-cd <your-project>
-claude                                   # then type: /harness-init
+# in your project directory
+npx claude-code-harness init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up as .backup)
+npx claude-code-harness update    # refreshes the payload (existing files backed up as .backup)
 ```
 
-`/harness-init` is the guided setup: it interviews the repo, fills every `CLAUDE.md`
-placeholder, arms the stop gate in `.claude/harness.json`, asks the work-tracking questions
-(kanban or scrum; files or GitHub Issues backend), gitignores `.claude/state/`,
-and verifies with the hook smoke test + context ledger. Manual fallback: `$EDITOR
-CLAUDE.md .claude/harness.json`, then `node .claude/hooks/smoke-test.mjs`.
+**Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx claude-code-harness merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
 
-Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. Requirements: Node ≥18 on PATH; the superpowers plugin installed (skills degrade to inline fallbacks without it).
+Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
+
+Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. The superpowers plugin is the execution discipline inside each stage (skills degrade to inline fallbacks without it).
 
 ## Maintain
 
