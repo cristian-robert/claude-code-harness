@@ -228,6 +228,18 @@ async function main() {
       if (rcExisted) { stats.updated++; } else { stats.created++; }
     }
 
+    // Refresh examples/ (parity with init.js).
+    var examplesSrc = path.join(sourceDir, 'template', 'examples');
+    if (fs.existsSync(examplesSrc)) {
+      var exStats = backupAndCopy(examplesSrc, path.join(projectRoot, 'examples'), projectRoot);
+      stats.created += exStats.created;
+      stats.updated += exStats.updated;
+      stats.backedUp += exStats.backedUp;
+      for (var ei = 0; ei < exStats.backedUpFiles.length; ei++) {
+        stats.backedUpFiles.push(exStats.backedUpFiles[ei]);
+      }
+    }
+
     // Reconcile settings.json: union the user's original team settings
     // (settings.json.backup) back into the freshly-updated framework version so
     // their hooks + permissions survive the update. Merges ONLY if a prior

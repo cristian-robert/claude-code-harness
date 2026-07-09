@@ -43,7 +43,7 @@
             "type": "command",
             "command": "node",
             "args": ["${CLAUDE_PROJECT_DIR}/.claude/hooks/post-edit.mjs"],
-            "timeout": 45
+            "timeout": 90
           }
         ]
       }

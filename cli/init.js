@@ -303,6 +303,9 @@ async function main() {
     console.log('');
   }
 
+  // From here the install writes to disk — run it under try/finally so the temp
+  // dir is always cleaned up even if a copy throws (parity with update.js).
+  try {
   // Install .claude/ with backup
   console.log('Installing framework...');
   var stats = backupAndCopy(
@@ -342,6 +345,20 @@ async function main() {
     }
     fs.copyFileSync(rcSrc, rcDest);
     if (rcExisted) { stats.updated++; } else { stats.created++; }
+  }
+
+  // Install examples/ (frontend/backend CLAUDE.md samples). /harness-init copies
+  // the relevant one into real subdirs and deletes the rest — it can't do that if
+  // the dir was never installed.
+  var examplesSrc = path.join(sourceDir, 'template', 'examples');
+  if (fs.existsSync(examplesSrc)) {
+    var exStats = backupAndCopy(examplesSrc, path.join(targetDir, 'examples'), targetDir);
+    stats.created += exStats.created;
+    stats.updated += exStats.updated;
+    stats.backedUp += exStats.backedUp;
+    for (var ei = 0; ei < exStats.backedUpFiles.length; ei++) {
+      stats.backedUpFiles.push(exStats.backedUpFiles[ei]);
+    }
   }
 
   // Reconcile settings.json: if the user had a pre-existing team settings.json
@@ -422,8 +439,10 @@ async function main() {
     console.log('');
   }
 
-  cleanupTmpDir(tmpDir);
-  getRl().close();
+  } finally {
+    cleanupTmpDir(tmpDir);
+    getRl().close();
+  }
 }
 
 // Export for tests and other CLI entry points. Only run main() when invoked
