@@ -43,6 +43,27 @@ check("denies Read of .env.production", denies(runHook("guard.mjs", { ...base, t
 check("allows Read of .env.example", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.example" } })));
 check("allows Read of normal file", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/src/app.ts" } })));
 check("denies Bash cat .env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env" } })));
+// Bash key-file parity with the Read branch — these were silently ALLOWED before.
+check("denies Bash cat *.pem", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat server.pem" } })));
+check("denies Bash cat id_rsa", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat ~/.ssh/id_rsa" } })));
+check("denies Bash cat credentials.json", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat config/credentials.json" } })));
+check("denies Bash reading a secrets/ file", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat secrets/prod.json" } })));
+// .env template variants are NOT secrets — allowed on Bash too (matches Read).
+check("allows Bash cat .env.sample", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env.sample" } })));
+check("allows Bash cat .env.template", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .env.template" } })));
+// A quoted secret read inside $()/backtick substitution must NOT slip through.
+check("denies Bash secret via $() substitution", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "loaded: $(cat ~/.ssh/id_rsa)"' } })));
+check("denies Bash secret via backticks", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "X=`cat server.pem`" } })));
+check("denies Bash secret via process substitution <()", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "diff <(cat server.pem) b" } })));
+check("denies Bash secret glued to a redirect", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat id_rsa>/tmp/x" } })));
+check("denies Bash secret via sh -c wrapper", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'bash -c "cat ~/.ssh/id_rsa"' } })));
+check("denies Bash secret via python -c wrapper", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "python3 -c \"print(open('config/credentials.json').read())\"" } })));
+// Fail-safe: a secret FILENAME anywhere (even prose) is denied — we cannot tell a
+// real path from prose without shell semantics, and over-blocking is the safe side.
+check("denies secret filename in prose (fail-safe)", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "rotate server.pem now"' } })));
+// Guard against over-blocking ordinary, non-secret commands.
+check("allows Bash cat package.json", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat package.json" } })));
+check("allows Bash normal echo", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo hello world" } })));
 check("denies Bash rm -rf", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "rm -rf build" } })));
 check("denies Bash find -delete", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "find . -name '*.tmp' -delete" } })));
 check("allows Bash rm single file", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "rm build/out.js" } })));

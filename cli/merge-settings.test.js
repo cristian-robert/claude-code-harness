@@ -108,6 +108,55 @@ test('same matcher, different commands → BOTH preserved', () => {
   );
 });
 
+test('node hooks with same matcher+command but different args → BOTH preserved', () => {
+  // The real harness shape: every hook is command:"node" with the target script
+  // in args. Deduping on (matcher, type, command) alone collapses them to one and
+  // silently drops a guardrail. args MUST be part of the tuple identity.
+  const user = {
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/user-lint.mjs'], timeout: 10 }] },
+      ],
+    },
+  };
+  const fw = {
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'], timeout: 15 }] },
+      ],
+    },
+  };
+  const out = mergeSettings(user, fw);
+  const hooks = out.hooks.PreToolUse[0].hooks;
+  assert.strictEqual(hooks.length, 2, 'both node hooks must survive (distinct args)');
+  assert.deepStrictEqual(
+    hooks.map((h) => h.args[0]),
+    ['.claude/hooks/user-lint.mjs', '.claude/hooks/guard.mjs'],
+    'user hook then framework hook'
+  );
+});
+
+test('node hook round-trips args + timeout (nothing dropped)', () => {
+  const fw = {
+    hooks: {
+      SessionStart: [
+        { hooks: [{ type: 'command', command: 'node', args: ['${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.mjs'], timeout: 15, statusMessage: 'Orienting...' }] },
+      ],
+    },
+  };
+  const out = mergeSettings({}, fw);
+  const h = out.hooks.SessionStart[0].hooks[0];
+  assert.deepStrictEqual(h.args, ['${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start.mjs'], 'args preserved');
+  assert.strictEqual(h.timeout, 15, 'timeout preserved');
+  assert.strictEqual(h.statusMessage, 'Orienting...', 'other hook keys preserved');
+});
+
+test('exact duplicate node hook (same matcher+command+args) is still deduped', () => {
+  const entry = { matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'], timeout: 15 }] };
+  const out = mergeSettings({ hooks: { PreToolUse: [entry] } }, { hooks: { PreToolUse: [entry] } });
+  assert.strictEqual(out.hooks.PreToolUse[0].hooks.length, 1, 'identical node hook deduped');
+});
+
 test('permissions union: user has X, framework has Y → merged has [X, Y]', () => {
   const user = { permissions: { allow: ['Bash(git *)'], deny: [] } };
   const fw = { permissions: { allow: ['Bash(npm *)'], deny: ['WebFetch(https://evil.example/*)'] } };
@@ -230,6 +279,102 @@ test('cli/index.js merge-settings subcommand forwards to script', () => {
   );
   const merged = JSON.parse(out);
   assert.deepStrictEqual(merged.permissions.allow, ['Bash(test *)']);
+});
+
+// ─── reconcileSettingsJson (init/update post-step) ───────────────────────────
+
+const { reconcileSettingsJson } = require('./merge-settings.js');
+
+function seedProject(name, live, backup) {
+  const root = path.join(TMP, name);
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+  const livePath = path.join(root, '.claude', 'settings.json');
+  fs.writeFileSync(livePath, JSON.stringify(live, null, 2));
+  if (backup !== undefined) {
+    fs.writeFileSync(livePath + '.backup', JSON.stringify(backup, null, 2));
+  }
+  return { root, livePath };
+}
+
+const MARKER = '.settings-user-origin';
+
+test('adoption (userBackupJustCreated) unions the user backup with the framework and records the marker', () => {
+  // live = freshly-installed PHE settings; backup = user's original team settings.
+  const framework = {
+    permissions: { deny: ['Read(./.env)'] },
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'], timeout: 15 }] },
+      ],
+    },
+  };
+  const userBackup = {
+    permissions: { allow: ['Bash(docker *)'], deny: [] },
+    hooks: {
+      PreToolUse: [
+        { matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/my-lint.mjs'], timeout: 10 }] },
+      ],
+    },
+  };
+  const { root, livePath } = seedProject('recon-union', framework, userBackup);
+  const res = reconcileSettingsJson(root, { userBackupJustCreated: true });
+  assert.strictEqual(res.merged, true, 'should report a merge happened');
+  const merged = JSON.parse(fs.readFileSync(livePath, 'utf-8'));
+  const scripts = merged.hooks.PreToolUse[0].hooks.map((h) => h.args[0]);
+  assert.deepStrictEqual(scripts, ['.claude/hooks/my-lint.mjs', '.claude/hooks/guard.mjs'], 'user hook AND framework guard both survive');
+  assert.ok(merged.permissions.allow.includes('Bash(docker *)'), 'user allow preserved');
+  assert.ok(merged.permissions.deny.includes('Read(./.env)'), 'framework deny preserved');
+  assert.ok(fs.existsSync(livePath + '.backup'), 'backup retained as audit trail');
+  assert.ok(fs.existsSync(path.join(root, '.claude', MARKER)), 'user-origin marker written for future updates');
+});
+
+test('reconcileSettingsJson no-ops on a fresh install (no .backup, no marker)', () => {
+  const framework = { permissions: { deny: ['Read(./.env)'] }, hooks: {} };
+  const { root, livePath } = seedProject('recon-fresh', framework /* no backup */);
+  const before = fs.readFileSync(livePath, 'utf-8');
+  const res = reconcileSettingsJson(root, { userBackupJustCreated: true });
+  assert.strictEqual(res.merged, false, 'no backup → nothing to merge');
+  assert.strictEqual(fs.readFileSync(livePath, 'utf-8'), before, 'live settings untouched');
+  assert.ok(!fs.existsSync(path.join(root, '.claude', MARKER)), 'no marker written when nothing merged');
+});
+
+test('reconcileSettingsJson does NOT merge a PHE-origin backup (fresh-init→update lineage: no adoption flag, no marker)', () => {
+  // The dangerous case: a fresh install had no user settings, so the FIRST update
+  // backs up PHE's OWN v1 file. Merging that into a v1.5 that intentionally
+  // REMOVED an allow/hook would resurrect them (a security ratchet reversal).
+  const pheV1 = { permissions: { allow: ['Bash(curl -s https://api.internal/*)'], deny: [] }, hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/old-H1.mjs'] }] }] } };
+  const pheV15 = { permissions: { deny: [] }, hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'] }] }] } };
+  const { root, livePath } = seedProject('recon-ratchet', pheV15, pheV1);
+  const before = fs.readFileSync(livePath, 'utf-8');
+  const res = reconcileSettingsJson(root, {}); // update lineage: no userBackupJustCreated, no marker
+  assert.strictEqual(res.merged, false, 'must not merge a PHE-origin backup');
+  assert.strictEqual(fs.readFileSync(livePath, 'utf-8'), before, 'framework removals preserved — no resurrection');
+});
+
+test('after adoption, an update applies framework removals (marker path, no ratchet reversal)', () => {
+  const fwV1 = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'] }, { type: 'command', command: 'node', args: ['.claude/hooks/v1-only.mjs'] }] }] } };
+  const userBackup = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/my-lint.mjs'] }] }] } };
+  const { root, livePath } = seedProject('recon-update', fwV1, userBackup);
+  // Adoption at init:
+  reconcileSettingsJson(root, { userBackupJustCreated: true });
+  // Update: framework v1.5 dropped v1-only.mjs; backupAndCopy overwrites live, backup (user original) untouched.
+  const fwV15 = { hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'] }] }] } };
+  fs.writeFileSync(livePath, JSON.stringify(fwV15, null, 2));
+  const res = reconcileSettingsJson(root, {}); // update relies on the marker
+  assert.strictEqual(res.merged, true, 'marker → merge on update');
+  const scripts = JSON.parse(fs.readFileSync(livePath, 'utf-8')).hooks.PreToolUse[0].hooks.map((h) => h.args[0]).sort();
+  assert.deepStrictEqual(scripts, ['.claude/hooks/guard.mjs', '.claude/hooks/my-lint.mjs'], 'user hook kept; framework-removed v1-only.mjs NOT resurrected');
+});
+
+test('reconcileSettingsJson fails safe on a malformed backup (leaves framework settings intact)', () => {
+  const framework = { hooks: {}, permissions: { deny: ['Read(./.env)'] } };
+  const { root, livePath } = seedProject('recon-bad', framework);
+  fs.writeFileSync(livePath + '.backup', '{ this is not json');
+  const before = fs.readFileSync(livePath, 'utf-8');
+  const res = reconcileSettingsJson(root, { userBackupJustCreated: true });
+  assert.strictEqual(res.merged, false, 'malformed backup → no merge');
+  assert.ok(res.error, 'error surfaced');
+  assert.strictEqual(fs.readFileSync(livePath, 'utf-8'), before, 'framework settings left intact');
 });
 
 // Cleanup

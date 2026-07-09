@@ -13,8 +13,8 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 | `docs/` | The distilled discipline: layer model, context engineering, enforcement vs guidance, loops, model policy, knowledge layer, sources |
 | `template/` | **The payload** — copy into any project: `CLAUDE.md`, `.claude/` (hooks, rules, skills, agents, references, `statusline.mjs`), `plans/`, `reports/`. `.claude/state/` holds runtime snapshots — gitignored by `/harness-init` |
 | `template/.claude/hooks/` | 6 tested Node hooks (guard, post-edit + hook self-test, stop-gate + verdict persistence, session-start, pre-compact, verdict-gate) + `smoke-test.mjs` |
-| `template/.claude/agents/` | `scout` (read-only exploration), `code-reviewer` (project memory across reviews), `qa-evaluator` (drives the running app) |
-| `template/.claude/skills/` | PIV+E pipeline + `/handoff` (reset-with-artifact) + `/harness-init` (guided adoption) + agile layer (`/backlog`, `/sprint`, `/accept`) + 2 knowledge skills (`architecture-map`, `debugging-this-repo`) |
+| `template/.claude/agents/` | `scout` (read-only exploration), `code-reviewer` (project memory across reviews), `qa-evaluator` (drives the running app), `research-gatherer` (doc-grounded research for `/research`) |
+| `template/.claude/skills/` | PIV+E pipeline + `/research` (doc-grounded) + `/handoff` (reset-with-artifact) + `/harness-init` (guided adoption) + agile layer (`/backlog`, `/sprint`, `/accept`) + 2 knowledge skills (`architecture-map`, `debugging-this-repo`) |
 | `template/.claude/references/` | Load-on-cite: plan template, harness maintenance, `dispatch-protocol`, `output-contract`, `item-template`, `work-tracking`, `autonomous-mode` |
 | `backlog/` + `sprints/` (convention) | Optional work tracking in adopted projects: one item per `backlog/<id>-<slug>.md`, `sprints/<n>.md` in scrum mode; the board is derived by grep, never committed (`docs/06-delivery-org.md`) |
 | `loop/` | Ralph-style autonomous loop driver (`loop.mjs`) + prompt template + doctrine |
@@ -32,11 +32,13 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 
 ```bash
 # in your project directory
-npx claude-code-harness init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up)
-npx claude-code-harness update    # updates the payload, preserving your customizations (three-way merge)
+npx claude-code-harness init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up as .backup)
+npx claude-code-harness update    # refreshes the payload (existing files backed up as .backup)
 ```
 
-Then open Claude Code and run **`/harness-init`** — it detects your stack, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
+**Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx claude-code-harness merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
+
+Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
 
 Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. The superpowers plugin is the execution discipline inside each stage (skills degrade to inline fallbacks without it).
 

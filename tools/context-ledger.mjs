@@ -40,7 +40,10 @@ const DESC_WORDS = [40, 60]; // skill description soft/hard word cap (always loa
 
 const rows = [], warns = [], hardViolations = [];
 const add = (file, text, cls) => {
-  const lines = text.split("\n").length;
+  // Strip the trailing newline before counting so a file at exactly the cap
+  // isn't reported as cap+1 (mirrors the skill-body counter below). Otherwise a
+  // 60-line rule with the standard final newline falsely fails the hard cap.
+  const lines = text.replace(/\n+$/, "").split("\n").length;
   const b = LINE_BUDGETS[cls];
   let mark = "";
   if (b && lines > b[1]) { mark = " !!HARD"; hardViolations.push(`${file}: ${lines} lines > hard cap ${b[1]}`); }

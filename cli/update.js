@@ -6,6 +6,7 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
+const { reconcileSettingsJson } = require('./merge-settings');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -225,6 +226,19 @@ async function main() {
       }
       fs.copyFileSync(rcSrc, rcDest);
       if (rcExisted) { stats.updated++; } else { stats.created++; }
+    }
+
+    // Reconcile settings.json: union the user's original team settings
+    // (settings.json.backup) back into the freshly-updated framework version so
+    // their hooks + permissions survive the update. Merges ONLY if a prior
+    // adoption (init over an existing harness) left the user-origin marker — a
+    // backup created by update itself is PHE's own previous file and is left
+    // alone, so framework-side removals are never silently reverted.
+    var settingsReconcile = reconcileSettingsJson(projectRoot);
+    if (settingsReconcile.merged) {
+      console.log('Merged your .claude/settings.json (hooks + permissions) with the updated framework version.');
+    } else if (settingsReconcile.error) {
+      console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
     }
 
     // Create init metadata for /harness-init merge

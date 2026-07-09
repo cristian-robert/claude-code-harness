@@ -48,7 +48,7 @@ claude-code-harness — the harness around Claude Code that makes it reliable.
 Usage:
   npx claude-code-harness init             Install the harness payload into the current project
   npx claude-code-harness update           Update payload files, preserving customizations (three-way merge)
-  npx claude-code-harness merge-settings   Deep-merge your .claude/settings.local.json with the framework version
+  npx claude-code-harness merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
   npx claude-code-harness file-size-check  Lint always-loaded context (CLAUDE.md, rules, skills) against budgets
   npx claude-code-harness --version        Show version
   npx claude-code-harness --help           Show this help

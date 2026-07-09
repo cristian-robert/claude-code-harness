@@ -6,6 +6,7 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
+const { reconcileSettingsJson } = require('./merge-settings');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -215,7 +216,15 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
   return stats;
 }
 
-// Write init metadata for /start merge detection
+// Whether init should merge a just-backed-up settings.json as the USER's pre-PHE
+// config. True ONLY on genuine first adoption: a settings.json was backed up this
+// run AND PHE was not already installed. Re-running init on an already-PHE project
+// backs up PHE's OWN settings.json, which must not be treated as user content.
+function shouldMergeUserSettings(pheAlreadyInstalled, backedUpFiles) {
+  return !pheAlreadyInstalled && backedUpFiles.indexOf('.claude/settings.json') !== -1;
+}
+
+// Write init metadata for /harness-init reconcile (lists backed-up files)
 function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
   var metaDir = path.join(targetDir, '.claude');
   if (!fs.existsSync(metaDir)) {
@@ -242,6 +251,17 @@ async function main() {
   var targetDir = process.cwd();
   var hasGit = fs.existsSync('.git');
   var hasExisting = fs.existsSync('.claude') || fs.existsSync('CLAUDE.md');
+
+  // Capture BEFORE the copy whether PHE is already installed here. A settings.json
+  // this run backs up is the user's pre-PHE config ONLY on genuine first adoption;
+  // re-running init on an already-PHE project would back up PHE's OWN settings.json,
+  // which must never be merged as "user content" (it would resurrect framework-
+  // removed hooks/permissions). PHE's signature: harness.json / .init-meta.json / marker.
+  var claudeDir = path.join(targetDir, '.claude');
+  var pheAlreadyInstalled =
+    fs.existsSync(path.join(claudeDir, 'harness.json')) ||
+    fs.existsSync(path.join(claudeDir, '.init-meta.json')) ||
+    fs.existsSync(path.join(claudeDir, '.settings-user-origin'));
 
   // Detect tech stack
   var stack = detectTechStack();
@@ -324,6 +344,23 @@ async function main() {
     if (rcExisted) { stats.updated++; } else { stats.created++; }
   }
 
+  // Reconcile settings.json: if the user had a pre-existing team settings.json
+  // (now saved as settings.json.backup), deterministically union their hooks +
+  // permissions back into the freshly-installed framework settings.json so the
+  // guardrails they already had keep firing alongside PHE's. init is PHE's first
+  // contact with the project, so a settings.json backed up HERE is genuinely the
+  // user's — flag it so the merge runs and marks the backup user-origin for
+  // future updates. CLAUDE.md/rules need judgment and are reconciled by
+  // /harness-init instead.
+  var settingsReconcile = reconcileSettingsJson(targetDir, {
+    userBackupJustCreated: shouldMergeUserSettings(pheAlreadyInstalled, stats.backedUpFiles),
+  });
+  if (settingsReconcile.merged) {
+    console.log('Merged your existing .claude/settings.json (hooks + permissions) with the framework version.');
+  } else if (settingsReconcile.error) {
+    console.warn('Could not merge your existing settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
+  }
+
   // Create init metadata if files were backed up
   if (stats.backedUp > 0) {
     createInitMeta(targetDir, previousVersion, newVersion, stats.backedUpFiles);
@@ -395,6 +432,7 @@ async function main() {
 module.exports = {
   backupAndCopy: backupAndCopy,
   __test_tmpPath: __test_tmpPath,
+  shouldMergeUserSettings: shouldMergeUserSettings,
   main: main,
 };
 

@@ -143,6 +143,89 @@ function runTests() {
   var currentContent = fs.readFileSync(path.join(TARGET_DIR, 'CLAUDE.md'), 'utf-8');
   assert('CLAUDE.md has latest framework content (v3)', currentContent.includes('Framework CLAUDE.md v3'));
 
+  // ── Integration: real backupAndCopy + reconcileSettingsJson (adopt-over-existing) ──
+  // Exercises the REAL exported functions (not the inlined copy above) to prove
+  // the "keep what the user had + add ours" flow end-to-end.
+  console.log('adopt-over-existing (real functions):');
+  var realInit = require('./init.js');
+  var reconcile = require('./merge-settings.js').reconcileSettingsJson;
+
+  var ROOT = path.join(TEST_DIR, 'adopt');
+  var SRC_CLAUDE = path.join(ROOT, 'src', '.claude');
+  var PROJ = path.join(ROOT, 'proj');
+  var PROJ_CLAUDE = path.join(PROJ, '.claude');
+  // Framework payload (source): settings.json with the guard hook + a shipped skill.
+  fs.mkdirSync(path.join(SRC_CLAUDE, 'skills', 'plan'), { recursive: true });
+  fs.writeFileSync(path.join(SRC_CLAUDE, 'settings.json'), JSON.stringify({
+    permissions: { deny: ['Read(./.env)'] },
+    hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/guard.mjs'], timeout: 15 }] }] },
+  }, null, 2));
+  fs.writeFileSync(path.join(SRC_CLAUDE, 'skills', 'plan', 'SKILL.md'), '# /plan (framework)\n');
+  // Existing user project: their own settings.json hook + their OWN skill PHE never ships.
+  fs.mkdirSync(path.join(PROJ_CLAUDE, 'skills', 'my-deploy'), { recursive: true });
+  fs.writeFileSync(path.join(PROJ_CLAUDE, 'settings.json'), JSON.stringify({
+    permissions: { allow: ['Bash(docker *)'], deny: [] },
+    hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'node', args: ['.claude/hooks/my-lint.mjs'], timeout: 10 }] }] },
+  }, null, 2));
+  var USER_SKILL = path.join(PROJ_CLAUDE, 'skills', 'my-deploy', 'SKILL.md');
+  fs.writeFileSync(USER_SKILL, '# /my-deploy (user-owned)\n');
+
+  var adoptStats = realInit.backupAndCopy(SRC_CLAUDE, PROJ_CLAUDE, PROJ);
+  // Adoption: init flags a settings.json it just backed up as user-origin.
+  var recon = reconcile(PROJ, { userBackupJustCreated: adoptStats.backedUpFiles.indexOf('.claude/settings.json') !== -1 });
+
+  assert('settings reconcile reports merged', recon.merged === true);
+  var mergedSettings = JSON.parse(fs.readFileSync(path.join(PROJ_CLAUDE, 'settings.json'), 'utf-8'));
+  var mergedScripts = mergedSettings.hooks.PreToolUse[0].hooks.map(function (h) { return h.args[0]; });
+  assert('user hook preserved after adopt', mergedScripts.indexOf('.claude/hooks/my-lint.mjs') !== -1);
+  assert('framework guard hook added', mergedScripts.indexOf('.claude/hooks/guard.mjs') !== -1);
+  assert('user allow permission preserved', mergedSettings.permissions.allow.indexOf('Bash(docker *)') !== -1);
+  assert('framework deny permission preserved', mergedSettings.permissions.deny.indexOf('Read(./.env)') !== -1);
+  // Step C: a user-owned file PHE does not ship is never touched or backed up.
+  assert('user-owned skill preserved verbatim', fs.readFileSync(USER_SKILL, 'utf-8') === '# /my-deploy (user-owned)\n');
+  assert('user-owned skill has no .backup', !fs.existsSync(USER_SKILL + '.backup'));
+
+  // ── Blocker-2 regression: re-running init on an already-PHE project must not
+  //    treat PHE's OWN settings.json as user content (would ratchet-revert). ──
+  console.log('re-init does not ratchet-revert (real functions):');
+  assert('shouldMergeUserSettings is exported', typeof realInit.shouldMergeUserSettings === 'function');
+  if (typeof realInit.shouldMergeUserSettings === 'function') {
+    // Unit: the flag is true ONLY on genuine first adoption.
+    assert('flag true: foreign adoption (not PHE-managed, settings backed up)', realInit.shouldMergeUserSettings(false, ['.claude/settings.json']) === true);
+    assert('flag false: fresh init (settings created, not backed up)', realInit.shouldMergeUserSettings(false, []) === false);
+    assert('flag false: re-init of already-PHE project', realInit.shouldMergeUserSettings(true, ['.claude/settings.json']) === false);
+
+    // Integration: real backupAndCopy + reconcile, harness.json as the "PHE already here" signal.
+    var pheHere = function (p) { return fs.existsSync(path.join(p, '.claude', 'harness.json')); };
+    var RR = path.join(TEST_DIR, 'reinit');
+    var RSRC = path.join(RR, 'src', '.claude');
+    var RPROJ = path.join(RR, 'proj');
+    var RPC = path.join(RPROJ, '.claude');
+    fs.mkdirSync(RSRC, { recursive: true });
+    fs.mkdirSync(RPC, { recursive: true });
+    fs.writeFileSync(path.join(RSRC, 'harness.json'), '{"stopGate":[]}');
+    fs.writeFileSync(path.join(RSRC, 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(curl -s https://api.internal/*)'], deny: [] }, hooks: {} }));
+
+    // init #1 (fresh project): settings.json is CREATED, not backed up.
+    var pheBefore1 = pheHere(RPROJ);
+    var st1 = realInit.backupAndCopy(RSRC, RPC, RPROJ);
+    var flag1 = realInit.shouldMergeUserSettings(pheBefore1, st1.backedUpFiles);
+    reconcile(RPROJ, { userBackupJustCreated: flag1 });
+    assert('init#1 flag is false (nothing to adopt)', flag1 === false);
+
+    // Framework v1.5 REMOVES the curl allow; user re-runs `init`.
+    fs.writeFileSync(path.join(RSRC, 'settings.json'), JSON.stringify({ permissions: { deny: [] }, hooks: {} }));
+    var pheBefore2 = pheHere(RPROJ); // harness.json now present → true
+    var st2 = realInit.backupAndCopy(RSRC, RPC, RPROJ);
+    var flag2 = realInit.shouldMergeUserSettings(pheBefore2, st2.backedUpFiles);
+    var recon2 = reconcile(RPROJ, { userBackupJustCreated: flag2 });
+    assert('re-init flag is false (PHE already installed)', flag2 === false);
+    assert('re-init does not merge PHE-origin settings', recon2.merged === false);
+    var s2 = JSON.parse(fs.readFileSync(path.join(RPC, 'settings.json'), 'utf-8'));
+    assert('re-init preserves framework removal (curl allow gone)', (s2.permissions.allow || []).indexOf('Bash(curl -s https://api.internal/*)') === -1);
+    assert('re-init writes no user-origin marker', !fs.existsSync(path.join(RPC, '.settings-user-origin')));
+  }
+
   cleanup();
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

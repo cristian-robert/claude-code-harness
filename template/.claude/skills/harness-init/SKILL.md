@@ -6,7 +6,19 @@ disable-model-invocation: true
 
 # /harness-init — fit the copied template to THIS project
 
-Run once, right after copying the template in. Goal: zero `<placeholder>` left, stop gate armed, hooks proven. Adapt files in place — smallest diffs, never rewrite from scratch.
+Run once, right after copying the template in. Goal: zero `<placeholder>` left, stop gate armed, hooks proven, and — if you adopted over an existing harness — your prior config folded back in. Adapt files in place — smallest diffs, never rewrite from scratch.
+
+## 0 · RECONCILE (only when adopting over an existing harness)
+
+Skip entirely if `.claude/.init-meta.json` is absent — fresh project, nothing to reconcile.
+
+`settings.json` is already merged: `init`/`update` deep-union your prior hooks + permissions with the framework's. You reconcile only the PROSE the CLI backed up but can't merge by rule — `CLAUDE.md` and `.claude/rules/*.md`. For each `backedUpFiles` entry that is one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
+
+- Carry the user's substance into PHE's shape: product one-liner, Commands rows, every incident-traced Convention/rule, protected-dir and live-infra rules.
+- On a shared discipline, PHE's wording wins; keep the user's traceable specifics.
+- Smallest diffs; never rewrite. A backed-up file PHE does NOT ship already survived untouched (no collision) — leave it.
+
+After merging, smoke-test the unioned `settings.json`: flag any merged hook whose target script is missing (a stale hook from the old harness) for the user to prune, and surface the unioned `permissions.allow` for their review. Keep every `.backup` until the user confirms, then offer to delete them.
 
 ## 1 · DETECT (read first, ask second, write nothing yet)
 

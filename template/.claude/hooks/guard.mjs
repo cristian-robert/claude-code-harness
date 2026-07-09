@@ -20,6 +20,7 @@ import { join, resolve } from "node:path";
 const SECRET_FILE = /(^|[\\/])\.env(\.[^\\/]+)?$/i;
 const SECRET_OK = /\.(example|sample|template|dist|defaults)$/i;
 const SECRET_EXTRA = /(^|[\\/])(id_rsa|id_ed25519|.*\.pem|credentials\.json|\.npmrc)$/i;
+const SECRET_DIR = /(^|[\\/])secrets[\\/]/i; // anything under a secrets/ dir
 const BASH_SECRET = /(^|[\s"'=/])\.env(\.(?!example|sample|template|dist|defaults)[\w.]+)?\b/;
 const RECURSIVE_RM = /\brm\s+(-[a-z]*[rR][a-z]*f?[a-z]*|--recursive)\b|\brm\s+-[a-z]*f[a-z]*[rR]\b|\bfind\b[^|;&]*(-delete|-exec\s+rm)\b|\bgit\s+clean\b[^|;&]*-[a-z]*d/;
 const PROTECTED = new Set(["main", "master"]);
@@ -47,7 +48,7 @@ function deny(reason) {
 
 function isSecretPath(p) {
   if (!p || SECRET_OK.test(p)) return false;
-  return SECRET_FILE.test(p) || SECRET_EXTRA.test(p);
+  return SECRET_FILE.test(p) || SECRET_EXTRA.test(p) || SECRET_DIR.test(p);
 }
 
 function currentBranch(cwd) {
@@ -152,8 +153,22 @@ async function main() {
 
   if (tool === "Bash") {
     const cmd = String(input.command || "");
-    if (BASH_SECRET.test(cmd) && !/\.env\.example/.test(cmd)) {
-      deny("This command touches a .env secret file, which is blocked. Use .env.example; the user manages real secrets.");
+    // Secret/key-file protection, parity with the Read/Edit/Write branch. Scan
+    // EVERY path-like fragment of the command — split on all shell/quoting
+    // punctuation — so quoting, command/process substitution ($(…), <(…), `…`),
+    // redirects, and interpreter wrapping (`sh -c "…"`, `python -c "…"`) cannot
+    // hide a literal secret path. `.env.example` and friends stay allowed via
+    // SECRET_OK. This intentionally ALSO denies a secret filename that appears
+    // only as prose (e.g. a commit message "rotate server.pem"): a rare,
+    // fail-safe false positive, matching how the prior .env-only guard behaved.
+    // It is NOT a defense against adversarial obfuscation — variable indirection
+    // ($VAR), eval, and base64 can't be resolved statically and remain the
+    // documented anti-adversary boundary (use permissions.deny + OS sandboxing
+    // for true isolation).
+    for (const frag of cmd.split(/[^\w./~\\-]+/)) {
+      if (frag && isSecretPath(frag)) {
+        deny(`This command references a secret/key file ('${frag}'), which is blocked. Use .env.example or a non-secret path; the user manages real secret values.`);
+      }
     }
     if (RECURSIVE_RM.test(cmd)) {
       deny("Recursive/forced deletion is blocked by the harness guard. Delete specific files explicitly, or ask the user to run this themselves.");
