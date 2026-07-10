@@ -32,11 +32,11 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 
 ```bash
 # in your project directory
-npx claude-code-harness init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up as .backup)
-npx claude-code-harness update    # refreshes the payload (existing files backed up as .backup)
+npx perfect-harness-engineering init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up as .backup)
+npx perfect-harness-engineering update    # refreshes the payload (existing files backed up as .backup)
 ```
 
-**Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx claude-code-harness merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
+**Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx perfect-harness-engineering merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
 
 Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
 

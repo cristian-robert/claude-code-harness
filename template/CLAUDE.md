@@ -46,7 +46,7 @@ Plan and Implement run in **separate sessions** (`/clear` between): a fresh cont
 - Path-scoped rules and subdirectory `CLAUDE.md` auto-load on matching file reads.
 - Knowledge skills: consult **architecture-map** BEFORE placing new code; **debugging-this-repo** BEFORE diagnosing any bug or test failure.
 - Touching the harness itself (hooks/rules/skills)? Read `.claude/references/harness-maintenance.md` FIRST.
-- **Navigate by symbol, not grep**: the `codebase-search` MCP (`where_is`/`find_references`/`outline`, Python) + LSP diagnostics (`.lsp.json`) come before text search — `.claude/references/symbol-navigation.md`.
+- **Navigate by symbol, not grep**: the `codebase-search` MCP (`where_is`/`find_references`/`outline`, Python — if wired) + LSP diagnostics (`.lsp.json`) come before text search — `.claude/references/symbol-navigation.md`.
 - **Doc-grounded work**: building against an external tool/library? Consult its docs for your pinned version — `wiki/stack/<tool>/` first, else `/research` (context7 + official docs). Never code an API from memory.
 
 ## Compact instructions

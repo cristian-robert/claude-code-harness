@@ -137,11 +137,11 @@ function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
 
 async function main() {
   console.log('');
-  console.log('  claude-code-harness — Update');
+  console.log('  perfect-harness-engineering — Update');
   console.log('');
 
   if (!fs.existsSync('.claude')) {
-    console.error('No .claude/ directory found. Run "npx claude-code-harness init" first.');
+    console.error('No .claude/ directory found. Run "npx perfect-harness-engineering init" first.');
     process.exit(1);
   }
 

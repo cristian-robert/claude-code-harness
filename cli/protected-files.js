@@ -19,7 +19,7 @@ var NEEDS_RESTORE = [
   'reports',
 ];
 
-// CLI tools to copy into the target project. claude-code-harness ships none —
+// CLI tools to copy into the target project. perfect-harness-engineering ships none —
 // merge-settings / file-size-check run via npx from the package, not from the project.
 var FRAMEWORK_CLI_FILES = [];
 

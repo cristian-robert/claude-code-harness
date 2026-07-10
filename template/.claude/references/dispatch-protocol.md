@@ -26,7 +26,7 @@ Worked example (scout):
 
 | Work | Dispatch | model: | effort: |
 |---|---|---|---|
-| Locate/trace a symbol | `codebase-search` MCP (where_is/find_references/outline) — see symbol-navigation.md | — | — |
+| Locate/trace a symbol | `codebase-search` MCP (where_is/find_references/outline) if wired, else targeted grep — see symbol-navigation.md | — | — |
 | Locate files / text | built-in Explore | haiku-class (inherits; skips CLAUDE.md) | — |
 | Understand / synthesize | `scout` | sonnet (frontmatter pin) | medium |
 | Implement | general-purpose | per the plan's model hint | high |

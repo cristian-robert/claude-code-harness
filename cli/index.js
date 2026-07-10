@@ -43,15 +43,15 @@ switch (command) {
   case '-h':
   case undefined:
     console.log(`
-claude-code-harness — the harness around Claude Code that makes it reliable.
+perfect-harness-engineering — the harness around Claude Code that makes it reliable.
 
 Usage:
-  npx claude-code-harness init             Install the harness payload into the current project
-  npx claude-code-harness update           Update payload files, preserving customizations (three-way merge)
-  npx claude-code-harness merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
-  npx claude-code-harness file-size-check  Lint always-loaded context (CLAUDE.md, rules, skills) against budgets
-  npx claude-code-harness --version        Show version
-  npx claude-code-harness --help           Show this help
+  npx perfect-harness-engineering init             Install the harness payload into the current project
+  npx perfect-harness-engineering update           Update payload files, preserving customizations (three-way merge)
+  npx perfect-harness-engineering merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
+  npx perfect-harness-engineering file-size-check  Lint always-loaded context (CLAUDE.md, rules, skills) against budgets
+  npx perfect-harness-engineering --version        Show version
+  npx perfect-harness-engineering --help           Show this help
 
 Then run /harness-init inside Claude Code to fit the payload to your project.
 Docs: https://github.com/cristian-robert/claude-code-harness
@@ -59,6 +59,6 @@ Docs: https://github.com/cristian-robert/claude-code-harness
     break;
   default:
     console.error('Unknown command: ' + command);
-    console.log('Run "npx claude-code-harness --help" for usage information.');
+    console.log('Run "npx perfect-harness-engineering --help" for usage information.');
     process.exit(1);
 }
