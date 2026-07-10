@@ -244,7 +244,7 @@ function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
 
 async function main() {
   console.log('');
-  console.log('  claude-code-harness');
+  console.log('  perfect-harness-engineering');
   console.log('  The harness around Claude Code that makes it reliable.');
   console.log('');
 
