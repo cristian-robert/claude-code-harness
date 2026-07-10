@@ -239,7 +239,7 @@ test('protected-files catalog has no KB engine or .obsidian entries', () => {
   const pf = require('./protected-files.js');
   assert.ok(!pf.FRAMEWORK_CLI_FILES.includes('cli/kb-search.js'), 'kb-search.js removed');
   assert.ok(!pf.FRAMEWORK_CLI_FILES.includes('cli/lean-index.js'), 'lean-index.js removed');
-  // claude-code-harness installs NO CLI tools into consumer projects —
+  // perfect-harness-engineering installs NO CLI tools into consumer projects —
   // merge-settings / file-size-check run via npx from the package, not the project.
   assert.deepStrictEqual(pf.FRAMEWORK_CLI_FILES, [], 'FRAMEWORK_CLI_FILES must be empty — CLI tools run via npx');
   const all = pf.NEEDS_MERGE.concat(pf.NEEDS_RESTORE);
@@ -262,6 +262,117 @@ test('cli/index.js has no KB engine surface (help text + lean-index gone)', () =
     status = e.status;
   }
   assert.notStrictEqual(status, 0, 'lean-index must be an unknown command (non-zero exit)');
+});
+
+const TEMPLATE = path.join(__dirname, '..', 'template');
+const readTemplate = (...p) => fs.readFileSync(path.join(TEMPLATE, ...p), 'utf-8');
+const HARNESS_INIT = path.join('.claude', 'skills', 'harness-init', 'SKILL.md');
+
+// /harness-init step 4 makes `npx <pkg> file-size-check` a MANDATORY gate. If the
+// skill names a package that is not this package's bin, that gate can never pass —
+// it 404s at the registry. The name shipped as `claude-code-harness` while the bin
+// was `perfect-harness-engineering`, so every install hit E404 on a required check.
+test('harness-init names an npx package + subcommand the CLI actually provides', () => {
+  const skill = readTemplate(HARNESS_INIT);
+  // Anchor on the backtick: the skill also mentions bare `npx` in prose and inside
+  // the context7 MCP JSON blob, and neither is the verification command.
+  const m = /`npx ([a-z0-9@/-]+) ([a-z-]+)`/.exec(skill);
+  assert.ok(m, 'harness-init must name an `npx <pkg> <subcommand>` verification command');
+  const [, pkg, subcommand] = m;
+
+  const rawBin = require('../package.json').bin;
+  // npm allows the single-bin string form; normalize before asserting.
+  const bin = typeof rawBin === 'string' ? { [require('../package.json').name]: rawBin } : rawBin;
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(bin, pkg),
+    'skill says `npx ' + pkg + '` but package.json bin exposes: ' + Object.keys(bin).join(', ')
+  );
+
+  const index = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf-8');
+  assert.ok(
+    index.includes("case '" + subcommand + "'"),
+    'cli/index.js does not implement the `' + subcommand + '` subcommand the skill requires'
+  );
+
+  // And it must actually run: `file-size-check` shells out to tools/context-ledger.mjs,
+  // which must be packed or npx installs a broken CLI. Accept the file or its dir.
+  const files = require('../package.json').files;
+  const packs = (rel) => files.some((f) => f === rel || rel.startsWith(f.replace(/\/?$/, '/')));
+  assert.ok(
+    packs('tools/context-ledger.mjs'),
+    'tools/context-ledger.mjs is not covered by package.json files[]: ' + files.join(', ')
+  );
+});
+
+// The placeholder gate. The pattern must be a GRAMMAR, not an enumeration: the shipped
+// alternation caught 20 of 69 tokens and let <file>, <incident>, <root cause>, <env-var>
+// survive into the two knowledge skills the agent consults before placing code or
+// debugging. Pinned as a LITERAL — the skill and this test must be edited together.
+const GATE_PATTERN = /<[A-Za-z][^<>]*>/;
+const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog'];
+const GATE_CMD =
+  "grep -rnoE '<[A-Za-z][^<>]*>' CLAUDE.md .claude/rules/ .claude/skills/architecture-map/ " +
+  '.claude/skills/debugging-this-repo/ \\| grep -vE ' +
+  "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
+
+const isPlaceholder = (t) => GATE_PATTERN.test(t) && !GATE_ALLOW.includes(t.slice(1, -1));
+
+test('harness-init step 4 ships exactly the pinned placeholder gate', () => {
+  assert.ok(
+    readTemplate(HARNESS_INIT).includes(GATE_CMD),
+    'harness-init step 4 no longer contains the pinned gate command:\n  ' + GATE_CMD
+  );
+});
+
+test('the placeholder gate catches every placeholder the pristine templates ship', () => {
+  const pristine = ['CLAUDE.md', path.join('.claude', 'skills', 'architecture-map', 'SKILL.md'),
+    path.join('.claude', 'skills', 'debugging-this-repo', 'SKILL.md')];
+  const tokens = pristine.flatMap((f) => readTemplate(f).match(/<[A-Za-z][^<>]*>/g) || []);
+
+  const uncaught = [...new Set(tokens)].filter(
+    (t) => !isPlaceholder(t) && !GATE_ALLOW.includes(t.slice(1, -1))
+  );
+  assert.strictEqual(uncaught.length, 0, 'gate misses placeholders: ' + uncaught.join(', '));
+
+  // The exact shapes the old enumeration missed — pinned so a narrower pattern fails here.
+  const regression = ['<file>', '<incident>', '<shared-dir>', '<root cause>', '<env-var>',
+    '<file:line>', '<exact error text>'];
+  const absent = regression.filter((t) => !tokens.includes(t));
+  assert.strictEqual(absent.length, 0, 'regression tokens no longer in templates: ' + absent.join(', '));
+  assert.ok(regression.every(isPlaceholder), 'a regression token is not caught by the gate');
+});
+
+test('every gate allowlist entry is earned by a real token in the templates', () => {
+  // Over-match guard. Path notation survives /harness-init in CLAUDE.md; the HTML tags
+  // are real prose in rules/frontend.md. An allowlist entry with no such use would be
+  // silently hiding a placeholder instead of exempting notation.
+  const claudeMd = readTemplate('CLAUDE.md');
+  const frontend = readTemplate('.claude', 'rules', 'frontend.md');
+  for (const t of ['<id>', '<slug>', '<n>', '<tool>']) {
+    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/CLAUDE.md — drop it');
+  }
+  for (const t of ['<a>', '<div>', '<button>', '<dialog>']) {
+    assert.ok(frontend.includes(t), 'allowlisted ' + t + ' is unused in rules/frontend.md — drop it');
+  }
+});
+
+// cli/init.js falls back to a GitHub tarball of the default branch, which contains only
+// COMMITTED files. An untracked payload file therefore installs fine from npm and is
+// missing from a git-sourced install — the same git/npm divergence that produced the
+// `claude-code-harness` 404.
+test('the whole template/ payload is committed (the tarball install path ships only tracked files)', () => {
+  const untracked = execFileSync('git', ['ls-files', '--others', '--exclude-standard', 'template/'], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf-8',
+  }).trim();
+  assert.strictEqual(untracked, '', 'untracked files under template/:\n  ' + untracked.split('\n').join('\n  '));
+});
+
+test('the eslint flat-config fragment ships with the payload', () => {
+  assert.ok(
+    fs.existsSync(path.join(TEMPLATE, '.claude', 'tooling', 'eslint.harness.mjs')),
+    'harness-init tells operators to wire .claude/tooling/eslint.harness.mjs before arming a lint gate'
+  );
 });
 
 // Cleanup

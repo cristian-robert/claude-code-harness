@@ -35,6 +35,28 @@ function denies(res) {
   catch { return false; }
 }
 
+// Resolve a harness hook's timeout by its SCRIPT NAME, anywhere in its lifecycle.
+// NEVER by array position: cli/merge-settings.js unions an adopter's prior hooks
+// FIRST, so on every adoption install index [0] is THEIR hook, not ours. Position
+// lookup both false-FAILED a correct install (reading a prior hook's absent
+// timeout as 0s) and could false-PASS (a prior hook's long timeout masking a
+// short one on ours — the direction that actually kills a hook mid-run).
+// Returns null when the script is not wired at all — a wiring gap, not a 0s budget.
+function hookTimeout(lifecycle, script) {
+  const isScript = (a) => {
+    const s = String(a);
+    // Path-boundary match: a bare endsWith would let "gate.mjs" resolve against
+    // ".../stop-gate.mjs" and hand back the wrong hook's timeout.
+    return s === script || s.endsWith("/" + script) || s.endsWith("\\" + script);
+  };
+  for (const entry of lifecycle || []) {
+    for (const h of entry.hooks || []) {
+      if ((h.args || []).some(isScript)) return h.timeout ?? 0;
+    }
+  }
+  return null;
+}
+
 const base = { session_id: "smoke", cwd: process.cwd(), hook_event_name: "PreToolUse" };
 
 console.log("guard.mjs");
@@ -73,7 +95,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   // Branch guard behaves per the CURRENT repo branch: deny on main/master, allow elsewhere.
   const res = runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "git commit -m x" } });
   let branch = null; // same detection as guard.mjs: works on unborn branches too
-  try { branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf8" }).trim() || null; } catch {}
+  try { branch = execFileSync("git", ["branch", "--show-current"], { encoding: "utf8" }).trim() || null; } catch { /* not a git repo: branch stays null */ }
   if (branch === "main" || branch === "master") check("denies git commit on protected branch", denies(res));
   else check(`allows git commit on '${branch}'`, !denies(res));
   check("allows message mentioning main", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo 'main topic' > notes.txt" } })));
@@ -223,8 +245,8 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   mkdirSync(join(tmp, ".claude"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(1)\""] }));
   const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
-  let blocked = false; try { blocked = JSON.parse(res.out).decision === "block"; } catch {}
-  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch {}
+  let blocked = false; try { blocked = JSON.parse(res.out).decision === "block"; } catch { /* non-JSON stdout: not a block */ }
+  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch { /* no/!JSON state file: the check below reports it */ }
   check("red gate blocks the turn", res.code === 0 && blocked);
   check("writes last-gate.json with RED verdict + failed cmd", state?.verdict === "RED" && state?.failed?.length === 1 && !!state?.when);
 }
@@ -234,7 +256,7 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   mkdirSync(join(tmp, ".claude"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(0)\""] }));
   const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
-  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch {}
+  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch { /* no/!JSON state file: the check below reports it */ }
   check("green gate exits 0 silently", res.code === 0 && res.out === "");
   check("writes last-gate.json with GREEN verdict", state?.verdict === "GREEN" && Array.isArray(state?.failed) && state.failed.length === 0 && !!state?.when);
 }
@@ -245,8 +267,8 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   mkdirSync(join(tmp, ".claude"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(0)\"", "node -e \"process.exit(0)\""], stopGateTotalSec: 1 }));
   const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
-  let blocked = false, reason = ""; try { const o = JSON.parse(res.out); blocked = o.decision === "block"; reason = o.reason || ""; } catch {}
-  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch {}
+  let blocked = false, reason = ""; try { const o = JSON.parse(res.out); blocked = o.decision === "block"; reason = o.reason || ""; } catch { /* non-JSON stdout: neither blocked nor reasoned */ }
+  let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch { /* no/!JSON state file: the check below reports it */ }
   check("skipped check blocks as INCOMPLETE, never GREEN", res.code === 0 && blocked && reason.includes("INCOMPLETE"));
   check("last-gate.json records INCOMPLETE + skipped", state?.verdict === "INCOMPLETE" && state?.skipped?.length >= 1);
 }
@@ -263,7 +285,7 @@ check("survives malformed input", runHook("post-edit.mjs", null).code === 0);
   writeFileSync(join(hooksDir, "smoke-test.mjs"), "console.log('stub suite: 1 passed, 0 failed');\n");
   writeFileSync(join(hooksDir, "guard.mjs"), "// stub hook\n");
   const res = runHook("post-edit.mjs", { ...base, hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: join(hooksDir, "guard.mjs") } });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("hook edit triggers adjacent smoke test", res.code === 0 && ctx.includes("Hook edited") && ctx.includes("stub suite"));
   const self = runHook("post-edit.mjs", { ...base, hook_event_name: "PostToolUse", tool_name: "Edit", tool_input: { file_path: join(hooksDir, "smoke-test.mjs") } });
   check("editing smoke-test.mjs itself does not self-trigger", self.code === 0 && self.out === "");
@@ -280,7 +302,7 @@ console.log("session-start.mjs");
   mkdirSync(join(tmp, ".claude", "state"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "state", "compact-snapshot.md"), "# Compact snapshot\n- when: now\n- branch: feature/x\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "compact", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("compact source re-injects snapshot + dropped-context warning", res.code === 0 && ctx.includes("Compaction dropped") && ctx.includes("feature/x"));
 }
 {
@@ -292,11 +314,11 @@ console.log("session-start.mjs");
   writeFileSync(join(tmp, "backlog", "0001-login-form.md"), "---\nid: 0001\ntype: story\nstatus: ready\npriority: P1\n---\n\n## Story\n");
   writeFileSync(join(tmp, "backlog", "0002-fix-auth.md"), "---\nid: 0002\ntype: bug\nstatus: doing\npriority: P0\n---\n\n## Story\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("files backend injects board counts", res.code === 0 && ctx.includes("Board: 1 ready · 1 doing"));
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ workTracking: { backend: "none" } }));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch {}
+  let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
   check("backend none emits no Board line", off.code === 0 && !offCtx.includes("Board:"));
 }
 {
@@ -307,7 +329,7 @@ console.log("session-start.mjs");
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ workTracking: { backend: "github", method: "kanban" } }));
   writeFileSync(join(tmp, "backlog", "001-a.md"), "---\nid: 001\nstatus: ready\n---\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("github backend still renders Board from files", res.code === 0 && ctx.includes("Board: 1 ready"));
 }
 {
@@ -319,7 +341,7 @@ console.log("session-start.mjs");
   writeFileSync(join(tmp, "backlog", "001-a.md"), "---\nstatus: doing\n---\n");
   writeFileSync(join(tmp, "backlog", "002-b.md"), "---\nstatus: doing\n---\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("WIP breach flagged in standup", res.code === 0 && ctx.includes("WIP 2/2"));
 }
 {
@@ -327,7 +349,7 @@ console.log("session-start.mjs");
   const tmp = mkdtempSync(join(tmpdir(), "phe-uninit-"));
   writeFileSync(join(tmp, "CLAUDE.md"), "# <Project Name>\n<placeholder>\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch {}
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("uninitialized template nudges /harness-init", res.code === 0 && ctx.includes("/harness-init"));
 }
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
@@ -406,18 +428,60 @@ console.log("settings.json wiring");
 
   // A hook killed by its outer timeout fails silently. Stop must outlast the gate
   // budget; PostToolUse must outlast post-edit's internal smoke-test budget (60s).
-  const stopTimeout = lifecycles.Stop?.[0]?.hooks?.[0]?.timeout ?? 0;
-  check("Stop timeout outlasts harness stopGateTotalSec", stopTimeout >= (harness.stopGateTotalSec ?? 0),
-    `Stop ${stopTimeout}s < stopGateTotalSec ${harness.stopGateTotalSec}s`);
-  const postTimeout = lifecycles.PostToolUse?.[0]?.hooks?.[0]?.timeout ?? 0;
-  check("PostToolUse timeout outlasts post-edit smoke budget (60s)", postTimeout >= 60,
-    `PostToolUse ${postTimeout}s < 60s (post-edit.mjs runs the smoke test with a 60s budget)`);
+  // Resolved by script name — the merge does not guarantee position (see hookTimeout).
+  const stopTimeout = hookTimeout(lifecycles.Stop, "stop-gate.mjs");
+  check("Stop timeout outlasts harness stopGateTotalSec", stopTimeout !== null && stopTimeout >= (harness.stopGateTotalSec ?? 0),
+    stopTimeout === null ? "stop-gate.mjs not wired into Stop" : `stop-gate.mjs ${stopTimeout}s < stopGateTotalSec ${harness.stopGateTotalSec}s`);
+  const postTimeout = hookTimeout(lifecycles.PostToolUse, "post-edit.mjs");
+  check("PostToolUse timeout outlasts post-edit smoke budget (60s)", postTimeout !== null && postTimeout >= 60,
+    postTimeout === null ? "post-edit.mjs not wired into PostToolUse" : `post-edit.mjs ${postTimeout}s < 60s`);
 
   const subMatcher = lifecycles.SubagentStop?.[0]?.matcher;
   if (subMatcher) {
     check(`SubagentStop matcher '${subMatcher}' names a real agent`,
       existsSync(join(claudeDir, "agents", subMatcher + ".md")));
   }
+}
+
+// The merge prepends the adopter's hooks, so the timeout assertions above must be
+// position-independent. This pins that: a prior hook with NO timeout sitting at
+// index [0] must not be mistaken for ours.
+console.log("hook resolution (merged settings)");
+{
+  const merged = [{ hooks: [
+    { type: "command", command: "node", args: ["./legacy/notify.mjs"] },
+    { type: "command", command: "node", args: ["${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-gate.mjs"], timeout: 90 },
+  ] }];
+  check("timeout resolves by script name, not array position", hookTimeout(merged, "stop-gate.mjs") === 90,
+    `got ${hookTimeout(merged, "stop-gate.mjs")}`);
+  check("an unwired script resolves to null, not 0s", hookTimeout(merged, "post-edit.mjs") === null);
+  check("a wired script with no timeout resolves to 0s", hookTimeout(merged, "notify.mjs") === 0);
+  check("a filename suffix does not match a longer script name", hookTimeout(merged, "gate.mjs") === null);
+}
+
+// A catch that swallows must say why. Beyond readability this is eslint `no-empty`:
+// adopting repos run `eslint .` across the whole tree, and a harness that cannot pass
+// js.configs.recommended turns the install commit red — after which /harness-init may
+// arm `lint` as a stop gate that is red on EVERY turn. (The companion `no-undef` errors
+// are config, not code: .claude/tooling/eslint.harness.mjs supplies the Node globals.)
+// Scanned over the whole file, not line-by-line — `catch {` … `}` spans two lines and
+// eslint flags it just the same.
+console.log("shipped .mjs lint hygiene");
+{
+  const claudeDir = dirname(HOOKS);
+  const files = [
+    ...readdirSync(HOOKS).filter((f) => f.endsWith(".mjs")).map((f) => join(HOOKS, f)),
+    join(claudeDir, "statusline.mjs"),
+  ].filter(existsSync);
+  const offenders = [];
+  for (const f of files) {
+    const text = readFileSync(f, "utf8");
+    for (const m of text.matchAll(/\bcatch\s*(\([^)]*\))?\s*\{\s*\}/g)) {
+      offenders.push(`${f.split("/").pop()}:${text.slice(0, m.index).split("\n").length}`);
+    }
+  }
+  check("no empty catch block (eslint no-empty) — every swallow carries a comment",
+    offenders.length === 0, offenders.join(", "));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

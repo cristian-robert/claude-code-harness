@@ -34,7 +34,7 @@ Read MEMORY.md before reviewing; update it after the verdict. Record (≤2 lines
 
 ## Verify wiring structurally
 
-Do not trust the diff text. A new function/route/handler/config key must be provably connected — imported, registered, invoked. Defined-but-never-called is a blocker. Prove it with the `codebase-search` MCP (`find_references(<symbol>)` shows real call sites, no false hits) when wired — the payload ships it (`.mcp.json`, Python source); otherwise grep the call sites. See `.claude/references/symbol-navigation.md`.
+Do not trust the diff text. A new function/route/handler/config key must be provably connected — imported, registered, invoked. Defined-but-never-called is a blocker. Prove it with the `codebase-search` MCP (`find_references(<symbol>)` shows real call sites, no false hits) when wired — it is Python-AST-only, and `/harness-init` removes it from repos without Python; otherwise grep the call sites. See `.claude/references/symbol-navigation.md`.
 
 ## Output format (machine-parseable — the controller parses the first line)
 
