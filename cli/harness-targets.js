@@ -65,8 +65,9 @@ function writeHarnessTargets(projectRoot, targets) {
   var p = harnessJsonPath(projectRoot);
   var current = {};
   if (fs.existsSync(p)) {
+    var parsed;
     try {
-      current = JSON.parse(fs.readFileSync(p, 'utf-8')) || {};
+      parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
     } catch (e) {
       throw new Error(
         p + ' exists but is not valid JSON, so it cannot be safely updated ' +
@@ -74,6 +75,21 @@ function writeHarnessTargets(projectRoot, targets) {
         'Fix the file by hand, then re-run this command.'
       );
     }
+    // A truthy non-object (e.g. a bare array or number) parses without
+    // throwing above, but `current.harness = targets` on it either sets a
+    // property JSON.stringify silently drops (arrays) or is a no-op/throws
+    // depending on strict mode (primitives) -- and null has no keys to merge
+    // into. Refuse exactly like the unparseable-JSON case above rather than
+    // risk any of those: the write contract is "refuse on malformed input",
+    // never "silently lose the file's other keys".
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(
+        p + ' exists but does not contain a JSON object, so it cannot be ' +
+        'safely updated (it may also hold your stop gate and work-tracking ' +
+        'config). Fix the file by hand, then re-run this command.'
+      );
+    }
+    current = parsed;
   }
   current.harness = targets.slice().sort();
   var dir = path.dirname(p);

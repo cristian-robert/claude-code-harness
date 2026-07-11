@@ -100,6 +100,62 @@ fs.mkdirSync(path.join(FRESH, '.claude'), { recursive: true });
 writeHarnessTargets(FRESH, ['codex']);
 assert('creates harness.json when absent', JSON.stringify(readHarnessTargets(FRESH)) === '["codex"]');
 
+// Minor 3: a truthy NON-object (e.g. a bare array) parses without throwing,
+// but `current.harness = targets` on an array sets a property JSON.stringify
+// silently drops -- the array round-trips unchanged, the harness choice is
+// lost, and "Setup complete!" prints as if nothing went wrong. The module's
+// stated contract is "the write REFUSES on malformed input" -- today it
+// silently succeeds and loses data. Write must refuse here exactly like the
+// unparseable-JSON case.
+var ARRAYJSON = path.join(TEST_DIR, 'arrayjson');
+fs.mkdirSync(path.join(ARRAYJSON, '.claude'), { recursive: true });
+var arrayJsonPath = path.join(ARRAYJSON, '.claude', 'harness.json');
+var arrayJsonContent = JSON.stringify([1, 2]);
+fs.writeFileSync(arrayJsonPath, arrayJsonContent);
+var arrayThrown = null;
+try {
+  writeHarnessTargets(ARRAYJSON, ['claude']);
+} catch (e) {
+  arrayThrown = e;
+}
+assert('write throws on a truthy non-object (array) existing harness.json', arrayThrown instanceof Error);
+assert(
+  'array-case error message names the file',
+  !!arrayThrown && arrayThrown.message.indexOf(arrayJsonPath) !== -1
+);
+assert(
+  'write does not modify the array-holding file',
+  fs.readFileSync(arrayJsonPath, 'utf-8') === arrayJsonContent
+);
+
+// A bare JSON scalar (number/string/bool) is the same class of bug —
+// typeof !== 'object' catches it in one check alongside the array case.
+var SCALARJSON = path.join(TEST_DIR, 'scalarjson');
+fs.mkdirSync(path.join(SCALARJSON, '.claude'), { recursive: true });
+var scalarJsonPath = path.join(SCALARJSON, '.claude', 'harness.json');
+fs.writeFileSync(scalarJsonPath, '42');
+var scalarThrown = null;
+try {
+  writeHarnessTargets(SCALARJSON, ['claude']);
+} catch (e) {
+  scalarThrown = e;
+}
+assert('write throws on a bare JSON scalar (number) existing harness.json', scalarThrown instanceof Error);
+
+// null is also not a mergeable object -- refuse rather than silently
+// substitute an empty object and proceed.
+var NULLJSON = path.join(TEST_DIR, 'nulljson');
+fs.mkdirSync(path.join(NULLJSON, '.claude'), { recursive: true });
+var nullJsonPath = path.join(NULLJSON, '.claude', 'harness.json');
+fs.writeFileSync(nullJsonPath, 'null');
+var nullThrown = null;
+try {
+  writeHarnessTargets(NULLJSON, ['claude']);
+} catch (e) {
+  nullThrown = e;
+}
+assert('write throws on a JSON null existing harness.json', nullThrown instanceof Error);
+
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
