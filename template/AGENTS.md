@@ -1,6 +1,6 @@
 # <Project Name>
 
-<One sentence: what this product is and who uses it. Fresh copy? Run `/harness-init` — it interviews the repo, fills every <placeholder>, arms the gate, and configures work tracking. A placeholder in a live CLAUDE.md is a bug.>
+<One sentence: what this product is and who uses it. Fresh copy? Run `/harness-init` — it interviews the repo, fills every <placeholder>, arms the gate, and configures work tracking. A placeholder in a live AGENTS.md is a bug.>
 
 <!-- Vault users: paste your vault's pointer block here (its system/pointer-block.md; /harness-init can scaffold one), then delete this comment. -->
 

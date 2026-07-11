@@ -12,7 +12,7 @@ Run once, right after copying the template in. Goal: zero `<placeholder>` left, 
 
 Skip entirely if `.claude/.init-meta.json` is absent — fresh project, nothing to reconcile.
 
-`settings.json` is already merged: `init`/`update` deep-union your prior hooks + permissions with the framework's. You reconcile only the PROSE the CLI backed up but can't merge by rule — `CLAUDE.md` and `.claude/rules/*.md`. For each `backedUpFiles` entry that is one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
+`settings.json` is already merged: `init`/`update` deep-union your prior hooks + permissions with the framework's. You reconcile only the PROSE the CLI backed up but can't merge by rule — `AGENTS.md` and `.claude/rules/*.md` (never `CLAUDE.md` — see below). For each `backedUpFiles` entry that is one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
 
 A pre-PHE project's `CLAUDE.md.backup` reconciles INTO `AGENTS.md` — that is where project content now lives. The installed `CLAUDE.md` is a generated shim; never merge user content into it.
 

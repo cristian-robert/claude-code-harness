@@ -5,7 +5,7 @@ paths: ["**/*.tsx", "**/*.jsx", "**/components/**"]
 
 # Frontend rules
 
-File-TYPE guidance: loads only when matching files are touched. Place facts (dir layout, local commands) belong in `<frontend-dir>/CLAUDE.md`, not here. Each rule below shows the shape — specific, imperative, traceable — replace the traces with yours.
+File-TYPE guidance: loads only when matching files are touched. Place facts (dir layout, local commands) belong in `<frontend-dir>/AGENTS.md`, not here. Each rule below shows the shape — specific, imperative, traceable — replace the traces with yours.
 
 - **Server components by default.** Add `"use client"` only for state, effects, or browser APIs — never "just in case". (Trace: 14 needless client components, +80KB bundle.)
 - **Design tokens, never raw hex.** `var(--color-*)` / theme scale only; raw values live in one tokens file. (Trace: hardcoded `#3B82F6` in 9 files broke the rebrand.)

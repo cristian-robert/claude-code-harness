@@ -1,6 +1,6 @@
 # Core discipline
 
-Always-on rules beyond CLAUDE.md. Each traces to a real failure.
+Always-on rules beyond AGENTS.md. Each traces to a real failure.
 
 ## Context economy
 
@@ -37,8 +37,8 @@ Never claim done/fixed/passing without the command and its real output. Applies 
 
 ## Memory
 
-Auto-memory holds MACHINE-LOCAL facts only: env quirks, ports, local workarounds. Team knowledge (conventions, gotchas, commands) → CLAUDE.md/rules via /evolve — never duplicate into memory. Task state lives in plans/ + reports/, never in memory.
+Auto-memory holds MACHINE-LOCAL facts only: env quirks, ports, local workarounds. Team knowledge (conventions, gotchas, commands) → AGENTS.md/rules via /evolve — never duplicate into memory. Task state lives in plans/ + reports/, never in memory.
 
 ## Harness changes
 
-Touching hooks, rules, skills, or CLAUDE.md → read `.claude/references/harness-maintenance.md` FIRST. After any hook edit: `node .claude/hooks/smoke-test.mjs`.
+Touching hooks, rules, skills, or AGENTS.md/CLAUDE.md → read `.claude/references/harness-maintenance.md` FIRST. After any hook edit: `node .claude/hooks/smoke-test.mjs`.

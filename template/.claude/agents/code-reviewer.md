@@ -29,7 +29,7 @@ Read MEMORY.md before reviewing; update it after the verdict. Record (≤2 lines
 2. **Correctness** — logic, edge cases, error paths, off-by-ones, state/concurrency.
 3. **Tests** — every behavior change carries a test; missing test = blocker.
 4. **Security** — secrets in code, injection, missing authz, unsafe input handling.
-5. **Conventions** — CLAUDE.md and `.claude/rules/` rules; pattern consistency with surrounding code.
+5. **Conventions** — AGENTS.md (imported by CLAUDE.md on Claude Code) and `.claude/rules/` rules; pattern consistency with surrounding code.
 6. **Boundaries** — `.claude/skills/architecture-map/SKILL.md` exists → read its Boundaries section; a violation (forbidden import/dependency direction) is a blocker.
 
 ## Verify wiring structurally

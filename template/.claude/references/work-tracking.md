@@ -63,4 +63,4 @@ This harness never touches `gh project`. Projects v2 mutations require the `proj
 
 ## Optional backend: Backlog.md CLI
 
-Backlog.md (github.com/MrLesk/Backlog.md) already implements this file-per-item + derived-board shape — `backlog board`, a local web UI, machine-parseable AC markers, an MCP server — and is itself dogfooded by AI agents. A project may adopt it as a drop-in replacement for the files-mode column (its CLI performs the same operations); map its status names to this schema in the project CLAUDE.md and keep item files as the source of truth. It is a dependency, not a default — the ratchet must earn it.
+Backlog.md (github.com/MrLesk/Backlog.md) already implements this file-per-item + derived-board shape — `backlog board`, a local web UI, machine-parseable AC markers, an MCP server — and is itself dogfooded by AI agents. A project may adopt it as a drop-in replacement for the files-mode column (its CLI performs the same operations); map its status names to this schema in the project AGENTS.md and keep item files as the source of truth. It is a dependency, not a default — the ratchet must earn it.

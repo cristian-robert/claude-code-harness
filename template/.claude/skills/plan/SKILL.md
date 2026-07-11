@@ -41,7 +41,7 @@ Autonomous mode (activation: `.claude/references/autonomous-mode.md` — never s
 
 ## 3. Load knowledge
 
-Match the work against this repo's knowledge skills (architecture-map etc.) and the CLAUDE.md on-demand context table; READ every match NOW. Then LIST the consulted knowledge skills and context files in the plan's Context section under `Knowledge to load first:` — `/implement` runs after `/clear` and reloads only what the plan names.
+Match the work against this repo's knowledge skills (architecture-map etc.) and the AGENTS.md on-demand context table; READ every match NOW. Then LIST the consulted knowledge skills and context files in the plan's Context section under `Knowledge to load first:` — `/implement` runs after `/clear` and reloads only what the plan names.
 
 ## 4. Explore the codebase
 

@@ -34,11 +34,11 @@ Apply `superpowers:receiving-code-review`:
 - Verify each finding against the code BEFORE implementing it. Reviewers prompted to find gaps will report some even when the work is sound.
 - Push back with evidence when the reviewer is wrong. Fix only what affects correctness or stated requirements.
 - Waiving a finding you verified false → TELL the reviewer to record the waiver in its memory (fingerprint, reason, decider) — in the next loop dispatch or a one-line follow-up. An unrecorded waiver is re-litigated next session.
-- Loop: fix → **re-run the full gate** (CLAUDE.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch → until the first line is `PASS`. Append each round's verdict to the report.
+- Loop: fix → **re-run the full gate** (AGENTS.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch → until the first line is `PASS`. Append each round's verdict to the report.
 
 ## 5. Security lens (when the diff warrants)
 
-Diff touches auth, sessions, crypto, input handling, file/network I/O, deserialization, SQL, secrets management, payments, or PII → run a dedicated security pass, not just the reviewer's checklist line. Invoke the global `security-audit` skill (or `pentest-expert` / `web-security-testing` for their domains) if available; absent → have `code-reviewer` treat the security checklist item as blocking-priority and say the deep skill was unavailable. Dependency/supply-chain: run the audit command from CLAUDE.md's Commands table (`npm audit` / `pip-audit` / `uv pip audit`) if `/harness-init` configured one.
+Diff touches auth, sessions, crypto, input handling, file/network I/O, deserialization, SQL, secrets management, payments, or PII → run a dedicated security pass, not just the reviewer's checklist line. Invoke the global `security-audit` skill (or `pentest-expert` / `web-security-testing` for their domains) if available; absent → have `code-reviewer` treat the security checklist item as blocking-priority and say the deep skill was unavailable. Dependency/supply-chain: run the audit command from AGENTS.md's Commands table (`npm audit` / `pip-audit` / `uv pip audit`) if `/harness-init` configured one.
 
 ## 6. Optional second lens (L/XL changes)
 

@@ -5,7 +5,7 @@ paths: ["**/api/**", "**/server/**", "**/*.py"]
 
 # Backend rules
 
-File-TYPE guidance: loads only when matching files are touched. Place facts (module map, local commands) belong in `<backend-dir>/CLAUDE.md`, not here. Replace the traces with yours.
+File-TYPE guidance: loads only when matching files are touched. Place facts (module map, local commands) belong in `<backend-dir>/AGENTS.md`, not here. Replace the traces with yours.
 
 - **Validate at the boundary.** Every handler parses input through the schema layer (zod/pydantic) before any logic; interior code receives typed data only. (Trace: `undefined` userId reached the DB layer.)
 - **Parameterized queries only.** No string-built SQL, even for "safe" internal values. (Trace: f-string `ORDER BY` injection in report export.)
