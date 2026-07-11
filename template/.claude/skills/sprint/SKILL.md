@@ -16,7 +16,7 @@ Ceremonies edit item/sprint files in the TRACKING ROOT (work-tracking.md) — mi
 
 !`ls sprints/ 2>/dev/null`
 
-Next sprint `<n>` = highest existing number + 1 (none → 1). `$ARGUMENTS` picks the ceremony; missing → ask which.
+Next sprint `<n>` = highest existing number + 1 (none → 1). The invocation argument (the text typed after the command) picks the ceremony; missing → ask which.
 
 ## /sprint plan — PM hat proposes, PO (the human) decides scope
 

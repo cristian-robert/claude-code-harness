@@ -11,7 +11,7 @@ allowed-tools: Bash(git diff *) Bash(git show *) Bash(git log *) Bash(git merge-
 ## 1. Gather inputs
 
 - Status precondition (item-linked): the item must be `status: review` (set by `/implement` when the report was written). Not `review` → blocker: `item <id> is <status>, not review — /implement must finish first`.
-- Plan: `$ARGUMENTS` if given; else the plan referenced by the newest `reports/*-implementation-report.md`.
+- Plan: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`.
 - Base branch: `.claude/harness.json` `baseBranch` if set, else `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`), else `main`/`master` — whichever exists. Diff the WHOLE branch: `git diff <base>...HEAD` (single commit: `git show HEAD`). Never review per-task slices: cross-task bugs are invisible to per-task lenses (two real incidents).
 
 ## 2. Dispatch the reviewer

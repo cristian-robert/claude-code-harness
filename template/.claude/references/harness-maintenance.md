@@ -97,7 +97,7 @@ Every "load when" cell (CLAUDE.md context table, rule reference citations, skill
 | task-shaped | `any export work (CSV/PDF/XLSX)` — name the operation |
 | diff-driven | `<glob> files in diff` |
 | plan-driven | `plan frontmatter complexity: M+` |
-| argument-driven | `$ARGUMENTS contains <token>` |
+| argument-driven | `invocation argument contains <token>` |
 
 Combine with `+` (AND) or `,` (OR), two clauses max — more logic belongs inside the loaded file.
 

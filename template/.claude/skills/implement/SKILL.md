@@ -12,7 +12,7 @@ inline fallback given per step. On conflict, this repo's rules win.
 
 ## 1 · Load the contract
 
-Read the plan file at `$ARGUMENTS`. Missing, unreadable, or no argument → stop; final line becomes:
+Read the plan file named by **the invocation argument** (the text typed after the command). Missing, unreadable, or no argument → stop; final line becomes:
 
 ```
 BLOCKED: plan file <path> missing or unreadable — run /plan first

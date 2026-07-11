@@ -8,7 +8,7 @@ allowed-tools: Bash(ls *) Bash(grep *)
 
 # /backlog — one item model, four verbs
 
-Items live at `backlog/<id>-<slug>.md` IN THE TRACKING ROOT (primary checkout — items sit outside code branches; every write commits there as `track(<id>): <event>`), in the exact shape of `.claude/references/item-template.md`. Backend (files|github) and method (kanban|scrum) come from `.claude/harness.json` `workTracking`; every backend operation — including degrade — follows `.claude/references/work-tracking.md`. Route on `$ARGUMENTS`; no subcommand → board.
+Items live at `backlog/<id>-<slug>.md` IN THE TRACKING ROOT (primary checkout — items sit outside code branches; every write commits there as `track(<id>): <event>`), in the exact shape of `.claude/references/item-template.md`. Backend (files|github) and method (kanban|scrum) come from `.claude/harness.json` `workTracking`; every backend operation — including degrade — follows `.claude/references/work-tracking.md`. Route on the invocation argument (the text typed after the command); no subcommand → board.
 
 ## Current state
 
