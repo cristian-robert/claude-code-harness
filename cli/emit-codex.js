@@ -116,6 +116,11 @@ function copyTree(src, dest) {
     var entry = entries[i];
     // Parity with init.js: never follow symlinks out of the payload.
     if (entry.isSymbolicLink()) continue;
+    // Never mirror backup artifacts (<file>.backup) that backupAndCopy leaves
+    // in .claude/ once update.js has run — the generated Codex tree must be a
+    // faithful mirror of the canonical skill content only, never PHE's own
+    // backup bookkeeping from the file it was copied out of.
+    if (entry.name.slice(-7) === '.backup') continue;
     var s = path.join(src, entry.name);
     var d = path.join(dest, entry.name);
     if (entry.isDirectory()) copyTree(s, d);

@@ -7,6 +7,8 @@ const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
+const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
+const { emitCodexPayload } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -148,6 +150,18 @@ async function main() {
   var projectRoot = process.cwd();
   var previousVersion = getVersion(projectRoot);
 
+  // Non-interactive: the harness choice was made at init. A project installed
+  // before multi-harness support has no `harness` key — it is Claude-only.
+  // The actual persist happens later (see writeHarnessTargets below) — the
+  // copy of .claude/ that follows overwrites harness.json with the framework's
+  // default (no `harness` key), so writing it here would just be clobbered.
+  var targets = readHarnessTargets(projectRoot);
+  if (targets === null) {
+    targets = ['claude'];
+    console.log('No harness recorded — assuming Claude Code. Re-run `init` to add Codex.');
+  }
+  console.log('Harness: ' + targets.join(' + '));
+
   // UUID-based tmp dir — avoids collisions when two update runs start in the
   // same millisecond (Date.now() has millisecond granularity).
   var tmpDir = path.join(os.tmpdir(), 'ai-framework-update-' + crypto.randomUUID());
@@ -195,16 +209,23 @@ async function main() {
       projectRoot
     );
 
-    // Update CLAUDE.md with backup + rollback on failure. See
-    // cli/claude-md-copy.js for the rollback semantics.
-    var claudeMdSource = path.join(sourceDir, 'template', 'CLAUDE.md');
-    var claudeMdDest = path.join(projectRoot, 'CLAUDE.md');
-    var claudeMdDelta = copyClaudeMdWithBackup(claudeMdSource, claudeMdDest);
-    stats.created += claudeMdDelta.created;
-    stats.updated += claudeMdDelta.updated;
-    stats.backedUp += claudeMdDelta.backedUp;
-    for (var bi = 0; bi < claudeMdDelta.backedUpFiles.length; bi++) {
-      stats.backedUpFiles.push(claudeMdDelta.backedUpFiles[bi]);
+    // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
+    var instructionFiles = ['AGENTS.md'];
+    if (targets.indexOf('claude') !== -1) instructionFiles.push('CLAUDE.md');
+
+    for (var ifI = 0; ifI < instructionFiles.length; ifI++) {
+      var ifName = instructionFiles[ifI];
+      var ifDelta = copyClaudeMdWithBackup(
+        path.join(sourceDir, 'template', ifName),
+        path.join(projectRoot, ifName),
+        { backupLabel: ifName }
+      );
+      stats.created += ifDelta.created;
+      stats.updated += ifDelta.updated;
+      stats.backedUp += ifDelta.backedUp;
+      for (var bi = 0; bi < ifDelta.backedUpFiles.length; bi++) {
+        stats.backedUpFiles.push(ifDelta.backedUpFiles[bi]);
+      }
     }
 
     // Update root symbol-search config: .mcp.json (codebase-search MCP) and
@@ -251,6 +272,19 @@ async function main() {
       console.log('Merged your .claude/settings.json (hooks + permissions) with the updated framework version.');
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
+    }
+
+    // Persist the harness choice AFTER the payload copy — the copy above just
+    // overwrote .claude/harness.json with the framework's default (no `harness`
+    // key), so re-merge the recorded/derived targets into it now (parity with
+    // init.js, which records for the same reason in the same relative spot).
+    writeHarnessTargets(projectRoot, targets);
+
+    // Re-derive the Codex tree so a payload change (new skill, edited agent)
+    // reaches Codex. Generated trees are overwritten, never backed up.
+    if (targets.indexOf('codex') !== -1) {
+      var codexCounts = emitCodexPayload(projectRoot);
+      console.log('Re-emitted Codex payload: ' + codexCounts.skills + ' skills, ' + codexCounts.agents + ' agents.');
     }
 
     // Create init metadata for /harness-init merge

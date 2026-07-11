@@ -114,6 +114,17 @@ assert('re-emit is idempotent (same counts)', result2.skills === 1 && result2.ag
 assert('re-emit does not create .backup files in generated trees',
   !fs.existsSync(path.join(PROJ, '.agents', 'skills', 'plan', 'SKILL.md.backup')));
 
+// update.js's backupAndCopy() leaves <file>.backup siblings inside .claude/
+// once it has run once. copyTree must not mirror those into the generated
+// tree — they are PHE's own backup bookkeeping, not canonical skill content.
+fs.writeFileSync(
+  path.join(PROJ, '.claude', 'skills', 'plan', 'SKILL.md.backup'),
+  '# stale backup content\n'
+);
+emitCodexPayload(PROJ);
+assert('a pre-existing .backup sibling in .claude/skills/ is NOT mirrored into .agents/',
+  !fs.existsSync(path.join(PROJ, '.agents', 'skills', 'plan', 'SKILL.md.backup')));
+
 // A file removed from a skill that still exists must not linger after a
 // re-emit — the generated skill dir must be a faithful mirror of the source,
 // not an accumulating overlay (copyTree only adds/overwrites, never deletes).
