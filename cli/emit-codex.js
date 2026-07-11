@@ -86,7 +86,127 @@ function agentMdToToml(mdText, fallbackName) {
   ].join('\n');
 }
 
+const CODEX_CONFIG_TOML = [
+  '# ' + GENERATED_BY,
+  '# Source: perfect-harness-engineering template. Re-run `npx perfect-harness-engineering update`.',
+  '',
+  '# Codex subagents are OFF by default; PHE ships four (see .codex/agents/).',
+  '[features]',
+  'multi_agent = true',
+  '',
+  '[agents]',
+  'max_threads = 4',
+  '',
+].join('\n');
+
+const GENERATED_MARKER = [
+  '# ' + GENERATED_BY,
+  '#',
+  '# This directory is DERIVED from .claude/skills/ on every',
+  '# `perfect-harness-engineering init` / `update`. Edits here are LOST.',
+  '# Edit .claude/skills/<name>/SKILL.md instead — it is the single source and',
+  '# it serves both harnesses (Claude Code reads .claude/skills, Codex reads here).',
+  '',
+].join('\n');
+
+function copyTree(src, dest) {
+  if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
+  var entries = fs.readdirSync(src, { withFileTypes: true });
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i];
+    // Parity with init.js: never follow symlinks out of the payload.
+    if (entry.isSymbolicLink()) continue;
+    var s = path.join(src, entry.name);
+    var d = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyTree(s, d);
+    else if (entry.isFile()) fs.copyFileSync(s, d);
+  }
+}
+
+function dirNames(p) {
+  if (!fs.existsSync(p)) return [];
+  return fs.readdirSync(p, { withFileTypes: true })
+    .filter(function (e) { return e.isDirectory(); })
+    .map(function (e) { return e.name; });
+}
+
+// Derive the Codex tree from the installed .claude/ payload.
+// Generated files are overwritten, never backed up — they are not user content.
+function emitCodexPayload(projectRoot) {
+  var claudeSkills = path.join(projectRoot, '.claude', 'skills');
+  var claudeAgents = path.join(projectRoot, '.claude', 'agents');
+  var agentsSkills = path.join(projectRoot, '.agents', 'skills');
+  var codexAgents = path.join(projectRoot, '.codex', 'agents');
+  var counts = { skills: 0, agents: 0 };
+
+  // --- skills: .claude/skills/<n>/ -> .agents/skills/<n>/ ---
+  fs.mkdirSync(agentsSkills, { recursive: true });
+  var wanted = dirNames(claudeSkills);
+
+  // Prune skills we previously generated but no longer ship, so a removed skill
+  // does not keep firing on Codex after an update.
+  var existing = dirNames(agentsSkills);
+  for (var p = 0; p < existing.length; p++) {
+    if (wanted.indexOf(existing[p]) === -1) {
+      fs.rmSync(path.join(agentsSkills, existing[p]), { recursive: true, force: true });
+    }
+  }
+
+  for (var s = 0; s < wanted.length; s++) {
+    var skillDest = path.join(agentsSkills, wanted[s]);
+    copyTree(path.join(claudeSkills, wanted[s]), skillDest);
+    counts.skills++;
+
+    // Implicit-invocation parity. Claude Code keeps a skill user-invoke-only with
+    // `disable-model-invocation: true`; Codex's equivalent is an openai.yaml
+    // policy alongside SKILL.md. Without it Codex would happily auto-fire
+    // /implement off a description match — a pipeline stage must never self-start.
+    var skillMd = null;
+    try {
+      skillMd = fs.readFileSync(path.join(skillDest, 'SKILL.md'), 'utf-8');
+    } catch (e) {
+      skillMd = null;
+    }
+    var yamlPath = path.join(skillDest, 'agents', 'openai.yaml');
+    var userOnly = skillMd !== null &&
+      parseFrontmatter(skillMd).fm['disable-model-invocation'] === 'true';
+
+    if (userOnly) {
+      fs.mkdirSync(path.join(skillDest, 'agents'), { recursive: true });
+      fs.writeFileSync(yamlPath, [
+        '# ' + GENERATED_BY,
+        '# Mirrors `disable-model-invocation: true` in the canonical SKILL.md.',
+        'policy:',
+        '  allow_implicit_invocation: false',
+        '',
+      ].join('\n'));
+    } else if (fs.existsSync(yamlPath)) {
+      // The flag was turned off upstream — drop the stale policy.
+      fs.rmSync(yamlPath, { force: true });
+    }
+  }
+  fs.writeFileSync(path.join(agentsSkills, '.phe-generated'), GENERATED_MARKER);
+
+  // --- agents: .claude/agents/<n>.md -> .codex/agents/<n>.toml ---
+  fs.mkdirSync(codexAgents, { recursive: true });
+  if (fs.existsSync(claudeAgents)) {
+    var files = fs.readdirSync(claudeAgents).filter(function (f) { return f.endsWith('.md'); });
+    for (var a = 0; a < files.length; a++) {
+      var stem = files[a].replace(/\.md$/, '');
+      var md = fs.readFileSync(path.join(claudeAgents, files[a]), 'utf-8');
+      fs.writeFileSync(path.join(codexAgents, stem + '.toml'), agentMdToToml(md, stem));
+      counts.agents++;
+    }
+  }
+
+  // --- .codex/config.toml ---
+  fs.writeFileSync(path.join(projectRoot, '.codex', 'config.toml'), CODEX_CONFIG_TOML);
+
+  return counts;
+}
+
 module.exports = {
   GENERATED_BY: GENERATED_BY,
   agentMdToToml: agentMdToToml,
+  emitCodexPayload: emitCodexPayload,
 };

@@ -15,9 +15,9 @@
   "files": ["cli/", "template/", "tools/context-ledger.mjs", "docs/*.md", "README.md"],
   "scripts": {
     "test:init": "node cli/init-backup.test.js",
-    "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js",
+    "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js",
     "test:hooks": "node template/.claude/hooks/smoke-test.mjs",
-    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node template/.claude/hooks/smoke-test.mjs"
+    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node template/.claude/hooks/smoke-test.mjs"
   },
   "engines": {
     "node": ">=18"
