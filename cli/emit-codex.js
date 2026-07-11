@@ -277,7 +277,14 @@ function emitCodexPayload(projectRoot) {
   }
 
   // --- .codex/config.toml ---
-  fs.writeFileSync(path.join(projectRoot, '.codex', 'config.toml'), CODEX_CONFIG_TOML);
+  // F1 residual: config.toml is a direct child of .codex, not of .codex/agents,
+  // so assertNoSymlinkChildren(codexAgents) above never covers it. Without this,
+  // a symlinked .codex/config.toml lets writeFileSync follow the link and
+  // overwrite whatever it points at. .codex itself is already covered by
+  // assertRealDir(codexRoot) above.
+  var codexConfigPath = path.join(codexRoot, 'config.toml');
+  assertNotSymlink(codexConfigPath);
+  fs.writeFileSync(codexConfigPath, CODEX_CONFIG_TOML);
 
   return counts;
 }

@@ -293,6 +293,49 @@ function freshProj(name) {
   assert('sanity: config.toml still written', fs.existsSync(path.join(proj, '.codex', 'config.toml')));
 })();
 
+// F1 residual: .codex/config.toml is a direct child of .codex, not of
+// .codex/agents, so assertNoSymlinkChildren(codexAgents) never covers it.
+// Reproduced through the real CLI: a symlinked .codex/config.toml let the
+// final writeFileSync follow the link and clobber an external file, exit 0.
+(function () {
+  var proj = freshProj('config-toml-symlink');
+  var decoy = path.join(SYM_TEST_DIR, 'decoy-config-target.toml');
+  fs.writeFileSync(decoy, 'DECOY CONTENT -- DO NOT OVERWRITE');
+  fs.mkdirSync(path.join(proj, '.codex'), { recursive: true });
+  fs.symlinkSync(decoy, path.join(proj, '.codex', 'config.toml'));
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('emitCodexPayload throws when .codex/config.toml is a symlink', threw instanceof Error);
+  assert('the decoy file still exists', fs.existsSync(decoy));
+  assert('the decoy file content is unchanged',
+    fs.existsSync(decoy) && fs.readFileSync(decoy, 'utf-8') === 'DECOY CONTENT -- DO NOT OVERWRITE');
+})();
+
+// Sanity: a normal emit-then-emit must still write a real config.toml and
+// must not throw -- the new guard must not false-positive on the ordinary
+// "config.toml is a real file from a prior emit" case.
+(function () {
+  var proj = freshProj('config-toml-sanity');
+  emitCodexPayload(proj);
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('re-emit of a real (non-symlinked) config.toml does not throw', threw === null);
+  var cfgPath = path.join(proj, '.codex', 'config.toml');
+  assert('.codex/config.toml exists after re-emit', fs.existsSync(cfgPath));
+  assert('.codex/config.toml has multi_agent = true after re-emit',
+    fs.existsSync(cfgPath) && fs.readFileSync(cfgPath, 'utf-8').indexOf('multi_agent = true') !== -1);
+})();
+
 fs.rmSync(SYM_TEST_DIR, { recursive: true, force: true });
 
 // ─── F2: a dropped harness target is never cleaned up ──────────────────────
