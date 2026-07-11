@@ -114,6 +114,16 @@ assert('re-emit is idempotent (same counts)', result2.skills === 1 && result2.ag
 assert('re-emit does not create .backup files in generated trees',
   !fs.existsSync(path.join(PROJ, '.agents', 'skills', 'plan', 'SKILL.md.backup')));
 
+// A file removed from a skill that still exists must not linger after a
+// re-emit — the generated skill dir must be a faithful mirror of the source,
+// not an accumulating overlay (copyTree only adds/overwrites, never deletes).
+fs.rmSync(path.join(PROJ, '.claude', 'skills', 'plan', 'nested', 'ref.md'), { force: true });
+emitCodexPayload(PROJ);
+assert('stale skill asset is removed on re-emit (not just overlaid)',
+  !fs.existsSync(path.join(PROJ, '.agents', 'skills', 'plan', 'nested', 'ref.md')));
+assert('live SKILL.md survives the same re-emit',
+  fs.existsSync(path.join(PROJ, '.agents', 'skills', 'plan', 'SKILL.md')));
+
 // A stale generated skill (removed from .claude/) must not linger in .agents/.
 fs.mkdirSync(path.join(PROJ, '.agents', 'skills', 'ghost'), { recursive: true });
 fs.writeFileSync(path.join(PROJ, '.agents', 'skills', 'ghost', 'SKILL.md'), '# ghost\n');

@@ -154,6 +154,11 @@ function emitCodexPayload(projectRoot) {
 
   for (var s = 0; s < wanted.length; s++) {
     var skillDest = path.join(agentsSkills, wanted[s]);
+    // Clean-then-copy: the generated skill dir must be a faithful mirror of
+    // the source, not an accumulating overlay. copyTree only adds/overwrites,
+    // so a file dropped from a still-shipped skill would otherwise linger
+    // forever. This is safe because .agents/skills/ is wholly generated.
+    fs.rmSync(skillDest, { recursive: true, force: true });
     copyTree(path.join(claudeSkills, wanted[s]), skillDest);
     counts.skills++;
 
@@ -180,10 +185,10 @@ function emitCodexPayload(projectRoot) {
         '  allow_implicit_invocation: false',
         '',
       ].join('\n'));
-    } else if (fs.existsSync(yamlPath)) {
-      // The flag was turned off upstream — drop the stale policy.
-      fs.rmSync(yamlPath, { force: true });
     }
+    // No stale-delete branch needed here: skillDest was just removed and
+    // recopied from scratch above, so a fresh dir can never contain a stale
+    // agents/openai.yaml (or a stale, now-empty agents/ dir) to clean up.
   }
   fs.writeFileSync(path.join(agentsSkills, '.phe-generated'), GENERATED_MARKER);
 
