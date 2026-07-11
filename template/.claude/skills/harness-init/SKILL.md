@@ -87,6 +87,8 @@ Any red → fix and re-run before finishing. Setup without a green smoke test is
 
 **Codex target?** Codex only loads a project's `.codex/` layer when the project is TRUSTED. Tell the user to run `codex` in this directory once and accept the trust prompt, or to add `[projects."<abs-path>"] trust_level = "trusted"` to `~/.codex/config.toml`. Until then `.codex/config.toml` and `.codex/agents/` are ignored entirely.
 
+**Codex customizations?** `.agents/`/`.codex/` were generated at install time, before this step's edits — run `npx perfect-harness-engineering emit` now to push them (filled AGENTS.md, knowledge skills, MCP-clause prunes) into the Codex tree.
+
 ## Output contract
 
 Everything the operator must review — the step-0 reconcile audit (stale hooks, unioned `permissions.allow`, SessionStart injection cost), the step-4 verification outputs, the degraded-roles notice, any gate candidate that came back red — is WRITTEN to `reports/harness-init.md`, not narrated. The one interactive surface is step 2's single `AskUserQuestion` round plus the step-0 offer to delete the `.backup` files.

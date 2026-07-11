@@ -471,8 +471,9 @@ async function main() {
     console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
   }
   if (targets.indexOf('codex') !== -1) {
-    console.log('  Codex: instructions are in AGENTS.md; the pipeline skills are invocable as $plan, $implement, $validate, $review.');
-    console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — edit .claude/, then re-run update.');
+    console.log('  Codex: instructions are in AGENTS.md. Run $harness-init in Codex — it fits the payload to your stack and arms the gate.');
+    console.log('  Pipeline skills are invocable as $plan, $implement, $validate, $review.');
+    console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — after $harness-init (or any later hand-edit of .claude/), run `npx perfect-harness-engineering emit` to push the changes into the Codex tree. `update` is NOT a substitute — it reverts .claude/ to the framework template before re-emitting.');
     console.log('  Enforcement hooks are not wired for Codex yet (guidance-only).');
   }
   if (stats.backedUp > 0) {
