@@ -7,6 +7,8 @@ const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
+const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
+const { emitCodexPayload } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -270,6 +272,19 @@ async function main() {
     console.log('');
   }
 
+  // Which harness(es)? Asked once, at init; recorded in .claude/harness.json so
+  // `update` re-emits the same payload without prompting.
+  var targets = null;
+  while (targets === null) {
+    var answer = await ask('\n' + HARNESS_PROMPT);
+    targets = parseHarnessAnswer(answer);
+    if (targets === null) {
+      console.log('  Please answer 1, 2, or 3 (or claude / codex / both).');
+    }
+  }
+  console.log('  Harness: ' + targets.join(' + '));
+  console.log('');
+
   // Get previous version before overwriting
   var previousVersion = getVersion(targetDir);
 
@@ -314,16 +329,25 @@ async function main() {
     targetDir
   );
 
-  // Install CLAUDE.md with backup + rollback on failure. See
-  // cli/claude-md-copy.js for the rollback semantics.
-  var claudeMdSource = path.join(sourceDir, 'template', 'CLAUDE.md');
-  var claudeMdDest = path.join(targetDir, 'CLAUDE.md');
-  var claudeMdDelta = copyClaudeMdWithBackup(claudeMdSource, claudeMdDest);
-  stats.created += claudeMdDelta.created;
-  stats.updated += claudeMdDelta.updated;
-  stats.backedUp += claudeMdDelta.backedUp;
-  for (var bi = 0; bi < claudeMdDelta.backedUpFiles.length; bi++) {
-    stats.backedUpFiles.push(claudeMdDelta.backedUpFiles[bi]);
+  // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
+  // reads it directly). CLAUDE.md is a thin `@AGENTS.md` import shim and is only
+  // installed when Claude Code is a target. Both use the backup+rollback copier.
+  var instructionFiles = [{ name: 'AGENTS.md' }];
+  if (targets.indexOf('claude') !== -1) instructionFiles.push({ name: 'CLAUDE.md' });
+
+  for (var ifI = 0; ifI < instructionFiles.length; ifI++) {
+    var ifName = instructionFiles[ifI].name;
+    var ifDelta = copyClaudeMdWithBackup(
+      path.join(sourceDir, 'template', ifName),
+      path.join(targetDir, ifName),
+      { backupLabel: ifName }
+    );
+    stats.created += ifDelta.created;
+    stats.updated += ifDelta.updated;
+    stats.backedUp += ifDelta.backedUp;
+    for (var bi = 0; bi < ifDelta.backedUpFiles.length; bi++) {
+      stats.backedUpFiles.push(ifDelta.backedUpFiles[bi]);
+    }
   }
 
   // Install root symbol-search config: .mcp.json (codebase-search MCP) and
@@ -378,6 +402,18 @@ async function main() {
     console.warn('Could not merge your existing settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
   }
 
+  // Record the harness choice AFTER the payload copy — the copy installs the
+  // framework's harness.json, and writeHarnessTargets merges into it.
+  writeHarnessTargets(targetDir, targets);
+
+  // Derive the Codex tree from the canonical .claude/ payload.
+  var codexCounts = null;
+  if (targets.indexOf('codex') !== -1) {
+    codexCounts = emitCodexPayload(targetDir);
+    console.log('Emitted Codex payload: ' + codexCounts.skills + ' skills -> .agents/skills/, ' +
+      codexCounts.agents + ' agents -> .codex/agents/');
+  }
+
   // Create init metadata if files were backed up
   if (stats.backedUp > 0) {
     createInitMeta(targetDir, previousVersion, newVersion, stats.backedUpFiles);
@@ -423,8 +459,15 @@ async function main() {
   console.log('');
 
   console.log('Next steps:');
-  console.log('  1. Open Claude Code in this project');
-  console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
+  if (targets.indexOf('claude') !== -1) {
+    console.log('  1. Open Claude Code in this project');
+    console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
+  }
+  if (targets.indexOf('codex') !== -1) {
+    console.log('  Codex: instructions are in AGENTS.md; the pipeline skills are invocable as $plan, $implement, $validate, $review.');
+    console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — edit .claude/, then re-run update.');
+    console.log('  Enforcement hooks are not wired for Codex yet (guidance-only).');
+  }
   if (stats.backedUp > 0) {
     console.log('  (existing files were backed up as .backup — reconcile any you had customized)');
   }
