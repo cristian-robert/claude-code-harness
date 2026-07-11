@@ -386,5 +386,107 @@ function f2Proj(name) {
 
 fs.rmSync(F2_DIR, { recursive: true, force: true });
 
+// ─── F6: pin the disable-model-invocation invariant against the REAL ───────
+// payload. Every prior assertion in this file runs against hand-built
+// fixtures in a temp dir -- nothing asserts the property holds on
+// template/.claude/skills/ itself, and the detection is a strict string
+// compare (fm['disable-model-invocation'] === 'true'). A future skill written
+// with `yes`/`True`/a forgotten key would silently become model-invocable on
+// Codex ($implement auto-firing with no human in the loop) with CI staying
+// green. Derives the expectation by READING the real skills -- never
+// hardcodes the list of names, so a new skill is automatically covered.
+console.log('\nF6: disable-model-invocation parity against the REAL template payload:');
+
+const { parseFrontmatter } = require('./emit-codex');
+
+function copyDirSync(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  var entries = fs.readdirSync(src, { withFileTypes: true });
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    if (e.isSymbolicLink()) continue;
+    var s = path.join(src, e.name);
+    var d = path.join(dest, e.name);
+    if (e.isDirectory()) copyDirSync(s, d);
+    else if (e.isFile()) fs.copyFileSync(s, d);
+  }
+}
+
+function findAll(dir, filename) {
+  var found = [];
+  var entries = fs.readdirSync(dir, { withFileTypes: true });
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    var p = path.join(dir, e.name);
+    if (e.isDirectory()) found = found.concat(findAll(p, filename));
+    else if (e.isFile() && e.name === filename) found.push(p);
+  }
+  return found;
+}
+
+var REAL_TEST_DIR = path.join(os.tmpdir(), 'emit-codex-real-test-' + crypto.randomUUID());
+var REAL_PROJ = path.join(REAL_TEST_DIR, 'proj');
+var REPO_ROOT = path.join(__dirname, '..');
+var REAL_TEMPLATE_CLAUDE = path.join(REPO_ROOT, 'template', '.claude');
+
+// Copy template/.claude/ into a temp dir -- emitCodexPayload must NEVER run
+// against the repo's own template/ (it would leave .agents/.codex committed
+// as generated cruft in the framework repo itself).
+copyDirSync(REAL_TEMPLATE_CLAUDE, path.join(REAL_PROJ, '.claude'));
+emitCodexPayload(REAL_PROJ);
+
+var realSkillsDir = path.join(REAL_TEMPLATE_CLAUDE, 'skills');
+var realSkillNames = fs.readdirSync(realSkillsDir, { withFileTypes: true })
+  .filter(function (e) { return e.isDirectory(); })
+  .map(function (e) { return e.name; });
+
+var expectedFlagged = [];
+var expectedUnflagged = [];
+for (var rs = 0; rs < realSkillNames.length; rs++) {
+  var name = realSkillNames[rs];
+  var mdPath = path.join(realSkillsDir, name, 'SKILL.md');
+  if (!fs.existsSync(mdPath)) continue;
+  var fm = parseFrontmatter(fs.readFileSync(mdPath, 'utf-8')).fm;
+  if (fm['disable-model-invocation'] === 'true') expectedFlagged.push(name);
+  else expectedUnflagged.push(name);
+}
+
+// Sanity: both branches must actually be exercised, or the assertions below
+// would vacuously pass on an empty list.
+assert('sanity: at least one real skill IS flagged disable-model-invocation', expectedFlagged.length > 0);
+assert('sanity: at least one real skill is NOT flagged (knowledge skills)', expectedUnflagged.length > 0);
+
+var flaggedMissingYaml = expectedFlagged.filter(function (name) {
+  return !fs.existsSync(path.join(REAL_PROJ, '.agents', 'skills', name, 'agents', 'openai.yaml'));
+});
+assert('every disable-model-invocation:true real skill got an openai.yaml: ' + flaggedMissingYaml.join(', '),
+  flaggedMissingYaml.length === 0);
+
+var flaggedWrongContent = expectedFlagged.filter(function (name) {
+  var yamlPath = path.join(REAL_PROJ, '.agents', 'skills', name, 'agents', 'openai.yaml');
+  if (!fs.existsSync(yamlPath)) return false; // already reported above
+  return fs.readFileSync(yamlPath, 'utf-8').indexOf('allow_implicit_invocation: false') === -1;
+});
+assert('every emitted openai.yaml for a flagged skill forbids implicit invocation: ' + flaggedWrongContent.join(', '),
+  flaggedWrongContent.length === 0);
+
+var unflaggedWithYaml = expectedUnflagged.filter(function (name) {
+  return fs.existsSync(path.join(REAL_PROJ, '.agents', 'skills', name, 'agents', 'openai.yaml'));
+});
+assert('no non-flagged real skill got an openai.yaml: ' + unflaggedWithYaml.join(', '), unflaggedWithYaml.length === 0);
+
+// Global scan: no emitted openai.yaml ANYWHERE allows implicit invocation --
+// catches a future skill that sets the key to something other than the
+// exact string 'true' (e.g. `yes`, `True`) and STILL expects to be
+// user-invoke-only, where a looser generator might emit the wrong policy.
+var allRealYamls = findAll(path.join(REAL_PROJ, '.agents', 'skills'), 'openai.yaml');
+assert('sanity: at least one openai.yaml was actually emitted', allRealYamls.length > 0);
+var leaky = allRealYamls.filter(function (p) {
+  return fs.readFileSync(p, 'utf-8').indexOf('allow_implicit_invocation: true') !== -1;
+});
+assert('no emitted openai.yaml anywhere allows implicit invocation: ' + leaky.join(', '), leaky.length === 0);
+
+fs.rmSync(REAL_TEST_DIR, { recursive: true, force: true });
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
