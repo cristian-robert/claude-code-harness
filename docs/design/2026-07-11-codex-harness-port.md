@@ -230,7 +230,12 @@ Codex trust step.
 4. **Periphery.** `loop.mjs --harness codex`; ledger budgets; `global/` `~/.codex` layer; harness-neutral
    `docs/00–06`, `docs/99` sources; README/identity; vault write-back.
 
-Phase 1 is a prerequisite for 2 and 3. Phases 2, 3, and 4 are independent of each other.
+5. **Code & token economy.** Its own design: `2026-07-11-code-and-token-economy.md` (the ladder + guards,
+   platform-native table, tool-schema discipline, output-contract amendment). Cross-cutting and independent
+   of 1–4, except that its rules reach Codex through Phase 2's `rules-inject.mjs`.
+
+Phase 1 is a prerequisite for 2 and 3. Phases 2, 3, and 4 are independent of each other. Phase 5 is
+independent but lands on Codex only once Phase 2 ships.
 
 ## Vault write-back (Index Law)
 
