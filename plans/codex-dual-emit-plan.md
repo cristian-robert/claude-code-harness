@@ -1159,8 +1159,9 @@ git commit -m "feat(cli): update re-emits the Codex payload from harness.json"
 
 **Files:**
 - Modify: `README.md`
-- Modify: `.gitignore` (repo root) — nothing to add for PHE itself, but see Step 2
 - Modify: `template/.claude/skills/harness-init/SKILL.md` (Codex trust note)
+
+**Decision (do NOT gitignore the generated trees):** `.agents/` and `.codex/` are committed in an adopting project, exactly like `.claude/` is. They are derived, but a fresh `git clone` of a Codex project must work without first running the CLI. "Generated" here means "overwritten by `update`, never hand-edited" — not "untracked". No `.gitignore` change is needed.
 
 **Interfaces:**
 - Consumes: everything above.
