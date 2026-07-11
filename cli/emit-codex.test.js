@@ -295,5 +295,96 @@ function freshProj(name) {
 
 fs.rmSync(SYM_TEST_DIR, { recursive: true, force: true });
 
+// ─── F2: a dropped harness target is never cleaned up ──────────────────────
+// Trace: init(claude) -> init(both) -> update -> init(claude). Without
+// cleanup, .agents/skills, .codex/agents, .codex/config.toml all survive the
+// downgrade and update no longer refreshes them (targets no longer contains
+// codex) -- a teammate opening Codex there runs a stale pipeline, silently,
+// forever.
+console.log('\nF2: dropped-target cleanup:');
+
+const { removeCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+
+var F2_DIR = path.join(os.tmpdir(), 'emit-codex-f2-test-' + crypto.randomUUID());
+
+function f2Proj(name) {
+  var proj = path.join(F2_DIR, name);
+  fs.mkdirSync(path.join(proj, '.claude', 'skills', 'plan'), { recursive: true });
+  fs.writeFileSync(
+    path.join(proj, '.claude', 'skills', 'plan', 'SKILL.md'),
+    '---\nname: plan\ndescription: "Plan."\n---\n\nBody.\n'
+  );
+  return proj;
+}
+
+// emit for ['claude','codex'], then clean for ['claude'] -> .agents/ and
+// .codex/ are gone, and the caller gets a non-silent notice.
+(function () {
+  var proj = f2Proj('drop-codex');
+  emitCodexPayload(proj);
+  assert('.agents/ exists after emitting for both harnesses', fs.existsSync(path.join(proj, '.agents')));
+  assert('.codex/ exists after emitting for both harnesses', fs.existsSync(path.join(proj, '.codex')));
+
+  var msg = cleanupDroppedTargets(proj, ['claude']);
+  assert('.agents/ is removed once codex drops out of targets', !fs.existsSync(path.join(proj, '.agents')));
+  assert('.codex/ is removed once codex drops out of targets', !fs.existsSync(path.join(proj, '.codex')));
+  assert('cleanup returns a non-silent notice naming codex', typeof msg === 'string' && msg.indexOf('codex') !== -1);
+})();
+
+// The symmetric case: claude drops out -> the orphan CLAUDE.md shim is
+// removed too, mentioned in the same notice.
+(function () {
+  var proj = f2Proj('drop-claude');
+  fs.writeFileSync(path.join(proj, 'CLAUDE.md'), '@AGENTS.md\n');
+  emitCodexPayload(proj);
+
+  var msg = cleanupDroppedTargets(proj, ['codex']);
+  assert('CLAUDE.md is removed once claude drops out of targets', !fs.existsSync(path.join(proj, 'CLAUDE.md')));
+  assert('.agents/ survives (codex is still a target)', fs.existsSync(path.join(proj, '.agents')));
+  assert('cleanup returns a non-silent notice naming claude', typeof msg === 'string' && msg.indexOf('claude') !== -1);
+})();
+
+// ['codex'] -> ['claude','codex'] still works: nothing is removed and a
+// re-emit still succeeds.
+(function () {
+  var proj = f2Proj('codex-then-both');
+  emitCodexPayload(proj);
+  var msgNone = cleanupDroppedTargets(proj, ['claude', 'codex']);
+  assert('no cleanup notice when both targets are present', msgNone === null);
+  assert('.agents/ is untouched when both targets are present', fs.existsSync(path.join(proj, '.agents')));
+  var result = emitCodexPayload(proj);
+  assert('re-emitting for both harnesses still works', result.skills === 1);
+})();
+
+// Nothing to clean up (neither generated tree nor CLAUDE.md exists) -> no
+// throw, no notice.
+(function () {
+  var proj = f2Proj('nothing-to-clean');
+  var msg = cleanupDroppedTargets(proj, ['claude']);
+  assert('cleanup on a project with nothing generated returns null, does not throw', msg === null);
+})();
+
+// F1's guard applies to removal too: .agents is a symlink -> throws, target
+// untouched.
+(function () {
+  var proj = f2Proj('remove-symlink-guard');
+  var decoy = path.join(F2_DIR, 'remove-decoy');
+  fs.mkdirSync(decoy, { recursive: true });
+  fs.writeFileSync(path.join(decoy, 'evidence.txt'), 'decoy content');
+  fs.symlinkSync(decoy, path.join(proj, '.agents'), 'dir');
+
+  var threw = null;
+  try {
+    removeCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('removeCodexPayload throws when .agents is a symlink', threw instanceof Error);
+  assert('the decoy target survives a guarded removal attempt',
+    fs.existsSync(decoy) && fs.existsSync(path.join(decoy, 'evidence.txt')));
+})();
+
+fs.rmSync(F2_DIR, { recursive: true, force: true });
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

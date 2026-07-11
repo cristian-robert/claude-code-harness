@@ -282,8 +282,68 @@ function emitCodexPayload(projectRoot) {
   return counts;
 }
 
+// F2: remove the whole generated Codex tree (.agents/, .codex/) -- called
+// when `codex` drops out of the recorded harness targets (e.g. init(both)
+// re-run as init(claude)). Everything under .agents/.codex is generated and
+// holds nothing the user owns, so wholesale removal is safe -- but this is
+// the SAME destructive primitive as the stale-skill prune loop, so the SAME
+// F1 symlink guard applies: refuse rather than rm -rf through a symlink.
+function removeCodexPayload(projectRoot) {
+  var agentsRoot = path.join(projectRoot, '.agents');
+  var codexRoot = path.join(projectRoot, '.codex');
+  var removed = { agents: false, codex: false };
+
+  assertRealDir(agentsRoot);
+  assertRealDir(codexRoot);
+
+  if (fs.existsSync(agentsRoot)) {
+    fs.rmSync(agentsRoot, { recursive: true, force: true });
+    removed.agents = true;
+  }
+  if (fs.existsSync(codexRoot)) {
+    fs.rmSync(codexRoot, { recursive: true, force: true });
+    removed.codex = true;
+  }
+  return removed;
+}
+
+// F2: run at the same point init.js/update.js do the conditional emit.
+// Removes the generated tree(s) for any harness target no longer present.
+// codex dropped -> .agents/+.codex/ go. claude dropped -> the CLAUDE.md shim
+// goes too (it is inert -- an @AGENTS.md import, never user content of its
+// own -- so removing it is as safe as removing .agents/.codex). Only one of
+// the two can happen per run: parseHarnessAnswer only ever offers
+// claude/codex/both, never "neither", so targets can shrink by at most one
+// harness per init/update. Returns a single never-silent notice line, or
+// null when there was nothing to remove.
+function cleanupDroppedTargets(projectRoot, targets) {
+  var removeClaudeMdShim = require('./claude-md-copy').removeClaudeMdShim;
+  var removedParts = [];
+  var droppedNames = [];
+
+  if (targets.indexOf('codex') === -1) {
+    var removedCodex = removeCodexPayload(projectRoot);
+    if (removedCodex.agents) removedParts.push('.agents/');
+    if (removedCodex.codex) removedParts.push('.codex/');
+    if (removedCodex.agents || removedCodex.codex) droppedNames.push('codex');
+  }
+  if (targets.indexOf('claude') === -1) {
+    if (removeClaudeMdShim(projectRoot)) {
+      removedParts.push('CLAUDE.md');
+      droppedNames.push('claude');
+    }
+  }
+
+  if (removedParts.length === 0) return null;
+  return 'Removed the Codex payload (' + removedParts.join(', ') + ') -- ' +
+    droppedNames.join(' + ') + ' is no longer a target.';
+}
+
 module.exports = {
   GENERATED_BY: GENERATED_BY,
   agentMdToToml: agentMdToToml,
+  parseFrontmatter: parseFrontmatter,
   emitCodexPayload: emitCodexPayload,
+  removeCodexPayload: removeCodexPayload,
+  cleanupDroppedTargets: cleanupDroppedTargets,
 };

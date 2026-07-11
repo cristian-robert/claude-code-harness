@@ -8,7 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
-const { emitCodexPayload } = require('./emit-codex');
+const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -286,6 +286,13 @@ async function main() {
       var codexCounts = emitCodexPayload(projectRoot);
       console.log('Re-emitted Codex payload: ' + codexCounts.skills + ' skills, ' + codexCounts.agents + ' agents.');
     }
+
+    // A recorded target that was DROPPED since the last run (harness.json
+    // narrowed from ['claude','codex'] to one) must not leave that target's
+    // generated tree behind, stale forever — same point as the conditional
+    // emit above.
+    var cleanupMsg = cleanupDroppedTargets(projectRoot, targets);
+    if (cleanupMsg) console.log(cleanupMsg);
 
     // Create init metadata for /harness-init merge
     if (stats.backedUp > 0) {

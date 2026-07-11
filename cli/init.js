@@ -8,7 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
-const { emitCodexPayload } = require('./emit-codex');
+const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -413,6 +413,13 @@ async function main() {
     console.log('Emitted Codex payload: ' + codexCounts.skills + ' skills -> .agents/skills/, ' +
       codexCounts.agents + ' agents -> .codex/agents/');
   }
+
+  // A re-run that DROPPED a target (init(both) -> init(claude), or the
+  // symmetric init(both) -> init(codex)) must not leave that target's
+  // generated tree behind, stale forever — same point as the conditional
+  // emit above.
+  var cleanupMsg = cleanupDroppedTargets(targetDir, targets);
+  if (cleanupMsg) console.log(cleanupMsg);
 
   // Create init metadata if files were backed up
   if (stats.backedUp > 0) {

@@ -63,6 +63,31 @@ function copyClaudeMdWithBackup(sourcePath, destPath, options) {
   }
 }
 
+// F2: remove the CLAUDE.md shim when Claude Code drops out of the harness
+// targets (e.g. init(both) re-run as init(codex)). CLAUDE.md is always a
+// generated `@AGENTS.md` import shim -- never project content of its own --
+// so removal is safe. Same symlink guard as any other generated-tree removal
+// (F1/F2): refuse rather than unlink through a symlink.
+function removeClaudeMdShim(projectRoot) {
+  var path = require('path');
+  var p = path.join(projectRoot, 'CLAUDE.md');
+  var st;
+  try {
+    st = fs.lstatSync(p);
+  } catch (e) {
+    return false; // does not exist -- nothing to remove
+  }
+  if (st.isSymbolicLink()) {
+    throw new Error(
+      p + ' is a symlink -- perfect-harness-engineering will not remove it ' +
+      'automatically. Remove it by hand if it is no longer needed.'
+    );
+  }
+  fs.unlinkSync(p);
+  return true;
+}
+
 module.exports = {
   copyClaudeMdWithBackup: copyClaudeMdWithBackup,
+  removeClaudeMdShim: removeClaudeMdShim,
 };
