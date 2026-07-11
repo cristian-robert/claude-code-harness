@@ -51,7 +51,10 @@ const add = (file, text, cls) => {
   rows.push({ file: file + mark, lines, tokens: est(text) });
 };
 
-for (const f of ["CLAUDE.md", join(".claude", "CLAUDE.md"), "CLAUDE.local.md"]) {
+// AGENTS.md is the canonical instruction file (Codex reads it directly; CLAUDE.md
+// imports it). Both are counted: on Claude Code the import inlines AGENTS.md, so
+// the real always-loaded cost is shim + canonical.
+for (const f of ["AGENTS.md", "CLAUDE.md", join(".claude", "CLAUDE.md"), "CLAUDE.local.md"]) {
   const text = read(join(dir, f));
   if (text != null) add(f, text, "claudemd");
 }

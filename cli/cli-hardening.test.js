@@ -311,7 +311,7 @@ test('harness-init names an npx package + subcommand the CLI actually provides',
 const GATE_PATTERN = /<[A-Za-z][^<>]*>/;
 const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog'];
 const GATE_CMD =
-  "grep -rnoE '<[A-Za-z][^<>]*>' CLAUDE.md .claude/rules/ .claude/skills/architecture-map/ " +
+  "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ .claude/skills/architecture-map/ " +
   '.claude/skills/debugging-this-repo/ \\| grep -vE ' +
   "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
 
@@ -325,7 +325,7 @@ test('harness-init step 4 ships exactly the pinned placeholder gate', () => {
 });
 
 test('the placeholder gate catches every placeholder the pristine templates ship', () => {
-  const pristine = ['CLAUDE.md', path.join('.claude', 'skills', 'architecture-map', 'SKILL.md'),
+  const pristine = ['AGENTS.md', path.join('.claude', 'skills', 'architecture-map', 'SKILL.md'),
     path.join('.claude', 'skills', 'debugging-this-repo', 'SKILL.md')];
   const tokens = pristine.flatMap((f) => readTemplate(f).match(/<[A-Za-z][^<>]*>/g) || []);
 
@@ -343,13 +343,13 @@ test('the placeholder gate catches every placeholder the pristine templates ship
 });
 
 test('every gate allowlist entry is earned by a real token in the templates', () => {
-  // Over-match guard. Path notation survives /harness-init in CLAUDE.md; the HTML tags
+  // Over-match guard. Path notation survives /harness-init in AGENTS.md; the HTML tags
   // are real prose in rules/frontend.md. An allowlist entry with no such use would be
   // silently hiding a placeholder instead of exempting notation.
-  const claudeMd = readTemplate('CLAUDE.md');
+  const claudeMd = readTemplate('AGENTS.md');
   const frontend = readTemplate('.claude', 'rules', 'frontend.md');
   for (const t of ['<id>', '<slug>', '<n>', '<tool>']) {
-    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/CLAUDE.md — drop it');
+    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/AGENTS.md — drop it');
   }
   for (const t of ['<a>', '<div>', '<button>', '<dialog>']) {
     assert.ok(frontend.includes(t), 'allowlisted ' + t + ' is unused in rules/frontend.md — drop it');
