@@ -173,5 +173,127 @@ assert('auto-invocable skill still gets no openai.yaml',
 
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
+// ─── F1 (CRITICAL): rmSync/mkdirSync/writeFileSync must never follow a ─────
+// symlink out of the generated tree. Reproduced: a cloned repo where
+// .agents/skills is a symlink (git stores symlinks; PHE's generated trees are
+// committed) let the stale-skill prune loop rm -rf real content outside
+// .agents/ -- up to and including $HOME. Every case below must THROW before
+// touching anything, and the decoy/target content must survive the throw.
+console.log('\nF1: symlink guard (arbitrary-directory-deletion):');
+
+var SYM_TEST_DIR = path.join(os.tmpdir(), 'emit-codex-symlink-test-' + crypto.randomUUID());
+
+function freshProj(name) {
+  var proj = path.join(SYM_TEST_DIR, name);
+  fs.mkdirSync(path.join(proj, '.claude', 'skills', 'plan'), { recursive: true });
+  fs.writeFileSync(
+    path.join(proj, '.claude', 'skills', 'plan', 'SKILL.md'),
+    '---\nname: plan\ndescription: "Plan."\n---\n\nBody.\n'
+  );
+  return proj;
+}
+
+// Repro 1: .agents/skills is a symlink to a directory containing decoy files.
+// The prune loop (dirNames(agentsSkills) -> rm -rf each stale name) must
+// never get the chance to run through the link.
+(function () {
+  var proj = freshProj('decoy-skills-symlink');
+  var decoy = path.join(SYM_TEST_DIR, 'decoy-home');
+  fs.mkdirSync(path.join(decoy, 'Documents'), { recursive: true });
+  fs.writeFileSync(path.join(decoy, 'Documents', 'important.txt'), 'DO NOT DELETE');
+  fs.mkdirSync(path.join(proj, '.agents'), { recursive: true });
+  fs.symlinkSync(decoy, path.join(proj, '.agents', 'skills'), 'dir');
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('emitCodexPayload throws when .agents/skills is a symlink', threw instanceof Error);
+  assert('the symlink target directory itself is untouched', fs.existsSync(decoy));
+  assert('decoy file inside the symlink target was NOT deleted', fs.existsSync(path.join(decoy, 'Documents', 'important.txt')));
+  assert('decoy content is unchanged',
+    fs.existsSync(path.join(decoy, 'Documents', 'important.txt')) &&
+    fs.readFileSync(path.join(decoy, 'Documents', 'important.txt'), 'utf-8') === 'DO NOT DELETE');
+})();
+
+// Repro 2: plausible footgun -- `ln -s ../.claude/skills .agents/skills`.
+// rmSync must never resolve through the link into the CANONICAL skills.
+(function () {
+  var proj = freshProj('canonical-skills-symlink');
+  fs.mkdirSync(path.join(proj, '.agents'), { recursive: true });
+  fs.symlinkSync(path.join(proj, '.claude', 'skills'), path.join(proj, '.agents', 'skills'), 'dir');
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('emitCodexPayload throws when .agents/skills points at .claude/skills', threw instanceof Error);
+  assert('the canonical skill SKILL.md still exists', fs.existsSync(path.join(proj, '.claude', 'skills', 'plan', 'SKILL.md')));
+  assert('the canonical skill content was NOT emptied',
+    fs.existsSync(path.join(proj, '.claude', 'skills', 'plan', 'SKILL.md')) &&
+    fs.readFileSync(path.join(proj, '.claude', 'skills', 'plan', 'SKILL.md'), 'utf-8').indexOf('Body.') !== -1);
+})();
+
+// A single skill dir INSIDE .agents/skills/ (not .agents/skills itself) is a
+// symlink to a decoy -- must also throw, target untouched.
+(function () {
+  var proj = freshProj('single-skill-dir-symlink');
+  var decoy = path.join(SYM_TEST_DIR, 'decoy-skill-target');
+  fs.mkdirSync(decoy, { recursive: true });
+  fs.writeFileSync(path.join(decoy, 'evidence.txt'), 'decoy content');
+  fs.mkdirSync(path.join(proj, '.agents', 'skills'), { recursive: true });
+  fs.symlinkSync(decoy, path.join(proj, '.agents', 'skills', 'plan'), 'dir');
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('emitCodexPayload throws when a single skill dir inside .agents/skills/ is a symlink', threw instanceof Error);
+  assert('the decoy target directory still exists', fs.existsSync(decoy));
+  assert('the decoy file inside it is untouched',
+    fs.existsSync(path.join(decoy, 'evidence.txt')) &&
+    fs.readFileSync(path.join(decoy, 'evidence.txt'), 'utf-8') === 'decoy content');
+})();
+
+// .codex is a symlink.
+(function () {
+  var proj = freshProj('codex-symlink');
+  var decoy = path.join(SYM_TEST_DIR, 'decoy-codex-target');
+  fs.mkdirSync(decoy, { recursive: true });
+  fs.writeFileSync(path.join(decoy, 'evidence.txt'), 'decoy content');
+  fs.symlinkSync(decoy, path.join(proj, '.codex'), 'dir');
+
+  var threw = null;
+  try {
+    emitCodexPayload(proj);
+  } catch (e) {
+    threw = e;
+  }
+  assert('emitCodexPayload throws when .codex is a symlink', threw instanceof Error);
+  assert('the decoy target still exists', fs.existsSync(decoy));
+  assert('the decoy file is untouched',
+    fs.existsSync(path.join(decoy, 'evidence.txt')) &&
+    fs.readFileSync(path.join(decoy, 'evidence.txt'), 'utf-8') === 'decoy content');
+})();
+
+// Sanity: the normal, non-symlinked case must still emit correctly -- the
+// guard must not false-positive on real directories.
+(function () {
+  var proj = freshProj('sanity-no-symlinks');
+  var result = emitCodexPayload(proj);
+  assert('sanity: normal emit still works after the F1 guard (skills count)', result.skills === 1);
+  assert('sanity: normal emit still works after the F1 guard (SKILL.md copied)',
+    fs.existsSync(path.join(proj, '.agents', 'skills', 'plan', 'SKILL.md')));
+  assert('sanity: config.toml still written', fs.existsSync(path.join(proj, '.codex', 'config.toml')));
+})();
+
+fs.rmSync(SYM_TEST_DIR, { recursive: true, force: true });
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

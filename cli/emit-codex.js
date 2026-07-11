@@ -135,14 +135,81 @@ function dirNames(p) {
     .map(function (e) { return e.name; });
 }
 
+// F1 (CRITICAL): every rm/mkdir/write below constructs a path UNDER one of
+// .agents, .agents/skills, .codex, .codex/agents and then deletes or creates
+// through it. If any of those directories -- or a single skill dir inside
+// .agents/skills/ -- is a symlink, the OS resolves the symlinked component
+// transparently, so `fs.rmSync('.agents/skills/<stale-name>', {recursive:true})`
+// or `fs.mkdirSync(..., {recursive:true})` silently operates on whatever the
+// link points to instead. Reproduced: a cloned repo shipping `.agents/skills`
+// as a symlink to $HOME let the stale-skill prune loop `rm -rf` real
+// directories ($HOME/Documents, $HOME/.ssh, ...); `ln -s ../.claude/skills
+// .agents/skills` let it empty the CANONICAL skills through the link.
+//
+// The fix: lstat (never follow) every one of those paths BEFORE any
+// destructive or creative call touches it, and throw hard on a symlink. This
+// is a destructive operation and the user may have made the symlink
+// deliberately -- silently unlinking and recreating would be worse than a
+// loud refusal.
+function assertNotSymlink(p) {
+  var st;
+  try {
+    st = fs.lstatSync(p);
+  } catch (e) {
+    return; // does not exist yet -- nothing to guard, caller will create it
+  }
+  if (st.isSymbolicLink()) {
+    throw new Error(
+      p + ' is a symlink. perfect-harness-engineering will not write through a ' +
+      'symlink into a generated tree (.agents/ or .codex/) -- doing so could ' +
+      'delete or overwrite content outside the intended tree. Remove the ' +
+      'symlink (or move what it points to somewhere else) and re-run.'
+    );
+  }
+}
+
+// A generated-tree directory must be a real directory (or absent) -- never a
+// symlink, never a plain file blocking the spot.
+function assertRealDir(p) {
+  assertNotSymlink(p);
+  if (fs.existsSync(p) && !fs.statSync(p).isDirectory()) {
+    throw new Error(p + ' exists but is not a directory -- refusing to write the generated tree there.');
+  }
+}
+
+// Guard every direct child of a generated directory, not just the directory
+// itself -- a single skill dir being a symlink is exactly as dangerous as
+// .agents/skills itself being one (rm/mkdir/write would resolve through it
+// the same way). No-ops when dirPath does not exist yet.
+function assertNoSymlinkChildren(dirPath) {
+  if (!fs.existsSync(dirPath)) return;
+  var names = fs.readdirSync(dirPath);
+  for (var i = 0; i < names.length; i++) {
+    assertNotSymlink(path.join(dirPath, names[i]));
+  }
+}
+
 // Derive the Codex tree from the installed .claude/ payload.
 // Generated files are overwritten, never backed up — they are not user content.
 function emitCodexPayload(projectRoot) {
   var claudeSkills = path.join(projectRoot, '.claude', 'skills');
   var claudeAgents = path.join(projectRoot, '.claude', 'agents');
+  var agentsRoot = path.join(projectRoot, '.agents');
   var agentsSkills = path.join(projectRoot, '.agents', 'skills');
+  var codexRoot = path.join(projectRoot, '.codex');
   var codexAgents = path.join(projectRoot, '.codex', 'agents');
   var counts = { skills: 0, agents: 0 };
+
+  // F1: guard every level of the generated tree BEFORE any rm/mkdir/write
+  // touches it (see assertRealDir/assertNoSymlinkChildren above). Parent
+  // checked before child, so a symlinked .agents (or .codex) is caught before
+  // we ever try to resolve a path underneath it.
+  assertRealDir(agentsRoot);
+  assertRealDir(agentsSkills);
+  assertNoSymlinkChildren(agentsSkills);
+  assertRealDir(codexRoot);
+  assertRealDir(codexAgents);
+  assertNoSymlinkChildren(codexAgents);
 
   // --- skills: .claude/skills/<n>/ -> .agents/skills/<n>/ ---
   fs.mkdirSync(agentsSkills, { recursive: true });
