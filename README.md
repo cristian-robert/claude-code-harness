@@ -11,7 +11,7 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 | Path | What it is |
 |---|---|
 | `docs/` | The distilled discipline: layer model, context engineering, enforcement vs guidance, loops, model policy, knowledge layer, sources |
-| `template/` | **The payload** — copy into any project: `CLAUDE.md`, `.claude/` (hooks, rules, skills, agents, references, `statusline.mjs`), `plans/`, `reports/`. `.claude/state/` holds runtime snapshots — gitignored by `/harness-init` |
+| `template/` | **The payload** — copy into any project: `AGENTS.md` (canonical instructions), `CLAUDE.md` (a `@AGENTS.md` import shim for Claude Code), `.claude/` (hooks, rules, skills, agents, references, `statusline.mjs`), `plans/`, `reports/`. `.claude/state/` holds runtime snapshots — gitignored by `/harness-init` |
 | `template/.claude/hooks/` | 6 tested Node hooks (guard, post-edit + hook self-test, stop-gate + verdict persistence, session-start, pre-compact, verdict-gate) + `smoke-test.mjs` |
 | `template/.claude/agents/` | `scout` (read-only exploration), `code-reviewer` (project memory across reviews), `qa-evaluator` (drives the running app), `research-gatherer` (doc-grounded research for `/research`) |
 | `template/.claude/skills/` | PIV+E pipeline + `/research` (doc-grounded) + `/handoff` (reset-with-artifact) + `/harness-init` (guided adoption) + agile layer (`/backlog`, `/sprint`, `/accept`) + 2 knowledge skills (`architecture-map`, `debugging-this-repo`) |
@@ -35,6 +35,23 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 npx perfect-harness-engineering init      # installs .claude/, CLAUDE.md, .mcp.json, .lsp.json (existing files backed up as .backup)
 npx perfect-harness-engineering update    # refreshes the payload (existing files backed up as .backup)
 ```
+
+`init` asks **which harness you use — Claude Code, Codex, or both** — and records it in `.claude/harness.json`, so `update` re-emits the right payload without asking again.
+
+**One source, two harnesses.** Canonical content lives once, under `.claude/` and `AGENTS.md`. When Codex is a target, PHE *derives* the trees Codex reads:
+
+| Generated | Derived from | Read by |
+|---|---|---|
+| `.agents/skills/` | `.claude/skills/` | Codex (`$plan`, `$implement`, …) |
+| `.codex/agents/*.toml` | `.claude/agents/*.md` | Codex subagents |
+| `.codex/config.toml` | (framework) | Codex |
+| `CLAUDE.md` | `AGENTS.md` (imports it) | Claude Code (`/plan`, `/implement`, …) |
+
+**These trees are committed**, exactly like `.claude/` — "generated" means *overwritten by `update`, never hand-edited*, not gitignored or temporary. A fresh `git clone` of a Codex project must work without running the CLI first.
+
+**Never hand-edit `.agents/` or `.codex/`** — they are overwritten on every `init`/`update`. Edit `.claude/`.
+
+Codex support in this release is **guidance-only**: instructions, skills, and subagents port; the enforcement hooks do not yet. They arrive next.
 
 **Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx perfect-harness-engineering merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
 

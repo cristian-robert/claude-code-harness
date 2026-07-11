@@ -85,6 +85,8 @@ Any red → fix and re-run before finishing. Setup without a green smoke test is
 
 **Global-agent notice:** if `~/.claude/agents/architect-agent` or `tester-agent` is absent, record in the report — "Two roles ship degraded: Architect KB retrieval falls back to the architecture-map skill; browser-UI QA is manual/UNVERIFIABLE. Install the global agents to enable them." So the operator knows before the pipeline, not mid-run.
 
+**Codex target?** Codex only loads a project's `.codex/` layer when the project is TRUSTED. Tell the user to run `codex` in this directory once and accept the trust prompt, or to add `[projects."<abs-path>"] trust_level = "trusted"` to `~/.codex/config.toml`. Until then `.codex/config.toml` and `.codex/agents/` are ignored entirely.
+
 ## Output contract
 
 Everything the operator must review — the step-0 reconcile audit (stale hooks, unioned `permissions.allow`, SessionStart injection cost), the step-4 verification outputs, the degraded-roles notice, any gate candidate that came back red — is WRITTEN to `reports/harness-init.md`, not narrated. The one interactive surface is step 2's single `AskUserQuestion` round plus the step-0 offer to delete the `.backup` files.
