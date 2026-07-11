@@ -9,6 +9,10 @@
 const fs = require('fs');
 const path = require('path');
 
+// The only harness names readHarnessTargets will trust. Anything else in the
+// file's "harness" array means the file isn't something we can act on.
+const KNOWN_HARNESS_NAMES = ['claude', 'codex'];
+
 const HARNESS_PROMPT =
   'Which harness will you use in this project?\n' +
   '  1) Claude Code\n' +
@@ -41,11 +45,22 @@ function readHarnessTargets(projectRoot) {
     return null;
   }
   if (!parsed || !Array.isArray(parsed.harness) || parsed.harness.length === 0) return null;
-  return parsed.harness.slice().sort();
+  var sorted = parsed.harness.slice().sort();
+  for (var i = 0; i < sorted.length; i++) {
+    // An unrecognised value means the file isn't something we can act on —
+    // downstream code trusts this array and branches on indexOf('codex').
+    if (KNOWN_HARNESS_NAMES.indexOf(sorted[i]) === -1) return null;
+  }
+  return sorted;
 }
 
 // Merge the harness key into harness.json, preserving every other key —
 // harness.json also holds the stop gate and work-tracking config.
+//
+// Asymmetry with readHarnessTargets is intentional: read degrades to null on
+// malformed JSON (reading must never crash), but write REFUSES on malformed
+// JSON (throws) rather than risk silently replacing the whole file — and with
+// it the user's stop gate — with just `{"harness": [...]}`.
 function writeHarnessTargets(projectRoot, targets) {
   var p = harnessJsonPath(projectRoot);
   var current = {};
@@ -53,7 +68,11 @@ function writeHarnessTargets(projectRoot, targets) {
     try {
       current = JSON.parse(fs.readFileSync(p, 'utf-8')) || {};
     } catch (e) {
-      current = {};
+      throw new Error(
+        p + ' exists but is not valid JSON, so it cannot be safely updated ' +
+        '(it may also hold your stop gate and work-tracking config). ' +
+        'Fix the file by hand, then re-run this command.'
+      );
     }
   }
   current.harness = targets.slice().sort();

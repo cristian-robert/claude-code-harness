@@ -32,7 +32,6 @@ assert('"both" -> both', JSON.stringify(parseHarnessAnswer('both')) === '["claud
 assert('"  both  " (whitespace) -> both', JSON.stringify(parseHarnessAnswer('  both  ')) === '["claude","codex"]');
 assert('empty -> null', parseHarnessAnswer('') === null);
 assert('garbage -> null', parseHarnessAnswer('emacs') === null);
-assert('always sorted', JSON.stringify(parseHarnessAnswer('both')) === '["claude","codex"]');
 
 console.log('readHarnessTargets:');
 fs.mkdirSync(path.join(TEST_DIR, 'proj', '.claude'), { recursive: true });
@@ -44,6 +43,14 @@ assert('harness.json without harness key -> null', readHarnessTargets(PROJ) === 
 
 fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), '{ not json');
 assert('malformed harness.json -> null (no throw)', readHarnessTargets(PROJ) === null);
+
+// Finding 3: unrecognised harness names must not round-trip as if they were valid —
+// downstream code (init.js/update.js) branches on these values with indexOf('codex').
+fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), JSON.stringify({ harness: ['foo'] }));
+assert('unknown harness name -> null', readHarnessTargets(PROJ) === null);
+
+fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), JSON.stringify({ harness: ['claude', 'bogus'] }));
+assert('mixed known/unknown harness names -> null', readHarnessTargets(PROJ) === null);
 
 console.log('writeHarnessTargets:');
 // Preserving other keys is the whole point — harness.json holds the stop gate.
@@ -57,6 +64,35 @@ assert('harness key written', JSON.stringify(after.harness) === '["claude","code
 assert('stopGate preserved', JSON.stringify(after.stopGate) === '["npm test"]');
 assert('workTracking preserved', after.workTracking.backend === 'none');
 assert('round-trips through readHarnessTargets', JSON.stringify(readHarnessTargets(PROJ)) === '["claude","codex"]');
+
+// Finding 2: exercise ordering through the actual persistence layer (not a
+// hardcoded-literal re-check of parseHarnessAnswer, which can never fail).
+writeHarnessTargets(PROJ, ['codex', 'claude']);
+assert('sorts unsorted input on write', JSON.stringify(readHarnessTargets(PROJ)) === '["claude","codex"]');
+
+// Finding 1 (CRITICAL): an existing-but-unparseable harness.json must never be
+// silently replaced — that would destroy stopGate/workTracking. Write must
+// refuse (throw) rather than clobber. Contrast with readHarnessTargets above,
+// which degrades to null on the same malformed input: read degrades, write refuses.
+var BADJSON = path.join(TEST_DIR, 'badjson');
+fs.mkdirSync(path.join(BADJSON, '.claude'), { recursive: true });
+var badJsonPath = path.join(BADJSON, '.claude', 'harness.json');
+fs.writeFileSync(badJsonPath, '{ not json');
+var thrownError = null;
+try {
+  writeHarnessTargets(BADJSON, ['claude']);
+} catch (e) {
+  thrownError = e;
+}
+assert('write throws on unparseable existing harness.json', thrownError instanceof Error);
+assert(
+  'error message names the file',
+  !!thrownError && thrownError.message.indexOf(badJsonPath) !== -1
+);
+assert(
+  'write does not modify the unparseable file',
+  fs.readFileSync(badJsonPath, 'utf-8') === '{ not json'
+);
 
 // Writing when harness.json does not exist yet must create it, not crash.
 var FRESH = path.join(TEST_DIR, 'fresh');
