@@ -152,9 +152,10 @@ async function main() {
 
   // Non-interactive: the harness choice was made at init. A project installed
   // before multi-harness support has no `harness` key — it is Claude-only.
-  // The actual persist happens later (see writeHarnessTargets below) — the
-  // copy of .claude/ that follows overwrites harness.json with the framework's
-  // default (no `harness` key), so writing it here would just be clobbered.
+  // The actual persist happens right after the .claude/ backupAndCopy below
+  // (see writeHarnessTargets there) — the copy overwrites harness.json with
+  // the framework's default (no `harness` key), so writing it here would
+  // just be clobbered.
   var targets = readHarnessTargets(projectRoot);
   if (targets === null) {
     targets = ['claude'];
@@ -208,6 +209,15 @@ async function main() {
       path.join(projectRoot, '.claude'),
       projectRoot
     );
+
+    // Persist the harness choice IMMEDIATELY after the .claude/ copy — that
+    // copy just overwrote .claude/harness.json with the framework's default
+    // (no `harness` key). Recording it right here, before anything else can
+    // throw (EACCES in the instruction-file copy, a settings-merge failure,
+    // ...), closes the crash window where a project's harness choice could
+    // be silently lost: a later `update` would then print "No harness
+    // recorded — assuming Claude Code" and silently drop Codex.
+    writeHarnessTargets(projectRoot, targets);
 
     // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
     var instructionFiles = ['AGENTS.md'];
@@ -273,12 +283,6 @@ async function main() {
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
     }
-
-    // Persist the harness choice AFTER the payload copy — the copy above just
-    // overwrote .claude/harness.json with the framework's default (no `harness`
-    // key), so re-merge the recorded/derived targets into it now (parity with
-    // init.js, which records for the same reason in the same relative spot).
-    writeHarnessTargets(projectRoot, targets);
 
     // Re-derive the Codex tree so a payload change (new skill, edited agent)
     // reaches Codex. Generated trees are overwritten, never backed up.

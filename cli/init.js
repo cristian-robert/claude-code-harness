@@ -329,6 +329,15 @@ async function main() {
     targetDir
   );
 
+  // Persist the harness choice IMMEDIATELY after the .claude/ copy — that
+  // copy just installed the framework's harness.json (no `harness` key).
+  // Recording it right here, before anything else can throw (EACCES in the
+  // instruction-file copy, a settings-merge failure, ...), closes the crash
+  // window where a project's harness choice could be silently lost: a later
+  // `update` would then print "No harness recorded — assuming Claude Code"
+  // and silently drop Codex.
+  writeHarnessTargets(targetDir, targets);
+
   // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
   // reads it directly). CLAUDE.md is a thin `@AGENTS.md` import shim and is only
   // installed when Claude Code is a target. Both use the backup+rollback copier.
@@ -401,10 +410,6 @@ async function main() {
   } else if (settingsReconcile.error) {
     console.warn('Could not merge your existing settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
   }
-
-  // Record the harness choice AFTER the payload copy — the copy installs the
-  // framework's harness.json, and writeHarnessTargets merges into it.
-  writeHarnessTargets(targetDir, targets);
 
   // Derive the Codex tree from the canonical .claude/ payload.
   var codexCounts = null;

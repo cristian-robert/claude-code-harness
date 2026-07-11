@@ -375,6 +375,78 @@ test('the eslint flat-config fragment ships with the payload', () => {
   );
 });
 
+// ─── Minor 2: harness.json crash window ─────────────────────────────────────
+// backupAndCopy(.claude/) overwrites harness.json with the framework default
+// (no `harness` key); writeHarnessTargets re-merges the recorded targets
+// into it. If anything throws in the gap between those two calls (EACCES in
+// the instruction-file copy, a settings-merge failure, ...), the project is
+// left with a harness.json that has no `harness` key -- the next `update`
+// then prints "No harness recorded -- assuming Claude Code" and silently
+// drops Codex. Fix: writeHarnessTargets runs IMMEDIATELY after
+// backupAndCopy, before anything else that could throw. Pinned structurally
+// (source-order), since exercising the crash itself would require faking a
+// mid-flight filesystem failure inside a full init/update run.
+
+test('update.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'update.js'), 'utf-8');
+  const backupCopyIdx = src.indexOf("backupAndCopy(\n      path.join(sourceDir, 'template', '.claude')");
+  const writeIdx = src.indexOf('writeHarnessTargets(projectRoot, targets)');
+  const instructionFilesIdx = src.indexOf("var instructionFiles = ['AGENTS.md']");
+  assert.ok(backupCopyIdx !== -1, 'the .claude/ backupAndCopy call was not found where expected');
+  assert.ok(writeIdx !== -1, 'writeHarnessTargets(projectRoot, targets) call not found');
+  assert.ok(instructionFilesIdx !== -1, 'the instruction-file copy block was not found where expected');
+  assert.ok(
+    backupCopyIdx < writeIdx && writeIdx < instructionFilesIdx,
+    'writeHarnessTargets must run between the .claude/ backupAndCopy and the instruction-file copy — found backupAndCopy@' +
+      backupCopyIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
+  );
+  // Exactly one call site — a stray second call (the old late-write left in
+  // by mistake) would silently re-widen the crash window it closes.
+  const callCount = src.split('writeHarnessTargets(projectRoot, targets)').length - 1;
+  assert.strictEqual(callCount, 1, 'writeHarnessTargets(projectRoot, targets) must be called exactly once, found ' + callCount);
+});
+
+test('init.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'init.js'), 'utf-8');
+  const backupCopyIdx = src.indexOf("backupAndCopy(\n    path.join(sourceDir, 'template', '.claude')");
+  const writeIdx = src.indexOf('writeHarnessTargets(targetDir, targets)');
+  const instructionFilesIdx = src.indexOf("var instructionFiles = [{ name: 'AGENTS.md' }]");
+  assert.ok(backupCopyIdx !== -1, 'the .claude/ backupAndCopy call was not found where expected');
+  assert.ok(writeIdx !== -1, 'writeHarnessTargets(targetDir, targets) call not found');
+  assert.ok(instructionFilesIdx !== -1, 'the instruction-file copy block was not found where expected');
+  assert.ok(
+    backupCopyIdx < writeIdx && writeIdx < instructionFilesIdx,
+    'writeHarnessTargets must run between the .claude/ backupAndCopy and the instruction-file copy — found backupAndCopy@' +
+      backupCopyIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
+  );
+  const callCount = src.split('writeHarnessTargets(targetDir, targets)').length - 1;
+  assert.strictEqual(callCount, 1, 'writeHarnessTargets(targetDir, targets) must be called exactly once, found ' + callCount);
+});
+
+// Dynamic companion to the structural checks above: prove the INVARIANT the
+// ordering exists for -- once backupAndCopy + writeHarnessTargets have both
+// run, the harness key is durably recorded, independent of anything that
+// happens afterward (simulated here by simply not running anything after).
+test('harness.json retains the harness key immediately after backupAndCopy + writeHarnessTargets (no later step required)', () => {
+  const dir = path.join(TMP, 'harness-crash-window');
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+
+  delete require.cache[require.resolve('./update.js')];
+  delete require.cache[require.resolve('./harness-targets.js')];
+  const { backupAndCopy } = require('./update.js');
+  const { writeHarnessTargets, readHarnessTargets } = require('./harness-targets.js');
+
+  const repoRoot = path.join(__dirname, '..');
+  backupAndCopy(path.join(repoRoot, 'template', '.claude'), path.join(dir, '.claude'), dir);
+  writeHarnessTargets(dir, ['claude', 'codex']);
+
+  assert.deepStrictEqual(
+    readHarnessTargets(dir),
+    ['claude', 'codex'],
+    'harness.json must carry the recorded targets right after these two calls, with nothing else run yet'
+  );
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });
