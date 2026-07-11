@@ -1,5 +1,5 @@
 <!-- TEMPLATE: adapt paths and rules to your stack during setup; every rule you keep must trace to a real failure. Delete rules that merely restate defaults. -->
-<!-- Copy to <backend-dir>/CLAUDE.md. Lazy-loads only when Claude reads a file under this directory — zero context cost otherwise. The split: .claude/rules/*.md with paths: = file-TYPE guidance across the whole tree (any *.py anywhere); a subdirectory CLAUDE.md = guidance about a PLACE (this dir's layout, commands, local traps). Never duplicate type rules here. -->
+<!-- Copy this file to <backend-dir>/AGENTS.md — that is the content, read directly by Codex. For Claude Code, also copy backend.CLAUDE.md alongside it as <backend-dir>/CLAUDE.md — a one-line `@AGENTS.md` shim (Claude Code reads CLAUDE.md, not AGENTS.md). Lazy-loads only when a file under this directory is read — zero context cost otherwise. The split: .claude/rules/*.md with paths: = file-TYPE guidance across the whole tree (any *.py anywhere); this file = guidance about a PLACE (this dir's layout, commands, local traps). Never duplicate type rules here. -->
 # <backend-dir>
 
 | Dir | Responsibility |
