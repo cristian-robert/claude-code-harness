@@ -8,6 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
+const { readVaultConfig, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -163,6 +164,12 @@ async function main() {
   }
   console.log('Harness: ' + targets.join(' + '));
 
+  // The vault (if any) recorded at init — same "asked once" fact as `harness`,
+  // read before the .claude/ copy overwrites harness.json with the framework's
+  // default (no `vault` key). A pre-vault project has `vault === null`; the
+  // write-back after the copy only fires when there was one to restore.
+  var vault = readVaultConfig(projectRoot);
+
   // UUID-based tmp dir — avoids collisions when two update runs start in the
   // same millisecond (Date.now() has millisecond granularity).
   var tmpDir = path.join(os.tmpdir(), 'ai-framework-update-' + crypto.randomUUID());
@@ -218,6 +225,12 @@ async function main() {
     // be silently lost: a later `update` would then print "No harness
     // recorded — assuming Claude Code" and silently drop Codex.
     writeHarnessTargets(projectRoot, targets);
+
+    // Same crash-window rationale as writeHarnessTargets above, and the same
+    // merge-preserving write (see vault-config.js) — but only if a vault was
+    // actually recorded; don't write a spurious `vault` key for a pre-vault
+    // project (readVaultConfig returned null).
+    if (vault !== null) writeVaultConfig(projectRoot, vault);
 
     // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
     var instructionFiles = ['AGENTS.md'];
