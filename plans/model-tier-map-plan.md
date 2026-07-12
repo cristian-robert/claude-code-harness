@@ -480,13 +480,34 @@ git commit -m "feat(models): ship the verified tier map in harness.json"
 
 ---
 
-### Task 4: `emit-codex.js` resolves `tier:` → `model` + `model_reasoning_effort`
+### Task 4: `emit-codex.js` — resolve `tier:` → `model`, AND register the agents so Codex can see them
 
-Depends on Task 1's verdict. If Task 1 found the agent TOML **rejects** `model`, write these keys into
-`.codex/config.toml` instead and adjust the assertions — do not force the agent-TOML path.
+**Task 1's verdict: ACCEPTED.** `model` / `model_reasoning_effort` do not trip a schema error in
+`.codex/agents/*.toml` — `RawAgentRoleFileToml` deserializes as a generic serde map, which is
+structurally incapable of `deny_unknown_fields`. The agent-TOML path is safe. Evidence:
+`reports/codex-agent-toml-schema.md`.
+
+**Task 1 also found a Phase-1 bug that this task must fix, or the whole phase is inert on Codex:**
+
+> **Codex has no directory auto-scan of `.codex/agents/`.** An agent exists only if `.codex/config.toml`
+> registers it with an `[agents.<name>]` block. PHE's `CODEX_CONFIG_TOML` emits only
+> `[features] multi_agent = true` and `[agents] max_threads = 4` — **no per-agent blocks**. So all five
+> generated agent files are unreachable today, and a `model` key inside them would be **dead config**.
+
+Registering them is therefore not scope creep — it is the difference between this phase doing
+something on Codex and doing nothing. Required keys per the binary's `AgentRoleToml`: `description`,
+`config_file`, `nickname_candidates`.
+
+⚠️ **Verify one thing before trusting the shape:** today's `[agents]` table holds `max_threads = 4`.
+If `[agents]` is a map of *agent-name → AgentRoleToml*, then `max_threads` is being parsed as an agent
+**named "max_threads"** — a live bug. Determine where `max_threads` actually belongs (the binary shows
+it adjacent to `OrchestratorToml`, alongside `max_depth` / `job_max_runtime_seconds` /
+`interrupt_message`) and place it correctly. Do not guess: probe the binary
+(`/opt/homebrew/lib/node_modules/@openai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex`)
+and/or run Codex against an emitted config and read the error. Record what you established.
 
 **Files:**
-- Modify: `cli/emit-codex.js` (`agentMdToToml`, `emitCodexPayload`)
+- Modify: `cli/emit-codex.js` (`agentMdToToml`, `CODEX_CONFIG_TOML` → a function, `emitCodexPayload`)
 - Modify: `cli/emit-codex.test.js`
 
 **Interfaces:**
@@ -610,16 +631,65 @@ In `emitCodexPayload`, read the map once and pass it down:
 ```
 and change the agent loop's call to `agentMdToToml(md, stem, models)`.
 
-- [ ] **Step 4: Run to green**
+- [ ] **Step 4: Register the agents in `.codex/config.toml` (without this, everything above is dead config)**
 
-Run: `node cli/emit-codex.test.js` → PASS.
+`CODEX_CONFIG_TOML` is currently a const string. Make it a function of the agents actually emitted, so
+the registration can never drift from the files on disk. Collect `{name, description}` in the agent
+loop (you already parse both), then build the config from that list.
+
+Write a failing test first, in `cli/emit-codex.test.js` (repo style — `assert(name, cond)`):
+
+```js
+// Codex has NO directory auto-scan: an agent that config.toml does not register does not
+// exist, and the model key we just wrote into its file is never read. Registration is what
+// makes the tier map real on Codex.
+var regRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-reg-'));
+fs.cpSync('template/.claude', path.join(regRoot, '.claude'), { recursive: true });
+emitCodexPayload(regRoot);
+var cfg = fs.readFileSync(path.join(regRoot, '.codex', 'config.toml'), 'utf-8');
+var emitted = fs.readdirSync(path.join(regRoot, '.codex', 'agents'))
+  .filter(function (f) { return f.slice(-5) === '.toml'; })
+  .map(function (f) { return f.slice(0, -5); });
+assert('at least one agent was emitted', emitted.length >= 5);
+for (var i = 0; i < emitted.length; i++) {
+  assert('config.toml registers [agents.' + emitted[i] + ']',
+    cfg.indexOf('[agents.' + emitted[i] + ']') !== -1);
+  assert('the ' + emitted[i] + ' registration points at its file',
+    cfg.indexOf('.codex/agents/' + emitted[i] + '.toml') !== -1);
+}
+assert('no agent file is left unregistered', emitted.length ===
+  (cfg.match(/^\[agents\.[^\]]+\]/gm) || []).length);
+```
+
+Run `node cli/emit-codex.test.js` → these MUST fail before you write the emitter change.
+
+Then emit a block per agent. Required keys (`AgentRoleToml`): `description`, `config_file`,
+`nickname_candidates`. Shape:
+
+```toml
+[agents.code-reviewer]
+description = "..."                            # from the agent's frontmatter
+config_file = ".codex/agents/code-reviewer.toml"
+nickname_candidates = ["code-reviewer"]
+```
+
+**Resolve the `max_threads` question here** (see the warning above the steps): if `[agents]` is a map
+of agent-name → role, then today's `[agents] max_threads = 4` is registering a phantom agent called
+`max_threads`. Establish where it belongs, move it, and write one comment in `emit-codex.js` recording
+what you established and how. If you cannot establish it, leave `max_threads` OUT rather than emit a
+key you know may be misparsed, and say so in your report — a missing tuning knob is recoverable, a
+silently corrupt agent table is not.
+
+- [ ] **Step 5: Run to green**
+
+Run: `node cli/emit-codex.test.js` → PASS (including the registration cases).
 Run: `npm test` → 0 failed.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add cli/emit-codex.js cli/emit-codex.test.js
-git commit -m "feat(codex): resolve agent tier -> model + effort in the emitted TOML"
+git commit -m "feat(codex): resolve agent tier -> model + effort, and register the agents in config.toml"
 ```
 
 ---
