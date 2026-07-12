@@ -1,6 +1,6 @@
 # 99 · Sources — Provenance Ledger
 
-Every load-bearing PHE decision traces to one of these sources (1–11: research pass 2026-07-07; 12–17: v0.3 agile-layer pass 2026-07-08). The three coleam00 clones live in this repo and are read-only.
+Every load-bearing PHE decision traces to one of these sources (1–11: research pass 2026-07-07; 12–17: v0.3 agile-layer pass 2026-07-08; "Model policy": model-tier-map pass 2026-07-12). The three coleam00 clones live in this repo and are read-only.
 
 ## 1 · Harness design for long-running apps — anthropic.com/engineering/harness-design-long-running-apps
 Anthropic Labs on a Planner/Generator/Evaluator harness for long-running autonomous builds.
@@ -106,12 +106,33 @@ engineeringexec.tech/posts/ai-scrum-can-proven-agile-principles-work-for-agent-t
 - "An AI agent cannot be a Product Owner" → Stakeholder and PO decisions stay human; role layering optional and scalable, never mandatory.
 - Role-tagged `SPRINT_N.md` files → `sprints/<n>.md`; independent frontmatter-kanban conventions converge on id/status/priority → the item schema.
 
+## Model policy (verified 2026-07-12)
+
+Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID,
+price, window, and effort level in those two files was read from a primary source on this date — none
+of it from model memory, which predates the gpt-5.6 family (shipped 2026-07-09).
+
+- **`openai/codex`** → `codex-rs/models-manager/models.json` — the shipping catalog: the three
+  gpt-5.6 IDs (`-sol` / `-terra` / `-luna`), `context_window: 372000`, and `supported_reasoning_levels`
+  (luna is the one 5.6 model without `ultra`). Also the source of the effort-default contradiction:
+  `gpt-5.6-sol` defaults to `low` here while the docs say `medium` → PHE never inherits effort.
+- **`openai/codex`** → `codex-rs/model-provider/src/models_endpoint.rs` — the catalog endpoint
+  `/models` re-verifies against.
+- **developers.openai.com/api/docs/pricing** — per-1M in/cached-in/out: sol $5/$0.50/$30 ·
+  terra $2.50/$0.25/$15 · luna $1/$0.10/$6.
+- **Installed `codex-cli 0.144.0`** — cross-check that the catalog above is what the local binary ships.
+- **Anthropic model reference** — Claude per-1M in/out (opus-4-8 $5/$25 · sonnet-5 $3/$15 · haiku-4-5
+  $1/$5 · fable-5 $10/$50); the ~30%-denser tokenizer on Opus 4.7+/Sonnet 5/Fable 5; Haiku 4.5 rejects
+  the `effort` parameter.
+
 ## Claims we deliberately labeled as unverified
 
-Directional only — never load-bearing. Do not hard-code these into rules, hooks, or budgets.
+Directional only — never load-bearing. Do not hard-code these into rules, hooks, or budgets. The last
+row is stronger than unverified: we went looking for it in the primary sources and it is **not there**.
 
 | Claim | Why it is soft |
 |---|---|
 | Context degrades noticeably at 40–50% fill (~400K effective of 1M) | Single self-reported GitHub issue thread (anthropics/claude-code #34685), not an Anthropic benchmark |
 | "12 well-chosen rules cut error rate 41% → 3%" | Secondhand aggregation of an unspecified source; never traced to primary data |
 | ~6.7% bare-model vs ~70% harnessed PR acceptance (Stripe ~1,300 AI PRs/week) | Cole Medin's reported figures; not independently verified |
+| Codex bills 2× input / 1.5× output on the whole request past 272K input tokens | The `(<272K context length)` annotation appears on gpt-5.5/5.5-pro/5.4/5.4-pro rows and on NO gpt-5.6 row; 272K is the 5.4/5.5 *context window*, not a 5.6 billing threshold. No $45 output price exists in OpenAI's pricing payload. Widely repeated by third-party blogs; not in OpenAI's own data. Do not budget against it. |
