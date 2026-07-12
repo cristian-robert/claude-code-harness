@@ -99,10 +99,24 @@ function agentMdToToml(mdText, fallbackName, models) {
     var model = resolveModel(models || DEFAULT_MODELS, 'codex', tier);
     lines.push('model = ' + tomlBasic(model));
 
+    // An effort we cannot vouch for must NEVER ship. `/models` refreshes the map to IDs
+    // that postdate this file, so CODEX_EFFORTS[model] is undefined for exactly the
+    // models we know least about — skipping validation there (the old `if (allowed &&`)
+    // turned the guard off precisely when it was needed and emitted an illegal level
+    // silently. Unknown model + pinned effort = refuse, and say what to do about it.
     var effort = parsed.fm.effort;
     if (effort) {
       var allowed = CODEX_EFFORTS[model];
-      if (allowed && allowed.indexOf(effort) === -1) {
+      if (!allowed) {
+        throw new Error(
+          '.claude/agents/' + name + '.md pins effort "' + effort + '", but ' + model +
+          ' has no recorded reasoning levels in CODEX_EFFORTS (cli/emit-codex.js), so the ' +
+          'effort cannot be validated — an unsupported level fails at dispatch time, far ' +
+          'from the file that caused it. Add ' + model + ' to CODEX_EFFORTS with the levels ' +
+          "its catalog lists (openai/codex models.json -> supported_reasoning_levels)."
+        );
+      }
+      if (allowed.indexOf(effort) === -1) {
         throw new Error(
           '.claude/agents/' + name + '.md pins effort "' + effort + '", which ' + model +
           ' does not support (allowed: ' + allowed.join(', ') + '). ' +

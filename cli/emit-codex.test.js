@@ -103,6 +103,27 @@ var deepUltraMd = ['---', 'name: d', 'description: "d"', 'tier: deep', 'effort: 
 assert('ultra on a sol-backed agent is allowed',
   agentMdToToml(deepUltraMd, 'd', DEFAULT_MODELS).indexOf('model_reasoning_effort = "ultra"') !== -1);
 
+// The effort guard must not DISABLE ITSELF on the models it knows least about. /models
+// refreshes the map to IDs that postdate this file, and `CODEX_EFFORTS[model]` is then
+// undefined — the shipped `if (allowed && ...)` skipped validation entirely and shipped
+// whatever effort the frontmatter pinned. An unverified model is exactly when we cannot
+// vouch for an effort level, so it must throw and send the maintainer to CODEX_EFFORTS.
+var REFRESHED = {
+  checkedAt: '2026-08-01', staleDays: 30,
+  claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
+  codex: { scout: 'gpt-6-nova', build: 'gpt-6-vega', deep: 'gpt-6-rigel' }, // not in CODEX_EFFORTS
+};
+var futureMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', 'effort: ultra', '---', 'b'].join('\n');
+var futureErr = null;
+try { agentMdToToml(futureMd, 'scout', REFRESHED); } catch (e) { futureErr = e; }
+assert('an effort pinned on a model with NO recorded levels throws, naming the model',
+  futureErr instanceof Error && /gpt-6-nova/.test(futureErr.message) && /CODEX_EFFORTS/.test(futureErr.message));
+
+// ...but a refreshed model with NO effort pinned is fine: nothing to vouch for.
+var futureNoEffortMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', '---', 'b'].join('\n');
+assert('a refreshed model with no effort: pinned still emits cleanly',
+  agentMdToToml(futureNoEffortMd, 'scout', REFRESHED).indexOf('model = "gpt-6-nova"') !== -1);
+
 // An unknown tier must fail loudly rather than silently emit no model.
 var badTierMd = ['---', 'name: x', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
 var badTierErr = null;
