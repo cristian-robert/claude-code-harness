@@ -123,5 +123,48 @@ var shipped = JSON.parse(fs.readFileSync(
 assert('the shipped template harness.json models === DEFAULT_MODELS',
   JSON.stringify(shipped.models) === JSON.stringify(DEFAULT_MODELS));
 
+
+// ─── PARITY: the hook and the resolver must agree on staleness ────────────────
+// The staleness rule lives TWICE by packaging necessity: .claude/hooks/*.mjs ships
+// into adopter repos and must stay dependency-free, while cli/ does not ship at all.
+// So the hook cannot import this module. Nothing mechanically kept the two in sync —
+// if the 30-day default or the skew tolerance ever moves in one, it silently diverges
+// in the other, and the harness starts nagging (or staying silent) at the wrong time.
+//
+// This is a BEHAVIOURAL parity test, not a source-text comparison: it drives the real
+// hook and asserts its warn/silent decision matches isStale() on the same input.
+var cp = require('child_process');
+var HOOK = path.join(__dirname, '..', 'template', '.claude', 'hooks', 'session-start.mjs');
+
+function hookSaysStale(checkedAt, staleDays) {
+  var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-parity-'));
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.claude', 'harness.json'), JSON.stringify({
+    stopGate: [], models: { checkedAt: checkedAt, staleDays: staleDays, claude: { deep: 'opus' } },
+  }));
+  var out = cp.execFileSync('node', [HOOK], {
+    input: JSON.stringify({ session_id: 'p', cwd: dir, hook_event_name: 'SessionStart', source: 'startup' }),
+    encoding: 'utf-8',
+  });
+  fs.rmSync(dir, { recursive: true, force: true });
+  try { return /Model map is stale/.test(JSON.parse(out).hookSpecificOutput.additionalContext); }
+  catch (e) { return false; }
+}
+
+var d2 = new Date();
+var today = d2.getFullYear() + '-' + String(d2.getMonth() + 1).padStart(2, '0') + '-' +
+  String(d2.getDate()).padStart(2, '0');
+var PARITY = [
+  [today, 30],          // checked today, LOCAL date — the timezone bug that shipped
+  ['2020-01-01', 30],   // long stale
+  ['2099-01-01', 30],   // implausibly future -> stale
+  ['2026-01-01', 3650], // old, but a huge staleDays window -> fresh
+];
+for (var pi = 0; pi < PARITY.length; pi++) {
+  var ca = PARITY[pi][0], sd = PARITY[pi][1];
+  assert('hook and resolver agree on staleness for (' + ca + ', ' + sd + 'd)',
+    hookSaysStale(ca, sd) === isStale(ca, sd, new Date()));
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
