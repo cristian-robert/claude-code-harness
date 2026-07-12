@@ -8,6 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
+const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -285,6 +286,19 @@ async function main() {
   console.log('  Harness: ' + targets.join(' + '));
   console.log('');
 
+  // Which Obsidian vault (if any) backs architecture & knowledge? Asked once,
+  // recorded in harness.json; /harness-init does the scaffolding + wiring.
+  var vault = null;
+  while (vault === null) {
+    var vaultAnswer = await ask(VAULT_PROMPT);
+    vault = parseVaultAnswer(vaultAnswer);
+    if (vault === null) {
+      console.log('  Enter an absolute path, or "s" to scaffold, or "skip".');
+    }
+  }
+  console.log('  Vault: ' + (vault.mode === 'existing' ? vault.path : vault.mode));
+  console.log('');
+
   // Get previous version before overwriting
   var previousVersion = getVersion(targetDir);
 
@@ -337,6 +351,7 @@ async function main() {
   // `update` would then print "No harness recorded — assuming Claude Code"
   // and silently drop Codex.
   writeHarnessTargets(targetDir, targets);
+  writeVaultConfig(targetDir, vault);
 
   // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
   // reads it directly). CLAUDE.md is a thin `@AGENTS.md` import shim and is only
@@ -483,6 +498,10 @@ async function main() {
   }
   if (stats.backedUp > 0) {
     console.log('  (existing files were backed up as .backup — reconcile any you had customized)');
+  }
+  if (vault.mode === 'scaffold' || vault.mode === 'existing') {
+    console.log('  Vault: /harness-init will ' + (vault.mode === 'scaffold' ? 'scaffold it and ' : '') +
+      'wire the pointer block and point the architect agent at projects/<name>/.');
   }
   console.log('');
 
