@@ -18,7 +18,7 @@ allowed-tools: Bash(git diff *) Bash(git show *) Bash(git log *) Bash(git merge-
 
 1. Invoke `superpowers:requesting-code-review` via the Skill tool for the discipline. Plugin unavailable → fallback below.
 2. Dispatch the `code-reviewer` subagent (`.claude/agents/code-reviewer.md`) with exactly: the diff (or ref), the plan path, the verdict contract below. Fresh context by design — it sees only diff + plan + protocol, never the reasoning that produced the code.
-3. Pass `model:` explicitly (fable/opus). Never downgrade a reviewer to save money — a reviewer that misses real bugs is worse than none.
+3. Pin the reviewer's model explicitly: it is the SIBLING of the plan's `tier:` (deep-written → review at `build`; build-written → review at `deep`), always at `effort: xhigh`. Never let the reviewer be the model that wrote the code — it does not find the bug it just made. No plan/tier? Default to `deep`.
 4. The reviewer keeps persistent project memory (`.claude/agent-memory/code-reviewer/`): recurring defect classes and past waived findings carry across sessions — but only if recorded (step 4).
 
 ## 3. Record the verdict

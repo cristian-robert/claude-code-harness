@@ -25,12 +25,12 @@ days → summarize it and STOP (report the path). Otherwise continue to extend/r
 `inbox/research/<tool>` hit is untriaged raw — surface it, never short-circuit on it. No vault → apply
 the same rule to `reports/research-<tool>.md`.
 
-## 3 · Gather (orchestrator directs, sonnet gathers)
+## 3 · Gather (orchestrator directs, `build` tier gathers)
 
 Resolve via the `context7` MCP IN THE MAIN LOOP (`resolve-library-id` → `get-library-docs`) if wired;
 absent/empty/ambiguous → skip and stamp `context7: uncovered`. Then write a precise brief (exact
 questions, target version, required sources = context7 result + official docs, output shape + line cap)
-and dispatch `research-gatherer` (sonnet) to read official docs + web. It returns structured, sourced
+and dispatch `research-gatherer` (`build` tier) to read official docs + web. It returns structured, sourced
 findings. Model discipline per `docs/04`: you think and direct; the subagent gathers.
 
 ## 4 · Verify before trusting

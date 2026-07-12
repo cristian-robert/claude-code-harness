@@ -20,7 +20,7 @@ Verify EVERY criterion observably — each was written to be checkable:
 | Criterion kind | How to verify |
 |---|---|
 | Command/test observable | Run the exact command yourself; capture exit code + output tail |
-| Runtime behavior (drive the app) | Dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `model: opus`) with the criteria list pasted into the brief + the entrypoint (its spec source accepts either a plan path or a criteria list) |
+| Runtime behavior (drive the app) | Dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`) with the criteria list pasted into the brief + the entrypoint (its spec source accepts either a plan path or a criteria list) |
 | Browser UI flow | `~/.claude/agents/tester-agent/AGENT.md` exists → dispatch it via the Agent tool, including that AGENT.md path in the brief, and grade from its evidence; absent → `UNVERIFIABLE (no browser driver)` — the human exercises it manually |
 | Static only (config/doc presence) | Cite `file:line` |
 

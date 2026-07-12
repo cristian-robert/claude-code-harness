@@ -22,19 +22,26 @@ Worked example (scout):
     Boundaries: node_modules, reports/, plans/ out of bounds. Stop early if
       migrations are vendored — just say so.
 
-## Model + effort matrix (pin both on every dispatch)
+## Tier + effort matrix (pin both on every dispatch)
 
-| Work | Dispatch | model: | effort: |
+Roles, never model names. `.claude/harness.json` → `models` maps them per harness; `/models` refreshes it.
+
+| Work | Dispatch | tier: | effort: |
 |---|---|---|---|
 | Locate/trace a symbol | `codebase-search` MCP (where_is/find_references/outline) if wired, else targeted grep — see symbol-navigation.md | — | — |
-| Locate files / text | built-in Explore | haiku-class (inherits; skips CLAUDE.md) | — |
-| Understand / synthesize | `scout` | sonnet (frontmatter pin) | medium |
-| Implement | general-purpose | per the plan's model hint | high |
-| Code review | `code-reviewer` | opus floor | xhigh |
-| Runtime check | `qa-evaluator` | opus | high |
-| Acceptance evidence pass | `qa-evaluator`; browser flows → global `tester-agent` | opus | high |
+| Locate files / text | built-in Explore | `scout` | — |
+| Understand / synthesize | `scout` agent | `build` | medium |
+| Implement | general-purpose | per the plan's `tier:` hint | high |
+| Code review | `code-reviewer` | **sibling of the implementer's tier** | xhigh |
+| Runtime check | `qa-evaluator` | `deep` | high |
+| Acceptance evidence pass | `qa-evaluator`; browser flows → global `tester-agent` | `deep` | high |
 
-Per-invocation `model:` beats agent frontmatter, which beats the session model. Agent files pin the floor; dispatches may raise, never lower — a reviewer below opus is a silent quality bug.
+**The reviewer is never the model that wrote the code.** `deep`-written code is reviewed at `build`;
+`build`-written code is reviewed at `deep`. Different weights find different bugs — a model does not
+catch the mistake it just made. `/review` reads the plan's `tier:` and inverts it.
+
+Per-invocation model beats agent frontmatter, which beats the session model. A dispatch that pins no
+tier inherits the session model — a silent cost and quality bug.
 
 ## Effort scaling (models misjudge effort — budget it in the brief)
 

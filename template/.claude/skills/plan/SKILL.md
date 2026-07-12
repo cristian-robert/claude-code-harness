@@ -45,7 +45,7 @@ Match the work against this repo's knowledge skills (architecture-map etc.) and 
 
 ## 4. Explore the codebase
 
-- Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `model: sonnet` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
+- Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `tier: build` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
 - External tools/services the plan builds against (major frameworks & services — NOT transitive deps): read `wiki/stack/<tool>/` frontmatter for version + freshness; on a miss/stale/version-mismatch run `/research <tool>@<pinned>`. Cite the `wiki/stack/<tool>/` path in the plan's Context. Never plan tool usage from memory. Detail: `.claude/references/research-and-docs.md`.
 - Read directly only what the plan will name: files to be modified (real line numbers), the closest existing analogue, relevant rules/context modules.
 
@@ -70,7 +70,7 @@ Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`,
 
 ## 7. Self-assess
 
-Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `model:` implementer hint (`opus` default; `sonnet` only for pinned S mechanical work).
+Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step). /review inverts it to choose the reviewer, so an honest tier matters twice.
 
 - Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan` run when its turn comes.
 - Tasks provably independent (pairwise-disjoint `Files:` lists, no ordering) → mark them with the same `Wave: N` per the template rule; otherwise omit Wave — sequential is the default. One judgment, made NOW by the planner, not re-litigated at implement time.

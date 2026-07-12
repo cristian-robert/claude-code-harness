@@ -9,7 +9,7 @@ item: backlog/<id>-<slug>.md  # optional — the work item this plan executes; i
 created: YYYY-MM-DD
 complexity: S|M|L|XL
 confidence: N/10          # that /implement succeeds first-pass; <=6 → ask user before handoff
-model: opus               # implementer hint; sonnet only for pinned S mechanical work
+tier: deep                # implementer hint: `deep` (hard logic/architecture) | `build` (this plan already specs it out step by step). /review inverts this to pick the reviewer.
 ---
 
 # <Title>
