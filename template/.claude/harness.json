@@ -1,10 +1,16 @@
 {
-  "$comment": "Harness config read by .claude/hooks/*.mjs. stopGate = CHEAP checks (seconds each — the gate runs on EVERY turn end); keep the expensive full gate in /validate. Empty array or missing file disarms the gate. stopGateTimeoutSec caps each command, stopGateTotalSec caps the whole gate (must stay under the Stop hook's outer timeout in settings.json). Commands are repo-owner-trusted, run with a shell in the project root. workTracking is set by /harness-init; backend none disables the layer. baseBranch (null = main/master) names a non-standard integration branch (develop/trunk) — guard protects it and /review//validate diff against it.",
+  "$comment": "Harness config read by .claude/hooks/*.mjs. stopGate = CHEAP checks (seconds each — the gate runs on EVERY turn end); keep the expensive full gate in /validate. Empty array or missing file disarms the gate. stopGateTimeoutSec caps each command, stopGateTotalSec caps the whole gate (must stay under the Stop hook's outer timeout in settings.json). Commands are repo-owner-trusted, run with a shell in the project root. workTracking is set by /harness-init; backend none disables the layer. baseBranch (null = main/master) names a non-standard integration branch (develop/trunk) — guard protects it and /review//validate diff against it. models maps ROLES (scout/build/deep) to model IDs per harness — the only file that names a model; /models re-verifies it and session-start warns when checkedAt is older than staleDays. review is NOT a role: the reviewer is the sibling of whoever implemented (deep<->build).",
   "stopGate": [],
   "requireEvolveBeforePush": false,
   "baseBranch": null,
   "autonomous": false,
   "stopGateTimeoutSec": 30,
   "stopGateTotalSec": 75,
-  "workTracking": { "backend": "none", "method": "kanban", "wipLimit": 3 }
+  "workTracking": { "backend": "none", "method": "kanban", "wipLimit": 3 },
+  "models": {
+    "checkedAt": "2026-07-12",
+    "staleDays": 30,
+    "claude": { "scout": "haiku", "build": "sonnet", "deep": "opus" },
+    "codex": { "scout": "gpt-5.6-luna", "build": "gpt-5.6-terra", "deep": "gpt-5.6-sol" }
+  }
 }

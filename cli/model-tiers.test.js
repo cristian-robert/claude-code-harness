@@ -80,5 +80,12 @@ assert('readModels degrades to null on malformed harness.json (never crashes ini
 
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
+// Drift guard: the SHIPPED map and the resolver's DEFAULT_MODELS must never diverge.
+// Without this, editing one and not the other ships a map the resolver disagrees with.
+var shipped = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', 'template', '.claude', 'harness.json'), 'utf-8'));
+assert('the shipped template harness.json models === DEFAULT_MODELS',
+  JSON.stringify(shipped.models) === JSON.stringify(DEFAULT_MODELS));
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
