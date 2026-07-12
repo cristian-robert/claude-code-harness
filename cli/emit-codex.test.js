@@ -9,6 +9,7 @@ const os = require('os');
 const crypto = require('crypto');
 
 const { agentMdToToml } = require('./emit-codex');
+const { DEFAULT_MODELS } = require('./model-tiers');
 
 var passed = 0;
 var failed = 0;
@@ -65,6 +66,60 @@ var TRIPLE_MD = ['---', 'name: t', 'description: "d"', '---', '', "x = '''", 'bo
 var tToml = agentMdToToml(TRIPLE_MD, 't');
 assert("body with ''' falls back to a basic multiline string", tToml.indexOf('developer_instructions = """') !== -1);
 assert("body with ''' still contains the body text", tToml.indexOf('body') !== -1);
+
+// --- tier -> model resolution in the emitted Codex TOML ---
+// Fixtures carry `tier:` inline: the real agent files do not have it yet, so
+// asserting against them would pin today's absence rather than the resolution.
+console.log('tier -> model resolution:');
+
+var scoutMd = [
+  '---', 'name: scout', 'description: "d"', 'tier: scout', 'effort: medium', '---', 'body text',
+].join('\n');
+var scoutTierToml = agentMdToToml(scoutMd, 'scout', DEFAULT_MODELS);
+assert('a scout-tier agent resolves to luna', scoutTierToml.indexOf('model = "gpt-5.6-luna"') !== -1);
+assert('effort passes through to model_reasoning_effort',
+  scoutTierToml.indexOf('model_reasoning_effort = "medium"') !== -1);
+assert('no Claude alias ever reaches the Codex tree',
+  scoutTierToml.indexOf('opus') === -1 && scoutTierToml.indexOf('sonnet') === -1 && scoutTierToml.indexOf('haiku') === -1);
+
+var deepMd = ['---', 'name: architect-agent', 'description: "d"', 'tier: deep', '---', 'b'].join('\n');
+assert('a deep-tier agent resolves to sol',
+  agentMdToToml(deepMd, 'architect-agent', DEFAULT_MODELS).indexOf('model = "gpt-5.6-sol"') !== -1);
+
+var buildMd = ['---', 'name: b', 'description: "d"', 'tier: build', '---', 'b'].join('\n');
+assert('a build-tier agent resolves to terra',
+  agentMdToToml(buildMd, 'b', DEFAULT_MODELS).indexOf('model = "gpt-5.6-terra"') !== -1);
+
+// luna is the ONE 5.6 model without `ultra` (models.json, verified 2026-07-12). Emitting it
+// would fail at dispatch time, far from the file that caused it — so fail at emit instead.
+var ultraMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', 'effort: ultra', '---', 'b'].join('\n');
+var ultraErr = null;
+try { agentMdToToml(ultraMd, 'scout', DEFAULT_MODELS); } catch (e) { ultraErr = e; }
+assert('ultra on a luna-backed agent throws at emit, naming the model',
+  ultraErr instanceof Error && /ultra/i.test(ultraErr.message) && /luna/.test(ultraErr.message));
+
+// ultra IS legal on the deeper tiers — the guard must be capability-based, not a blanket ban.
+var deepUltraMd = ['---', 'name: d', 'description: "d"', 'tier: deep', 'effort: ultra', '---', 'b'].join('\n');
+assert('ultra on a sol-backed agent is allowed',
+  agentMdToToml(deepUltraMd, 'd', DEFAULT_MODELS).indexOf('model_reasoning_effort = "ultra"') !== -1);
+
+// An unknown tier must fail loudly rather than silently emit no model.
+var badTierMd = ['---', 'name: x', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
+var badTierErr = null;
+try { agentMdToToml(badTierMd, 'x', DEFAULT_MODELS); } catch (e) { badTierErr = e; }
+assert('an unknown tier throws rather than silently emitting no model', badTierErr instanceof Error);
+
+// code-reviewer has no tier: its model is chosen per dispatch (the sibling of the
+// implementer). Emitting a fixed model here would reintroduce exactly the bug we removed.
+var noTierMd = ['---', 'name: code-reviewer', 'description: "d"', '---', 'b'].join('\n');
+assert('an agent with no tier: emits no model key rather than guessing one',
+  agentMdToToml(noTierMd, 'code-reviewer', DEFAULT_MODELS).indexOf('model = ') === -1);
+
+// A Claude-style `model: sonnet` in frontmatter must NOT leak through as the Codex
+// model — only `tier:` may select one.
+var claudeModelMd = ['---', 'name: c', 'description: "d"', 'model: sonnet', '---', 'b'].join('\n');
+assert('a Claude `model:` alias in frontmatter never becomes the Codex model',
+  agentMdToToml(claudeModelMd, 'c', DEFAULT_MODELS).indexOf('sonnet') === -1);
 
 console.log('emitCodexPayload:');
 
@@ -552,6 +607,80 @@ console.log('architect-agent emits to Codex:');
   assert('architect-agent.toml has NO model line (Phase 3 owns model keys)', /^model\s*=/m.test(aa) === false);
   assert('architect-agent instructions mention the vault', aa.toLowerCase().indexOf('vault') !== -1);
   fs.rmSync(AA_DIR, { recursive: true, force: true });
+}
+
+// ─── Agent registration: config.toml is what makes an agent EXIST on Codex ──
+// Codex has NO directory auto-scan of .codex/agents/ — an agent that config.toml
+// does not register does not exist, and the model key we just wrote into its file
+// is never read. Registration is what makes the tier map real on Codex.
+// Verified against codex-cli 0.144.0 (`codex doctor`).
+console.log('\nagent registration in .codex/config.toml:');
+{
+  var REG_DIR = path.join(os.tmpdir(), 'emit-codex-reg-' + crypto.randomUUID());
+  var regRoot = path.join(REG_DIR, 'proj');
+  var RR = path.join(__dirname, '..');
+  fs.cpSync(path.join(RR, 'template', '.claude'), path.join(regRoot, '.claude'), { recursive: true });
+  emitCodexPayload(regRoot);
+
+  var regCfg = fs.readFileSync(path.join(regRoot, '.codex', 'config.toml'), 'utf-8');
+  var emitted = fs.readdirSync(path.join(regRoot, '.codex', 'agents'))
+    .filter(function (f) { return f.slice(-5) === '.toml'; })
+    .map(function (f) { return f.slice(0, -5); });
+
+  assert('at least one agent was emitted', emitted.length >= 5);
+  for (var i = 0; i < emitted.length; i++) {
+    assert('config.toml registers [agents.' + emitted[i] + ']',
+      regCfg.indexOf('[agents.' + emitted[i] + ']') !== -1);
+    // config_file resolves relative to config.toml's OWN dir (.codex/), NOT the
+    // project root: ".codex/agents/x.toml" resolves to .codex/.codex/agents/x.toml
+    // and Codex silently drops the agent ("Ignoring malformed agent role
+    // definition"). Verified against the binary.
+    assert('the ' + emitted[i] + ' registration points at its file, CODEX_HOME-relative',
+      regCfg.indexOf('config_file = "agents/' + emitted[i] + '.toml"') !== -1);
+  }
+  assert('no config_file is .codex/-prefixed (that resolves to .codex/.codex/ and is dropped)',
+    regCfg.indexOf('config_file = ".codex/') === -1);
+  assert('no agent file is left unregistered',
+    emitted.length === (regCfg.match(/^\[agents\.[^\]]+\]/gm) || []).length);
+
+  // Every registered agent must declare the 3 keys AgentRoleToml requires.
+  assert('every registration carries a description',
+    (regCfg.match(/^description = /gm) || []).length === emitted.length);
+  assert('every registration carries nickname_candidates',
+    (regCfg.match(/^nickname_candidates = /gm) || []).length === emitted.length);
+
+  // max_threads is a SCALAR TUNING FIELD of [agents], not an agent. [agents] is a
+  // hybrid table: scalars + [agents.<n>] sub-tables. Established against codex-cli
+  // 0.144.0: `[agents] max_threads = 4` loads clean while `[agents] bogus_scalar = 4`
+  // is a hard "config could not be loaded" error — a plain name->role map would
+  // reject both integers identically.
+  assert('max_threads stays under [agents] (it is a tuning field, not an agent)',
+    /^\[agents\]\nmax_threads = 4$/m.test(regCfg));
+  assert('max_threads is NOT registered as an agent',
+    regCfg.indexOf('[agents.max_threads]') === -1);
+
+  // The whole point: no Claude alias may be emitted as a MODEL anywhere in the
+  // generated Codex tree — not in config.toml, not in any agent TOML.
+  // (findAll above matches one exact filename; this needs every file.)
+  var allFiles = function (dir) {
+    var out = [];
+    var entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (var k = 0; k < entries.length; k++) {
+      var p = path.join(dir, entries[k].name);
+      if (entries[k].isDirectory()) out = out.concat(allFiles(p));
+      else if (entries[k].isFile()) out.push(p);
+    }
+    return out;
+  };
+  var codexFiles = allFiles(path.join(regRoot, '.codex')).concat(allFiles(path.join(regRoot, '.agents')));
+  assert('sanity: the Codex tree scan actually found files', codexFiles.length > 0);
+  var aliasLeaks = codexFiles.filter(function (f) {
+    return /^model(_reasoning_effort)? = "(opus|sonnet|haiku)"/m.test(fs.readFileSync(f, 'utf-8'));
+  });
+  assert('no Claude alias (opus/sonnet/haiku) is emitted as a model anywhere in the Codex tree: ' +
+    aliasLeaks.join(', '), aliasLeaks.length === 0);
+
+  fs.rmSync(REG_DIR, { recursive: true, force: true });
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
