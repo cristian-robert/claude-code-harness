@@ -15,7 +15,22 @@ const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
 const TARBALL_URL = 'https://github.com/' + REPO + '/archive/refs/heads/' + BRANCH + '.tar.gz';
 
-// Lazy-init readline so requiring this module for tests doesn't open stdin.
+// Two input mechanisms, chosen once per process by ask() below, based on
+// whether stdin is a TTY:
+//
+// - TTY (a human typing): today's readline behaviour, unchanged. Lazy-init
+//   so requiring this module for tests doesn't open stdin.
+// - Piped/redirected (not a TTY): readline is unsafe here. main() asks
+//   MULTIPLE questions in sequence (harness, then vault, then maybe git-init).
+//   If a script pipes every answer in one chunk
+//   (`printf '1\n/path\n' | node cli/init.js`), readline delivers line 1 to
+//   the first ask(), then the pipe hits EOF before the second ask()'s
+//   rl.question() callback ever fires -- that `await` never resolves, the
+//   event loop drains with nothing left to do, and the process exits 0
+//   having installed nothing. Fix: read ALL of stdin to EOF up front and
+//   hand out one queued line per ask() call (createPipedAsker below).
+//   Running out of queued answers is a loud, non-zero failure -- never a
+//   silent no-op and never a hang.
 var _rl = null;
 function getRl() {
   if (!_rl) {
@@ -27,11 +42,67 @@ function getRl() {
   return _rl;
 }
 
-function ask(question) {
+function askTTY(question) {
   var rl = getRl();
   return new Promise(function (resolve) {
     rl.question(question, resolve);
   });
+}
+
+// Splits pre-read stdin text into a line queue. A trailing '\n' produces one
+// trailing empty-string artifact from String#split -- that's the terminator
+// of the last real line, not an extra blank answer, so it's dropped. A blank
+// line in the MIDDLE of the input (a genuine empty answer) is kept.
+function splitStdinLines(text) {
+  if (!text) return [];
+  var lines = text.split('\n');
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+// Pure-ish and unit-testable in isolation (see init-input.test.js): takes the
+// full stdin text and returns an asker whose ask(prompt) shifts the next
+// queued line, writing the prompt (and echoing the answer) the way a human
+// typing at a TTY would see. Throws -- does not hang, does not silently
+// return "" -- once the queue is exhausted, per the module comment above.
+function createPipedAsker(stdinText) {
+  var queue = splitStdinLines(stdinText);
+  return {
+    ask: function (prompt) {
+      process.stdout.write(prompt);
+      if (queue.length === 0) {
+        throw new Error(
+          'perfect-harness-engineering init: ran out of piped input (needed an answer to a prompt). ' +
+          'Provide all answers, or run interactively.'
+        );
+      }
+      var line = queue.shift();
+      console.log(line);
+      return line;
+    },
+  };
+}
+
+var _pipedAsker = null;
+function ask(question) {
+  if (process.stdin.isTTY) {
+    return askTTY(question);
+  }
+  if (!_pipedAsker) {
+    _pipedAsker = createPipedAsker(fs.readFileSync(0, 'utf-8'));
+  }
+  return _pipedAsker.ask(question);
+}
+
+// Releases whatever input mechanism was actually used. The piped path never
+// creates a readline interface (see ask() above), so this is a no-op there --
+// calling getRl() here instead would create one just to close it.
+function closeAsk() {
+  if (_rl) {
+    _rl.close();
+  }
 }
 
 // Collision-resistant temp path (UUID-based). Replaces Date.now() which
@@ -319,7 +390,7 @@ async function main() {
     } else {
       console.error('No framework source available. Check your internet connection.');
       cleanupTmpDir(tmpDir);
-      getRl().close();
+      closeAsk();
       process.exit(1);
     }
   }
@@ -461,7 +532,7 @@ async function main() {
         console.error('Could not initialize git: ' + e.message);
         console.error('You explicitly opted in to git init, but it failed. Aborting.');
         cleanupTmpDir(tmpDir);
-        getRl().close();
+        closeAsk();
         process.exit(1);
       }
     }
@@ -516,7 +587,7 @@ async function main() {
 
   } finally {
     cleanupTmpDir(tmpDir);
-    getRl().close();
+    closeAsk();
   }
 }
 
@@ -527,6 +598,7 @@ module.exports = {
   backupAndCopy: backupAndCopy,
   __test_tmpPath: __test_tmpPath,
   shouldMergeUserSettings: shouldMergeUserSettings,
+  createPipedAsker: createPipedAsker,
   main: main,
 };
 
