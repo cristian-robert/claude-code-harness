@@ -9,7 +9,7 @@ tags:
 
 This is the **one source** for how a code repo reaches this vault. To connect a project:
 
-1. Copy the fenced block below into that repo's own `CLAUDE.md` (near the top).
+1. Copy the fenced block below into that repo's own `AGENTS.md` (near the top). (On Claude Code, `CLAUDE.md` imports `AGENTS.md`, so `AGENTS.md` is the correct paste target for both Claude Code and Codex.)
 2. Replace `<project-name>` with the project's folder name under `projects/`.
 3. Make sure a matching wiki exists at `projects/<project-name>/` (copy the project template) and is registered in [[projects/_index|projects/_index]].
 
