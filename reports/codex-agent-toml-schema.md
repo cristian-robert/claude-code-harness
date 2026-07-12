@@ -221,7 +221,14 @@ analysis.
 Per the brief's Step 4: **ACCEPTED → no code change.** I have not modified
 `cli/emit-codex.js` or anything else.
 
-## Separate finding to flag for the controller (out of scope for this task, not fixed here)
+## Separate finding to flag for the controller — **RESOLVED in `ce691d3`**
+
+> **Status update (amended 2026-07-12).** The finding below was true when written and is now **fixed**.
+> Commit `ce691d3` ("feat(codex): resolve agent tier -> model + effort, and register the agents in
+> config.toml") taught `cli/emit-codex.js` to emit a `[agents.<name>]` block per agent — with
+> `description`, `config_file`, and `nickname_candidates` — so the generated agent files are now
+> registered and reachable. The original text is preserved verbatim below as the evidence trail that
+> found it; read it as a record of the bug, not of current behavior.
 
 Regardless of the `model` key question: **PHE's generated `.codex/config.toml` never
 registers any of the four `.codex/agents/*.toml` files it generates.** There is no
