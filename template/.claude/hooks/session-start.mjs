@@ -71,6 +71,21 @@ async function main() {
       const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
       const n = Array.isArray(cfg.stopGate) ? cfg.stopGate.length : 0;
       lines.push(n ? `Stop gate: ${n} check(s) armed — the turn cannot end red.` : "Stop gate: not configured (set stopGate in .claude/harness.json).");
+      // A model map nobody has re-checked in a month is how a retired ID gets dispatched.
+      // Duplicated (not imported) from cli/model-tiers.js on purpose: hooks are ESM and must
+      // stay dependency-free and copy-safe into any adopter repo. Keep the two in sync.
+      const m = cfg.models;
+      if (m && typeof m === "object") {
+        const days = typeof m.staleDays === "number" ? m.staleDays : 30;
+        const t = Date.parse(m.checkedAt ?? "");
+        const age = Date.now() - t;
+        // age < 0 (a future checkedAt — typo, clock skew, hand-edit) is STALE, not fresh.
+        // Freshness we cannot establish is exactly the freshness we must not assume: a
+        // naive `age > limit` returns false for a future date and silently says "fresh".
+        if (isNaN(t) || age < 0 || age > days * 864e5) {
+          lines.push(`Model map is stale (checkedAt: ${m.checkedAt ?? "never"}) — run /models to re-verify against the live catalogs.`);
+        }
+      }
       // Files-backed board summary (backend none/github or missing dir: skip silently).
       try {
         const backend = cfg.workTracking?.backend;

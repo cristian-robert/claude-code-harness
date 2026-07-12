@@ -352,6 +352,35 @@ console.log("session-start.mjs");
   let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("uninitialized template nudges /harness-init", res.code === 0 && ctx.includes("/harness-init"));
 }
+{
+  // A model map nobody has re-checked is how a retired model ID stays in the dispatch
+  // path long after the vendor pulled it. Staleness must be LOUD, at session start.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-models-stale-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: "2020-01-01", staleDays: 30, claude: { scout: "haiku", build: "sonnet", deep: "opus" } },
+  }));
+  const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
+  check("stale model map warns and names /models", res.code === 0 && ctx.includes("Model map is stale") && ctx.includes("/models"));
+
+  // Fresh map: silent. A warning that fires every session is a warning nobody reads.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: new Date().toISOString().slice(0, 10), staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const fresh = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let freshCtx = ""; try { freshCtx = JSON.parse(fresh.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: freshCtx stays "" */ }
+  check("fresh model map emits no staleness warning", fresh.code === 0 && !freshCtx.includes("Model map is stale"));
+
+  // No models key at all (an adopter who never ran /models): say nothing. Absent config
+  // is not a stale map — nagging about a feature they never opted into is noise.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: [] }));
+  const none = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let noneCtx = ""; try { noneCtx = JSON.parse(none.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: noneCtx stays "" */ }
+  check("no models key emits no staleness warning", none.code === 0 && !noneCtx.includes("Model map is stale"));
+}
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
 
 console.log("pre-compact.mjs");
