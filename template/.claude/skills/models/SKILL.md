@@ -48,8 +48,16 @@ Show a table: role · harness · current · proposed · why. Then **ask**. On ye
 
 - update `models` (merge-preserve — never rewrite `harness.json` wholesale; it also holds the stop
   gate, vault, and work-tracking config),
-- set `checkedAt` to today,
+- set `checkedAt` to today **only if EVERY harness in `harness.json` → `harness` verified cleanly in
+  step 2**. On a partial run: write the ids you DID verify, leave `checkedAt` untouched, and name the
+  harness that went unverified and why. `session-start.mjs` reads that one date as freshness for BOTH
+  harnesses — stamping it would silence the staleness warning for the very half nobody checked. The
+  nag persisting is the CORRECT outcome while something still needs re-verifying.
 - update `CODEX_EFFORTS` in `cli/emit-codex.js` if a ceiling moved,
+- **re-emit the Codex payload** — `npx perfect-harness-engineering emit` — whenever `codex` is in
+  `harness.json` → `harness`. `cli/emit-codex.js` bakes the resolved Codex IDs INTO `.codex/agents/*.toml`
+  at emit time, so updating the map alone changes nothing: every Codex agent keeps dispatching the OLD
+  ID until you re-emit. Skip only on a Claude-only setup.
 - re-run `npm test` and report the real output.
 
 On no: change nothing, and do not touch `checkedAt` — an unchanged map that was checked is still
