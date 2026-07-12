@@ -297,6 +297,25 @@ function localToday() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// The MAXIMUM legitimate skew a bare `checkedAt` can carry, made deterministic.
+//
+// /models writes the user's LOCAL date; Date.parse reads a bare date as midnight UTC. So
+// east of UTC a map checked "today" parses in the FUTURE, and a naive `age < 0 => stale`
+// nags the user who just re-verified it. localToday() alone does NOT reliably catch that:
+// the skew it produces is (local time-of-day − UTC offset), so the fixture only goes
+// future-dated in the host's own timezone, before the offset hour — under TZ=UTC (i.e. on
+// CI) it is future-dated NEVER, and the regression sails through green. Forcing a TZ on
+// the hook does not help either: the hook's math is TZ-independent by construction.
+//
+// A user at UTC+14 (Kiritimati) writing their local date at 00:30 records TOMORROW's UTC
+// date. Pinning that is what makes the fixture bite: it parses ahead of Date.now() by
+// (24h − now's UTC time-of-day), which is > 0 at every instant, in every timezone — while
+// still inside the one-day tolerance the correct guard allows. Naive guard: always stale
+// (test fails). Correct guard: always fresh (test passes).
+function maxSkewDate() {
+  return new Date(Date.now() + 864e5).toISOString().slice(0, 10); // tomorrow, in UTC
+}
+
 console.log("session-start.mjs");
 {
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" });
@@ -382,6 +401,31 @@ console.log("session-start.mjs");
   const fresh = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let freshCtx = ""; try { freshCtx = JSON.parse(fresh.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: freshCtx stays "" */ }
   check("fresh model map emits no staleness warning", fresh.code === 0 && !freshCtx.includes("Model map is stale"));
+
+  // The regression guard proper (see maxSkewDate): a checkedAt at the maximum legitimate
+  // timezone skew is FRESH, not stale. The fixture above only reproduces that east of UTC
+  // and only before the offset hour — it passed under TZ=UTC with the bug present, which
+  // is to say it passed on CI. This one is future-dated at every instant in every zone, so
+  // a naive `age < 0` fails it everywhere and can no longer ship green.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: maxSkewDate(), staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const skew = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let skewCtx = ""; try { skewCtx = JSON.parse(skew.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: skewCtx stays "" */ }
+  check("a map at MAX timezone skew (bare date parsed ahead of now) is fresh, in every timezone",
+    skew.code === 0 && !skewCtx.includes("Model map is stale"));
+
+  // ...and the tolerance is a tolerance, not a hole: past one day, a future date is a typo
+  // or a hand-edit, and must still read STALE.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: "2099-01-01", staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const future = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let futureCtx = ""; try { futureCtx = JSON.parse(future.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout */ }
+  check("an implausibly future checkedAt is still STALE (skew tolerance is not a hole)",
+    future.code === 0 && futureCtx.includes("Model map is stale"));
 
   // No models key at all (an adopter who never ran /models): say nothing. Absent config
   // is not a stale map — nagging about a feature they never opted into is noise.
