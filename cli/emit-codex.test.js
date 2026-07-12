@@ -531,5 +531,28 @@ assert('no emitted openai.yaml anywhere allows implicit invocation: ' + leaky.jo
 
 fs.rmSync(REAL_TEST_DIR, { recursive: true, force: true });
 
+// ─── architect-agent: vault-backed agent must emit to Codex ────────────────
+// Guards the REAL shipped agent file (not a fixture): copies template/.claude
+// into a temp dir, emits, and asserts the Codex TOML carries the agent's
+// name + body, omits model (Phase 3 owns model keys in emitted config), and
+// still mentions the vault it is backed by.
+console.log('architect-agent emits to Codex:');
+{
+  var AA_DIR = path.join(os.tmpdir(), 'emit-architect-test-' + crypto.randomUUID());
+  var AA_PROJ = path.join(AA_DIR, 'proj');
+  // Copy the REAL template payload so this guards the shipped agent file.
+  var REPO_ROOT = path.join(__dirname, '..');
+  fs.cpSync(path.join(REPO_ROOT, 'template', '.claude'), path.join(AA_PROJ, '.claude'), { recursive: true });
+  emitCodexPayload(AA_PROJ);
+  var aaToml = path.join(AA_PROJ, '.codex', 'agents', 'architect-agent.toml');
+  assert('architect-agent.toml emitted', fs.existsSync(aaToml));
+  var aa = fs.readFileSync(aaToml, 'utf-8');
+  assert('architect-agent.toml has name', aa.indexOf('name = "architect-agent"') !== -1);
+  assert('architect-agent.toml has developer_instructions', aa.indexOf('developer_instructions') !== -1);
+  assert('architect-agent.toml has NO model line (Phase 3 owns model keys)', /^model\s*=/m.test(aa) === false);
+  assert('architect-agent instructions mention the vault', aa.toLowerCase().indexOf('vault') !== -1);
+  fs.rmSync(AA_DIR, { recursive: true, force: true });
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);
