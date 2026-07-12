@@ -121,7 +121,9 @@ function isStale(checkedAt, maxDays, now) {
   var t = Date.parse(checkedAt);
   if (isNaN(t)) return true;
   var ref = (now instanceof Date ? now : new Date()).getTime();
-  return (ref - t) > maxDays * 24 * 60 * 60 * 1000;
+  var age = ref - t;
+  if (age < 0) return true; // a future checkedAt cannot be trusted as fresh
+  return age > maxDays * 24 * 60 * 60 * 1000;
 }
 
 module.exports = {

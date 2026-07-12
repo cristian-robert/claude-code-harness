@@ -55,6 +55,8 @@ assert('a checkedAt older than maxDays is stale', isStale('2026-06-01', 30, NOW)
 assert('a fresh checkedAt is not stale', isStale('2026-07-01', 30, NOW) === false);
 assert('a missing checkedAt is stale (never checked = needs checking)', isStale(undefined, 30, NOW) === true);
 assert('an unparseable checkedAt is stale, never silently OK', isStale('not-a-date', 30, NOW) === true);
+assert('a future-dated checkedAt is stale, not fresh (clock skew / typo / hand-edit)',
+  isStale('2099-01-01', 30, NOW) === true);
 
 // --- the shared-file contract (harness.json also holds the stop gate) ---
 var TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-models-'));
@@ -77,6 +79,24 @@ assert('writeModels REFUSES to write through a malformed harness.json',
   threw(function () { writeModels(bad, DEFAULT_MODELS); }) instanceof Error);
 assert('readModels degrades to null on malformed harness.json (never crashes init)',
   readModels(bad) === null);
+
+var arrayShape = path.join(TEST_DIR, 'array-shape');
+fs.mkdirSync(path.join(arrayShape, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(arrayShape, '.claude', 'harness.json'), '[1,2,3]');
+assert('writeModels REFUSES to write through a harness.json that parses to a bare array',
+  threw(function () { writeModels(arrayShape, DEFAULT_MODELS); }) instanceof Error);
+
+var numberShape = path.join(TEST_DIR, 'number-shape');
+fs.mkdirSync(path.join(numberShape, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(numberShape, '.claude', 'harness.json'), '42');
+assert('writeModels REFUSES to write through a harness.json that parses to a bare number',
+  threw(function () { writeModels(numberShape, DEFAULT_MODELS); }) instanceof Error);
+
+var nullShape = path.join(TEST_DIR, 'null-shape');
+fs.mkdirSync(path.join(nullShape, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(nullShape, '.claude', 'harness.json'), 'null');
+assert('writeModels REFUSES to write through a harness.json that parses to JSON null',
+  threw(function () { writeModels(nullShape, DEFAULT_MODELS); }) instanceof Error);
 
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
