@@ -952,7 +952,11 @@ Inside the existing `try { const cfg = JSON.parse(...) }` block that already rea
       if (m && typeof m === "object") {
         const days = typeof m.staleDays === "number" ? m.staleDays : 30;
         const t = Date.parse(m.checkedAt ?? "");
-        if (isNaN(t) || Date.now() - t > days * 864e5) {
+        const age = Date.now() - t;
+        // age < 0 (a future checkedAt — typo, clock skew, hand-edit) is STALE, not fresh.
+        // Freshness we cannot establish is exactly the freshness we must not assume: a
+        // naive `age > limit` returns false for a future date and silently says "fresh".
+        if (isNaN(t) || age < 0 || age > days * 864e5) {
           lines.push(`Model map is stale (checkedAt: ${m.checkedAt ?? "never"}) — run /models to re-verify against the live catalogs.`);
         }
       }
