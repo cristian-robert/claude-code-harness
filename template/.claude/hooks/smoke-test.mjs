@@ -461,8 +461,10 @@ console.log("verdict-gate.mjs");
 // Mechanical proof that agent frontmatter uses only real subagent keys — a wrong
 // key (e.g. the globs:/paths: class of typo) fails SILENTLY at runtime. Allowlist
 // is the documented sub-agents frontmatter schema (code.claude.com/docs/en/sub-agents),
-// plus `tier` — a PHE-defined cross-harness key the Codex emitter resolves to a model;
-// Claude Code itself ignores it, same as any other unknown key.
+// plus `tier` — a PHE-defined cross-harness key the Codex emitter resolves to a model.
+// UNVERIFIED: the docs list the supported keys but say nothing about unknown ones —
+// not ignored, not rejected. This allowlist is OURS; it does not exercise Claude Code's
+// parser. Re-check on upgrade (docs/99 · unverified claims).
 console.log("agent frontmatter");
 {
   const AGENT_KEYS = new Set([
@@ -478,7 +480,7 @@ console.log("agent frontmatter");
     const m = /^---\n([\s\S]*?)\n---/.exec(text);
     const keys = m ? [...m[1].matchAll(/^([A-Za-z][\w-]*)\s*:/gm)].map(x => x[1]) : [];
     const bad = keys.filter(k => !AGENT_KEYS.has(k));
-    check(`${f}: frontmatter keys all in documented schema`, m && bad.length === 0, bad.length ? `unknown: ${bad.join(", ")}` : "no frontmatter");
+    check(`${f}: frontmatter keys all in documented schema (+ PHE \`tier\`)`, m && bad.length === 0, bad.length ? `unknown: ${bad.join(", ")}` : "no frontmatter");
   }
 }
 
