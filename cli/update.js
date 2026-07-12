@@ -9,6 +9,7 @@ const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readVaultConfig, writeVaultConfig } = require('./vault-config');
+const { readModels, writeModels } = require('./model-tiers');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -170,6 +171,16 @@ async function main() {
   // write-back after the copy only fires when there was one to restore.
   var vault = readVaultConfig(projectRoot);
 
+  // The model map, same read-before-the-copy reason as `vault` — but this one is the
+  // user's WORK, not a setup answer: /models re-verifies the IDs against the live
+  // catalogs and rewrites checkedAt. The .claude/ copy below replaces harness.json with
+  // the template's map (the IDs the package was CUT with, and a checkedAt that reads
+  // FRESH), so without this read + the write-back after the copy, every `update`
+  // silently reverts the refresh — and the stale-map warning stays quiet about it.
+  // A project that never ran /models has no map to restore (null): the copy's shipped
+  // default is exactly what it should get.
+  var models = readModels(projectRoot);
+
   // UUID-based tmp dir — avoids collisions when two update runs start in the
   // same millisecond (Date.now() has millisecond granularity).
   var tmpDir = path.join(os.tmpdir(), 'ai-framework-update-' + crypto.randomUUID());
@@ -231,6 +242,13 @@ async function main() {
     // actually recorded; don't write a spurious `vault` key for a pre-vault
     // project (readVaultConfig returned null).
     if (vault !== null) writeVaultConfig(projectRoot, vault);
+
+    // Restore the refreshed model map (same merge-preserving write, same crash-window
+    // rationale). MUST land before the Codex emit below: emit-codex.js reads this file
+    // and BAKES the resolved IDs into .codex/agents/*.toml — restoring after it would
+    // leave the generated tree pinned to the package's IDs while harness.json showed
+    // the user's.
+    if (models !== null) writeModels(projectRoot, models);
 
     // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
     var instructionFiles = ['AGENTS.md'];

@@ -26,6 +26,23 @@ assert('deep-written code is reviewed by build', reviewerRoleFor('deep') === 'bu
 assert('build-written code is reviewed by deep', reviewerRoleFor('build') === 'deep');
 assert('scout never implements — its reviewer fails SAFE, to deep', reviewerRoleFor('scout') === 'deep');
 
+// Anything that is not an implementer role is a BUG at the call site, not a role to
+// fail safe on. The shipped `if deep -> build; else deep` swallowed undefined, null,
+// 'review', 'garbage' and 42 alike, handing back a plausible-looking 'deep' for each —
+// so a plan that pinned a typo'd tier reviewed happily and nobody ever knew.
+var GARBAGE_ROLES = [undefined, null, '', 'review', 'reviewer', 'garbage', 42, {}];
+for (var gi = 0; gi < GARBAGE_ROLES.length; gi++) {
+  (function (bad) {
+    var err = threw(function () { reviewerRoleFor(bad); });
+    assert('reviewerRoleFor(' + JSON.stringify(bad === undefined ? 'undefined' : bad) + ') THROWS rather than silently answering deep',
+      err instanceof Error && /scout, build, deep/.test(err.message));
+  })(GARBAGE_ROLES[gi]);
+}
+assert('the throw names the offending value',
+  /garbage/.test(String(threw(function () { reviewerRoleFor('garbage'); }))));
+assert('resolveReviewer inherits the validation (a bad implementer role never resolves)',
+  threw(function () { resolveReviewer(DEFAULT_MODELS, 'claude', 'review'); }) instanceof Error);
+
 assert('opus-written code is reviewed by sonnet',
   resolveReviewer(DEFAULT_MODELS, 'claude', 'deep') === 'sonnet');
 assert('sol-written code is reviewed by terra',
@@ -57,6 +74,14 @@ assert('a missing checkedAt is stale (never checked = needs checking)', isStale(
 assert('an unparseable checkedAt is stale, never silently OK', isStale('not-a-date', 30, NOW) === true);
 assert('a future-dated checkedAt is stale, not fresh (clock skew / typo / hand-edit)',
   isStale('2099-01-01', 30, NOW) === true);
+
+// `staleDays` is OPTIONAL in harness.json — the hook defaults a missing one to 30, so the
+// resolver must too. Without the default, maxDays is undefined, the comparison is against
+// NaN, and every comparison is false: an ancient map reads FRESH and the two disagree.
+assert('a missing staleDays defaults to 30: an old map is still stale',
+  isStale('2020-01-01', undefined, NOW) === true);
+assert('a missing staleDays defaults to 30: a recent map is still fresh',
+  isStale('2026-07-01', undefined, NOW) === false);
 
 // REGRESSION (real bug, shipped and caught): `checkedAt` is a bare date, which
 // Date.parse reads as midnight UTC, but /models writes the user's LOCAL date. East of
@@ -159,12 +184,103 @@ var PARITY = [
   ['2020-01-01', 30],   // long stale
   ['2099-01-01', 30],   // implausibly future -> stale
   ['2026-01-01', 3650], // old, but a huge staleDays window -> fresh
+  // staleDays is OPTIONAL: JSON.stringify drops `undefined`, so the hook reads a config
+  // with NO staleDays key — its real-world default path, and the one place the two had
+  // already diverged (hook defaults to 30; isStale compared against NaN and said fresh).
+  ['2020-01-01', undefined], // no staleDays, long stale -> both must warn
+  [today, undefined],        // no staleDays, checked today -> both must stay silent
 ];
 for (var pi = 0; pi < PARITY.length; pi++) {
   var ca = PARITY[pi][0], sd = PARITY[pi][1];
-  assert('hook and resolver agree on staleness for (' + ca + ', ' + sd + 'd)',
+  assert('hook and resolver agree on staleness for (' + ca + ', ' + (sd === undefined ? 'no staleDays' : sd + 'd') + ')',
     hookSaysStale(ca, sd) === isStale(ca, sd, new Date()));
 }
+// Parity alone can be satisfied by BOTH being wrong. Pin the direction too.
+assert('a 2020 map with no staleDays is STALE in the hook (not silently fresh)',
+  hookSaysStale('2020-01-01', undefined) === true);
+
+// ─── `update` MUST NOT DESTROY A /models REFRESH ──────────────────────────────
+// harness.json is SHARED, and `update` overwrites it wholesale with the template's copy
+// before restoring the keys it knows about. It knew about `harness` and `vault` — and not
+// `models`, so every `npx phe update` silently reverted the user's refreshed model IDs,
+// checkedAt and staleDays to the package defaults. The map then read "fresh" (the shipped
+// checkedAt) while pointing at whatever IDs the package was cut with: the exact retired-ID
+// dispatch the /models refresh exists to prevent, reintroduced by the upgrade path.
+//
+// Drives the REAL CLI end-to-end (nothing else proves the copy/restore ordering).
+var REFRESHED = {
+  checkedAt: '2030-01-01',
+  staleDays: 7,
+  claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
+  codex: { scout: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-9-refreshed' },
+};
+
+var UP = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-update-'));
+fs.mkdirSync(path.join(UP, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(UP, '.claude', 'harness.json'), JSON.stringify({
+  stopGate: ['npm test'],
+  harness: ['claude'],
+  models: REFRESHED,
+}, null, 2) + '\n');
+
+// `update` fetches the PUBLISHED tarball first. Shadow curl with a failing stub so it
+// takes the local-fallback path — otherwise this asserts against whatever is on npm,
+// not against the working tree, and would pass on a branch that never fixed anything.
+var SHADOW = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-shadow-bin-'));
+fs.writeFileSync(path.join(SHADOW, 'curl'), '#!/bin/sh\nexit 1\n');
+fs.chmodSync(path.join(SHADOW, 'curl'), 0o755);
+
+var updateOut = '';
+try {
+  updateOut = cp.execFileSync('node', [path.join(__dirname, 'index.js'), 'update'], {
+    cwd: UP,
+    env: Object.assign({}, process.env, { PATH: SHADOW + path.delimiter + process.env.PATH }),
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+} catch (e) {
+  updateOut = String((e.stdout || '') + (e.stderr || ''));
+}
+
+assert('update ran against THIS working tree (local fallback, not the published package)',
+  /local package as fallback/.test(updateOut));
+
+var afterUpdate = readModels(UP);
+assert('update preserves the refreshed model id (the /models refresh is not reverted)',
+  afterUpdate !== null && afterUpdate.codex && afterUpdate.codex.deep === 'gpt-9-refreshed');
+assert('update preserves checkedAt (a reverted date reads FRESH while pointing at stale IDs)',
+  afterUpdate !== null && afterUpdate.checkedAt === '2030-01-01');
+assert('update preserves staleDays', afterUpdate !== null && afterUpdate.staleDays === 7);
+
+// The restore must not cost the keys update already preserved. (stopGate is NOT asserted
+// here: update never restored it either — the template's empty gate wins and /harness-init
+// reconciles it from harness.json.backup. That is a separate gap, tracked outside this fix;
+// pinning today's behaviour for it here would freeze the bug in place as if intended.)
+var afterCfg = JSON.parse(fs.readFileSync(path.join(UP, '.claude', 'harness.json'), 'utf-8'));
+assert('update still preserves the harness targets alongside the restored map',
+  JSON.stringify(afterCfg.harness) === '["claude"]');
+
+fs.rmSync(UP, { recursive: true, force: true });
+
+// A project that never had a `models` key must not have one invented for it by the
+// restore — it gets the template's shipped map from the copy, like any other payload file.
+var UP2 = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-update-nomodels-'));
+fs.mkdirSync(path.join(UP2, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(UP2, '.claude', 'harness.json'),
+  JSON.stringify({ stopGate: [], harness: ['claude'] }, null, 2) + '\n');
+try {
+  cp.execFileSync('node', [path.join(__dirname, 'index.js'), 'update'], {
+    cwd: UP2,
+    env: Object.assign({}, process.env, { PATH: SHADOW + path.delimiter + process.env.PATH }),
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+} catch (e) { /* asserted on the file below, not the exit code */ }
+var pre = readModels(UP2);
+assert('a pre-models project gets the SHIPPED default map, not a resurrected empty one',
+  pre !== null && JSON.stringify(pre) === JSON.stringify(DEFAULT_MODELS));
+fs.rmSync(UP2, { recursive: true, force: true });
+fs.rmSync(SHADOW, { recursive: true, force: true });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed > 0 ? 1 : 0);

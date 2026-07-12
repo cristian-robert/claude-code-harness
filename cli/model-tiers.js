@@ -36,9 +36,19 @@ const DEFAULT_MODELS = {
 //
 // scout never implements. If a plan somehow pins it on an implementation task we fail
 // SAFE (deep reviews) rather than fail cheap — a scout-grade reviewer is not a reviewer.
+//
+// Anything that is not a role is a BUG at the call site, and must not be absorbed: a
+// bare `else return 'deep'` answered undefined, null, 'review' and 42 with a plausible
+// role, so a typo'd tier in a plan silently got a reviewer and nobody ever learned.
 function reviewerRoleFor(implementerRole) {
   if (implementerRole === 'deep') return 'build';
-  return 'deep'; // build -> deep; scout -> deep (fail safe)
+  if (implementerRole === 'build') return 'deep';
+  if (implementerRole === 'scout') return 'deep'; // scout never implements — fail safe
+  throw new Error(
+    'unknown implementer role: ' + JSON.stringify(implementerRole) +
+    ' (expected one of ' + ROLES.join(', ') + '). ' +
+    '`review` is not a role — the reviewer is DERIVED from the implementer.'
+  );
 }
 
 function assertKnown(models, harness, role) {
@@ -126,14 +136,19 @@ function writeModels(projectRoot, models) {
 // date nobody plausibly typed by accident.
 var SKEW_MS = 24 * 60 * 60 * 1000;
 
+// `staleDays` is optional in harness.json, so a missing maxDays defaults to 30 —
+// spelled EXACTLY as session-start.mjs spells it, because the parity test drives both
+// and an undefined maxDays otherwise compares against NaN, which is false for every
+// operator: a decade-old map would read FRESH here while the hook warned.
 function isStale(checkedAt, maxDays, now) {
   if (typeof checkedAt !== 'string') return true;
+  var days = typeof maxDays === 'number' ? maxDays : 30;
   var t = Date.parse(checkedAt);
   if (isNaN(t)) return true;
   var ref = (now instanceof Date ? now : new Date()).getTime();
   var age = ref - t;
   if (age < -SKEW_MS) return true; // implausibly future — cannot be trusted as fresh
-  return age > maxDays * 24 * 60 * 60 * 1000;
+  return age > days * 24 * 60 * 60 * 1000;
 }
 
 module.exports = {
