@@ -291,6 +291,12 @@ check("survives malformed input", runHook("post-edit.mjs", null).code === 0);
   check("editing smoke-test.mjs itself does not self-trigger", self.code === 0 && self.out === "");
 }
 
+// The user's LOCAL calendar date (what /models records), not the UTC one.
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 console.log("session-start.mjs");
 {
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" });
@@ -368,7 +374,10 @@ console.log("session-start.mjs");
   // Fresh map: silent. A warning that fires every session is a warning nobody reads.
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
     stopGate: [],
-    models: { checkedAt: new Date().toISOString().slice(0, 10), staleDays: 30, claude: { deep: "opus" } },
+    // The user's LOCAL date — what /models actually writes. NOT toISOString() (UTC):
+    // east of UTC those differ, and a bare date parses as midnight UTC, so a map checked
+    // "today" looks FUTURE-dated. A UTC fixture here passes while the real case fails.
+    models: { checkedAt: localToday(), staleDays: 30, claude: { deep: "opus" } },
   }));
   const fresh = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let freshCtx = ""; try { freshCtx = JSON.parse(fresh.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: freshCtx stays "" */ }

@@ -116,13 +116,23 @@ function writeModels(projectRoot, models) {
 
 // Unknown, missing, or unparseable checkedAt is STALE. A map whose freshness we cannot
 // establish is exactly the map that needs re-checking — never silently call it fresh.
+// A far-future checkedAt is bogus (typo, hand-edit) and must read STALE. But a
+// SMALL negative age is the normal case, not an anomaly: `checkedAt` is a bare
+// date, which Date.parse reads as midnight UTC, while /models writes the user's
+// LOCAL date. East of UTC those disagree — at 00:16 in UTC+3, a map checked
+// "today" parses ~3h in the future. A bare `age < 0` therefore declares a
+// just-verified map stale, and nags on every session forever. Tolerate one day
+// (covers every real zone, ±14h, plus clock drift); anything beyond that is a
+// date nobody plausibly typed by accident.
+var SKEW_MS = 24 * 60 * 60 * 1000;
+
 function isStale(checkedAt, maxDays, now) {
   if (typeof checkedAt !== 'string') return true;
   var t = Date.parse(checkedAt);
   if (isNaN(t)) return true;
   var ref = (now instanceof Date ? now : new Date()).getTime();
   var age = ref - t;
-  if (age < 0) return true; // a future checkedAt cannot be trusted as fresh
+  if (age < -SKEW_MS) return true; // implausibly future — cannot be trusted as fresh
   return age > maxDays * 24 * 60 * 60 * 1000;
 }
 

@@ -58,6 +58,22 @@ assert('an unparseable checkedAt is stale, never silently OK', isStale('not-a-da
 assert('a future-dated checkedAt is stale, not fresh (clock skew / typo / hand-edit)',
   isStale('2099-01-01', 30, NOW) === true);
 
+// REGRESSION (real bug, shipped and caught): `checkedAt` is a bare date, which
+// Date.parse reads as midnight UTC, but /models writes the user's LOCAL date. East of
+// UTC those disagree — at 00:16 in UTC+3 a map checked TODAY parses ~3h in the FUTURE.
+// A bare `age < 0 => stale` therefore nagged the user who had just re-verified the map,
+// on every single session. Tolerate a day of skew; still reject implausible futures.
+var d = new Date();
+var localToday = d.getFullYear() + '-' +
+  String(d.getMonth() + 1).padStart(2, '0') + '-' +
+  String(d.getDate()).padStart(2, '0');
+assert("a map checked TODAY (user's LOCAL date) is NOT stale, in any timezone",
+  isStale(localToday, 30, new Date()) === false);
+assert('a date one day ahead is tolerated as clock/timezone skew, not stale',
+  isStale('2026-07-13', 30, new Date('2026-07-12T21:16:00Z')) === false);
+assert('a date far in the future is still STALE (a typo is not skew)',
+  isStale('2026-09-01', 30, new Date('2026-07-12T21:16:00Z')) === true);
+
 // --- the shared-file contract (harness.json also holds the stop gate) ---
 var TEST_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'phe-models-'));
 

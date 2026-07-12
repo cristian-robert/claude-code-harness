@@ -79,10 +79,13 @@ async function main() {
         const days = typeof m.staleDays === "number" ? m.staleDays : 30;
         const t = Date.parse(m.checkedAt ?? "");
         const age = Date.now() - t;
-        // age < 0 (a future checkedAt — typo, clock skew, hand-edit) is STALE, not fresh.
-        // Freshness we cannot establish is exactly the freshness we must not assume: a
-        // naive `age > limit` returns false for a future date and silently says "fresh".
-        if (isNaN(t) || age < 0 || age > days * 864e5) {
+        // An implausibly FUTURE checkedAt (typo, hand-edit) is STALE, not fresh: a naive
+        // `age > limit` is false for any future date and silently says "fresh".
+        // But tolerate one day of skew — `checkedAt` is a bare date (= midnight UTC to
+        // Date.parse) while /models writes the user's LOCAL date, so east of UTC a map
+        // checked TODAY parses as future (at 00:16 in UTC+3, ~3h ahead). Without the
+        // tolerance the harness nags "stale" at the user who just re-verified it.
+        if (isNaN(t) || age < -864e5 || age > days * 864e5) {
           lines.push(`Model map is stale (checkedAt: ${m.checkedAt ?? "never"}) — run /models to re-verify against the live catalogs.`);
         }
       }
