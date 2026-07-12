@@ -38,9 +38,12 @@ On Claude, prefer the **family alias** (`opus`, `sonnet`, `haiku`) over a pinned
 the newest family member on their own, so they need no maintenance. Only pin an ID if the alias is
 gone. On Codex there are no aliases — its IDs are pinned and are the real reason this command exists.
 
-Also re-check the **effort ceilings**: as of 2026-07-12 `gpt-5.6-luna` is the one 5.6 model with no
-`ultra`. `cli/emit-codex.js` → `CODEX_EFFORTS` encodes that and will throw at emit if it drifts —
-update it in the same change.
+Also re-check the **effort ceilings** — `models.efforts` in the same file maps each Codex model ID to
+the reasoning levels it supports (its catalog's `supported_reasoning_levels`). As of 2026-07-12
+`gpt-5.6-luna` is the one 5.6 model with no `ultra`. A ceiling belongs to the ID, so it churns with
+the ID: **a new model must arrive with its levels, in the same change.** Emit validates every agent's
+pinned `effort:` against these and refuses an unsupported level; a model with no entry still emits,
+loudly warned. Drop the entry for any ID that leaves the map.
 
 ## 4 · Propose, then ask
 
@@ -53,7 +56,8 @@ Show a table: role · harness · current · proposed · why. Then **ask**. On ye
   harness that went unverified and why. `session-start.mjs` reads that one date as freshness for BOTH
   harnesses — stamping it would silence the staleness warning for the very half nobody checked. The
   nag persisting is the CORRECT outcome while something still needs re-verifying.
-- update `CODEX_EFFORTS` in `cli/emit-codex.js` if a ceiling moved,
+- update `models.efforts` in the SAME write — a refreshed ID whose levels nobody recorded emits with
+  a warning on every run until someone does,
 - **re-emit the Codex payload** — `npx perfect-harness-engineering emit` — whenever `codex` is in
   `harness.json` → `harness`. `cli/emit-codex.js` bakes the resolved Codex IDs INTO `.codex/agents/*.toml`
   at emit time, so updating the map alone changes nothing: every Codex agent keeps dispatching the OLD

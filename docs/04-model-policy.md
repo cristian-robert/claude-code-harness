@@ -15,13 +15,20 @@ task need," never by "how big is the diff."
 | `build` | Implementation the planner already specified step by step; mechanical transforms; read-only verification | Work whose design is still open |
 | `deep` | Hard code, logic, architecture, planning, debugging | — |
 
-Concrete IDs live in **one** file: `.claude/harness.json` → `models`, with a `checkedAt`. `/models`
-re-verifies it against the live catalogs; session-start warns past `staleDays`. Model IDs churn — the
-gpt-5.6 family landed two days before the design that needed it. A role survives that; an ID does not.
+The map lives in `.claude/harness.json` → `models`, with a `checkedAt`. `/models` re-verifies it
+against the live catalogs; session-start warns past `staleDays`. Model IDs churn — the gpt-5.6 family
+landed two days before the design that needed it. A role survives that; an ID does not.
 
-Plans, rules, skills, and agent frontmatter therefore name a **role**, never a model. The planner
-pins `tier:` per plan task and `/implement` executes that hint instead of re-judging it — one
-judgment, made once, by the strongest model, at plan time.
+**The two halves are not symmetric, on purpose.** `models.codex` is **load-bearing**: Codex has no
+alias mechanism, so its IDs are pinned, they churn, and `cli/emit-codex.js` bakes them into
+`.codex/agents/*.toml` at emit time. Those IDs — and the effort ceilings beside them — live in that
+one file and nowhere else. `models.claude` is **prose-facing**: no code reads it. Claude Code's family
+aliases (`opus`/`sonnet`/`haiku`) float to the newest family member on their own, so a Claude agent's
+frontmatter carries the alias directly (`model: opus`) and never needs a bump. An alias is not an ID.
+
+Plans, rules, skills, and dispatch prose therefore name a **role**, never a model ID. The planner pins
+`tier:` per plan task and `/implement` executes that hint instead of re-judging it — one judgment,
+made once, by the strongest model, at plan time.
 
 ## The reviewer is the sibling, never the author
 
@@ -57,6 +64,12 @@ Codex's own default effort is **contradictory across its docs and its shipping c
 defaults to `low` in models.json while the docs say `medium`). Never inherit; always pin.
 Ceilings as of 2026-07-12: `gpt-5.6-luna` is the one 5.6 model **without `ultra`**; Claude's
 Haiku 4.5 rejects the `effort` parameter entirely.
+
+A ceiling belongs to the model ID, so it churns on the same schedule and lives in the same place:
+`models.efforts`, beside the IDs, refreshed by `/models` in the same accepted change. Emit refuses an
+effort the model does not support — but a model with **no** recorded ceilings emits with a loud
+warning rather than a refusal. Refusing there would let a routine `/models` refresh brick the Codex
+emit in a project that has no way to fix it; warning fails neither way.
 
 ## Cost sanity
 
