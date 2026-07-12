@@ -8,6 +8,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic } = require('./harness-config');
 
 // The only harness names readHarnessTargets will trust. Anything else in the
 // file's "harness" array means the file isn't something we can act on.
@@ -58,9 +59,9 @@ function readHarnessTargets(projectRoot) {
 // harness.json also holds the stop gate and work-tracking config.
 //
 // Asymmetry with readHarnessTargets is intentional: read degrades to null on
-// malformed JSON (reading must never crash), but write REFUSES on malformed
-// JSON (throws) rather than risk silently replacing the whole file — and with
-// it the user's stop gate — with just `{"harness": [...]}`.
+// unparseable JSON (reading must never crash — the caller reports it), but
+// write REFUSES on it (throws) rather than risk silently replacing the whole
+// file — and with it the user's stop gate — with just `{"harness": [...]}`.
 function writeHarnessTargets(projectRoot, targets) {
   var p = harnessJsonPath(projectRoot);
   var current = {};
@@ -91,10 +92,25 @@ function writeHarnessTargets(projectRoot, targets) {
     }
     current = parsed;
   }
-  current.harness = targets.slice().sort();
-  var dir = path.dirname(p);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(current, null, 2) + '\n');
+  var desired = targets.slice().sort();
+
+  // Already recorded? Don't rewrite the file. `update` calls installHarnessConfig (which
+  // writes the merged config) and then this — two writes to the same file, back to back,
+  // where the second one changes nothing for any project that already has a `harness` key.
+  // Every write to this file is a chance to lose it, so the cheapest write is the one that
+  // doesn't happen. The refusal checks above still run first: a malformed harness.json
+  // throws whether or not the harness key happens to match.
+  //
+  // The write still HAPPENS for a legacy project (no `harness` key), which is the case the
+  // call site exists for — it materializes the assumed target so it isn't re-assumed forever.
+  if (Array.isArray(current.harness) &&
+      current.harness.length === desired.length &&
+      current.harness.every(function (h, i) { return h === desired[i]; })) {
+    return;
+  }
+
+  current.harness = desired;
+  writeJsonAtomic(p, current);
 }
 
 module.exports = {

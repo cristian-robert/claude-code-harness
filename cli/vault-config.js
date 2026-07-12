@@ -11,6 +11,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { writeJsonAtomic } = require('./harness-config');
 
 const VAULT_PROMPT =
   'Do you use an Obsidian vault for architecture & knowledge?\n' +
@@ -72,9 +73,7 @@ function writeVaultConfig(projectRoot, config) {
     }
   }
   current.vault = { mode: config.mode, path: config.path || null };
-  var dir = path.dirname(p);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(current, null, 2) + '\n');
+  writeJsonAtomic(p, current);
 }
 
 module.exports = {

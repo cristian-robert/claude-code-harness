@@ -63,14 +63,25 @@ const ENV = Object.assign({}, process.env, {
   PATH: SHIM + path.delimiter + process.env.PATH,
 });
 
-function runCli(args, cwd, input) {
+function runCli(args, cwd, input, extraEnv) {
   return execFileSync('node', [CLI].concat(args), {
     cwd: cwd,
-    env: ENV,
+    env: extraEnv ? Object.assign({}, ENV, extraEnv) : ENV,
     encoding: 'utf-8',
     input: input || '',
     stdio: ['pipe', 'pipe', 'pipe'],
   });
+}
+
+// Runs the CLI expecting it to FAIL. Returns { status, output } instead of throwing, so a
+// test can assert on the exit code and the message.
+function runCliExpectingFailure(args, cwd, input, extraEnv) {
+  try {
+    var out = runCli(args, cwd, input, extraEnv);
+    return { status: 0, output: out };
+  } catch (e) {
+    return { status: e.status, output: (e.stdout || '') + (e.stderr || '') };
+  }
 }
 
 // Proves the run used THIS working tree, not whatever is published to npm.
@@ -194,6 +205,64 @@ test('update FAILS LOUDLY on a malformed harness.json and leaves it untouched', 
     raw,
     'a harness.json we cannot parse must be left EXACTLY as it was — it may hold the stop gate'
   );
+});
+
+// ─── A write that dies partway must not take harness.json with it ────────────
+//
+// harness.json is no longer backed up by update (it is user config, not template content),
+// and it was still being written with a bare fs.writeFileSync -- which opens with O_TRUNC:
+// it EMPTIES the file, then writes. Die in that gap and the user has an empty harness.json:
+// no stopGate (the gate is disarmed), no baseBranch (the guard falls back to main), and no
+// .backup to recover from.
+//
+// Simulated INSIDE a real `update` run, via a --require preload that models the failure
+// faithfully: the truncation succeeds, the write does not. A non-atomic writer lands that on
+// harness.json and destroys it; an atomic one lands it on a temp file and never opens
+// harness.json for writing at all.
+test('a mid-write failure during `update` leaves harness.json intact (atomic write)', () => {
+  const crash = installProject('crash');
+  writeHarness(crash, USER_CONFIG);
+  const harnessPath = path.join(crash, HARNESS_REL);
+  const before = fs.readFileSync(harnessPath, 'utf-8');
+
+  const preload = path.join(TMP, 'fail-harness-write.js');
+  fs.writeFileSync(
+    preload,
+    "const fs = require('fs');\n" +
+      'const realWriteFileSync = fs.writeFileSync;\n' +
+      'fs.writeFileSync = function (target) {\n' +
+      "  if (typeof target === 'string' && /harness\\.json/.test(target)) {\n" +
+      "    realWriteFileSync.call(fs, target, '');\n" + // O_TRUNC succeeded...
+      "    throw new Error('ENOSPC: simulated disk-full writing ' + target);\n" + // ...write did not
+      '  }\n' +
+      '  return realWriteFileSync.apply(fs, arguments);\n' +
+      '};\n'
+  );
+
+  const run = runCliExpectingFailure(['update'], crash, '', {
+    NODE_OPTIONS: '--require ' + preload,
+  });
+
+  assert.notStrictEqual(run.status, 0, 'a failed write must never be reported as a successful update');
+
+  const raw = fs.readFileSync(harnessPath, 'utf-8');
+  assert.notStrictEqual(raw.trim(), '', 'harness.json was TRUNCATED — the stop gate is gone');
+
+  let after;
+  try {
+    after = JSON.parse(raw);
+  } catch (e) {
+    throw new Error('harness.json is no longer parseable after a failed write: ' + JSON.stringify(raw));
+  }
+  assert.deepStrictEqual(after.stopGate, USER_CONFIG.stopGate, 'stopGate did not survive the failed write');
+  assert.deepStrictEqual(after.baseBranch, USER_CONFIG.baseBranch, 'baseBranch did not survive the failed write');
+  assert.strictEqual(raw, before, 'harness.json must be byte-for-byte what it was');
+
+  // A crashed write must not leave a half-written temp file behind in .claude/.
+  const strays = fs
+    .readdirSync(path.join(crash, '.claude'))
+    .filter((f) => /harness\.json\./.test(f));
+  assert.deepStrictEqual(strays, [], 'a failed write left temp files behind: ' + strays.join(', '));
 });
 
 try {

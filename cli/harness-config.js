@@ -24,6 +24,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 // The ONE key the template owns. $comment is pure documentation — it explains what each key
 // means and which hook reads it — so it must track the SHIPPED version or a long-lived
@@ -32,6 +33,48 @@ const TEMPLATE_OWNED_KEYS = ['$comment'];
 
 function harnessJsonPath(projectRoot) {
   return path.join(projectRoot, '.claude', 'harness.json');
+}
+
+// Every write to harness.json goes through here.
+//
+// A bare fs.writeFileSync opens with O_TRUNC: it EMPTIES the file and then writes. If the
+// write fails in that gap — disk full, a crash, an I/O error — the user is left with a
+// truncated harness.json, which means no stopGate (the gate is disarmed) and no baseBranch
+// (the guard falls back to main). `update` used to leave a .backup to recover from; it no
+// longer copies this file at all (it is user config, not template content), so the crash
+// window has no safety net behind it. Close the window instead of re-adding the net.
+//
+// Write a temp file, then rename it over the target. rename(2) is atomic, so a reader — or
+// the next run — sees either the whole old file or the whole new one, never a half-written
+// one. The temp MUST live in the target's own directory: rename is only atomic within a
+// single filesystem, and .claude/ can sit on a different mount than the OS temp dir.
+function writeJsonAtomic(p, obj) {
+  var dir = path.dirname(p);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  // Unique per call: two concurrent runs must not share a temp file, or one's rename
+  // publishes the other's half-written bytes. Dot-prefixed so a crashed run leaves
+  // something obviously not-the-config behind.
+  var tmp = path.join(dir, '.' + path.basename(p) + '.' + crypto.randomUUID() + '.tmp');
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    // Flush the bytes before publishing the name. Without this, a power loss can land the
+    // rename while the temp file's contents are still in the page cache — atomically
+    // publishing an empty file, which is the exact outcome this function exists to prevent.
+    var fd = fs.openSync(tmp, 'r+');
+    try {
+      fs.fsyncSync(fd);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.renameSync(tmp, p);
+  } catch (e) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch (_) {
+      // The temp may not exist (the write itself failed) — the original is what matters.
+    }
+    throw e;
+  }
 }
 
 // Parse a harness.json that must be a JSON object, THROWING on anything else. Writes to this
@@ -104,13 +147,14 @@ function installHarnessConfig(projectRoot, templateHarnessPath) {
   }
 
   var merged = mergeHarnessConfig(userConfig, parseHarnessObject(templateHarnessPath));
-  fs.writeFileSync(p, JSON.stringify(merged, null, 2) + '\n');
+  writeJsonAtomic(p, merged);
   return { created: 0, updated: 1 };
 }
 
 module.exports = {
   TEMPLATE_OWNED_KEYS: TEMPLATE_OWNED_KEYS,
   harnessJsonPath: harnessJsonPath,
+  writeJsonAtomic: writeJsonAtomic,
   readHarnessConfig: readHarnessConfig,
   mergeHarnessConfig: mergeHarnessConfig,
   installHarnessConfig: installHarnessConfig,
