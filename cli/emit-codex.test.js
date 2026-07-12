@@ -586,6 +586,46 @@ assert('no emitted openai.yaml anywhere allows implicit invocation: ' + leaky.jo
 
 fs.rmSync(REAL_TEST_DIR, { recursive: true, force: true });
 
+
+// ─── REGRESSION GUARD: no Claude model name in Codex DISPATCH prose ───────────
+// The defect this phase fixed: skill bodies said "pin `model: sonnet`" / "default
+// opus", and the dual-emit copied that verbatim into .agents/skills/ where those
+// names mean NOTHING to Codex. Roles (scout|build|deep) replaced them.
+//
+// ONE documented exception: skills/models/ is the /models refresh command — naming
+// model IDs is its literal subject matter, and it is harness-aware prose, not a
+// dispatch instruction. Every OTHER skill, rule and reference must stay name-free.
+// If you are adding a new exception here, you are probably re-introducing the bug.
+console.log('no Claude model name leaks into Codex dispatch prose:');
+{
+  var LEAK = /\b(opus|sonnet|haiku|fable)\b/i;
+  var EXEMPT = ['models'];               // skills/<name>/ allowed to name models
+  var ROOT = path.join(__dirname, '..', 'template', '.claude');
+  var leaks = [];
+
+  var walk = function (dir, exemptDir) {
+    if (!fs.existsSync(dir)) return;
+    var entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (var i = 0; i < entries.length; i++) {
+      var e = entries[i];
+      var full = path.join(dir, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'vault-scaffold') continue;
+        walk(full, exemptDir || EXEMPT.indexOf(e.name) !== -1);
+      } else if (e.isFile() && e.name.slice(-3) === '.md' && !exemptDir) {
+        var m = LEAK.exec(fs.readFileSync(full, 'utf-8'));
+        if (m) leaks.push(path.relative(ROOT, full) + ' -> "' + m[0] + '"');
+      }
+    }
+  };
+  walk(path.join(ROOT, 'skills'), false);
+  walk(path.join(ROOT, 'rules'), false);
+  walk(path.join(ROOT, 'references'), false);
+
+  assert('skills/rules/references name no Claude model (except skills/models): ' + leaks.join('; '),
+    leaks.length === 0);
+}
+
 // ─── architect-agent: vault-backed agent must emit to Codex ────────────────
 // Guards the REAL shipped agent file (not a fixture): copies template/.claude
 // into a temp dir, emits, and asserts the Codex TOML carries the agent's
