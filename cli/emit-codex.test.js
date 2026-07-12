@@ -92,6 +92,8 @@ assert('a build-tier agent resolves to terra',
 
 // luna is the ONE 5.6 model without `ultra` (models.json, verified 2026-07-12). Emitting it
 // would fail at dispatch time, far from the file that caused it — so fail at emit instead.
+// This protection predates the ceilings move and MUST survive it: the levels now come from
+// the map (models.efforts) instead of a hardcoded table, but an illegal level still throws.
 var ultraMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', 'effort: ultra', '---', 'b'].join('\n');
 var ultraErr = null;
 try { agentMdToToml(ultraMd, 'scout', DEFAULT_MODELS); } catch (e) { ultraErr = e; }
@@ -103,26 +105,70 @@ var deepUltraMd = ['---', 'name: d', 'description: "d"', 'tier: deep', 'effort: 
 assert('ultra on a sol-backed agent is allowed',
   agentMdToToml(deepUltraMd, 'd', DEFAULT_MODELS).indexOf('model_reasoning_effort = "ultra"') !== -1);
 
-// The effort guard must not DISABLE ITSELF on the models it knows least about. /models
-// refreshes the map to IDs that postdate this file, and `CODEX_EFFORTS[model]` is then
-// undefined — the shipped `if (allowed && ...)` skipped validation entirely and shipped
-// whatever effort the frontmatter pinned. An unverified model is exactly when we cannot
-// vouch for an effort level, so it must throw and send the maintainer to CODEX_EFFORTS.
+// The ceilings are read from the MAP, not from a constant in this package. Proof: an effort
+// that is illegal under the shipped ceilings becomes LEGAL once the map says the model
+// supports it. A hardcoded table cannot pass this test.
+var LUNA_WITH_ULTRA = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+LUNA_WITH_ULTRA.efforts['gpt-5.6-luna'] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+assert('the ceilings come from the map: ultra on luna is allowed once the MAP records it',
+  agentMdToToml(ultraMd, 'scout', LUNA_WITH_ULTRA).indexOf('model_reasoning_effort = "ultra"') !== -1);
+
+// THE TRAP THIS FIX REMOVES. /models refreshes an ID to a model that shipped after this
+// package was cut. The ceilings for it are, by definition, not recorded yet. Throwing here
+// made `/models` BRICK the Codex emit it exists to keep working — and the throw pointed the
+// user at cli/emit-codex.js, a file that does not exist in an adopter's project (they have
+// .claude/, not cli/). So: WARN LOUDLY and emit. The emit survives; the user is told exactly
+// which model to record levels for, in a file they actually have.
 var REFRESHED = {
   checkedAt: '2026-08-01', staleDays: 30,
   claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
-  codex: { scout: 'gpt-6-nova', build: 'gpt-6-vega', deep: 'gpt-6-rigel' }, // not in CODEX_EFFORTS
+  codex: { scout: 'gpt-6-nova', build: 'gpt-6-vega', deep: 'gpt-6-rigel' },
+  efforts: DEFAULT_MODELS.efforts, // records the 5.6 family only — nothing about gpt-6
 };
 var futureMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', 'effort: ultra', '---', 'b'].join('\n');
+var futureWarnings = [];
 var futureErr = null;
-try { agentMdToToml(futureMd, 'scout', REFRESHED); } catch (e) { futureErr = e; }
-assert('an effort pinned on a model with NO recorded levels throws, naming the model',
-  futureErr instanceof Error && /gpt-6-nova/.test(futureErr.message) && /CODEX_EFFORTS/.test(futureErr.message));
+var futureToml = '';
+try {
+  futureToml = agentMdToToml(futureMd, 'scout', REFRESHED, function (m) { futureWarnings.push(m); });
+} catch (e) { futureErr = e; }
+assert('an effort pinned on a model with NO recorded ceilings does NOT throw', futureErr === null);
+assert('...it still emits the agent, with its refreshed model',
+  futureToml.indexOf('model = "gpt-6-nova"') !== -1);
+assert('...and carries the pinned effort through', futureToml.indexOf('model_reasoning_effort = "ultra"') !== -1);
+assert('...but WARNS, naming the model', futureWarnings.length === 1 && /gpt-6-nova/.test(futureWarnings[0]));
+assert('...and the warning points at harness.json + /models, NOT at cli/emit-codex.js',
+  /harness\.json/.test(futureWarnings[0]) && /\/models/.test(futureWarnings[0]) &&
+  futureWarnings[0].indexOf('cli/emit-codex.js') === -1);
 
-// ...but a refreshed model with NO effort pinned is fine: nothing to vouch for.
+// A warning must never be lost just because the caller passed no handler: the default goes
+// to stderr. (Captured here so it does not pollute the test output.)
+var realWarn = console.warn;
+var stderrWarnings = [];
+console.warn = function (m) { stderrWarnings.push(String(m)); };
+try { agentMdToToml(futureMd, 'scout', REFRESHED); } finally { console.warn = realWarn; }
+assert('with no onWarn handler, the unrecorded-ceilings warning still reaches stderr',
+  stderrWarnings.length === 1 && /gpt-6-nova/.test(stderrWarnings[0]));
+
+// ...and a refreshed model with NO effort pinned is silent: there is nothing to vouch for.
 var futureNoEffortMd = ['---', 'name: scout', 'description: "d"', 'tier: scout', '---', 'b'].join('\n');
+var quietWarnings = [];
 assert('a refreshed model with no effort: pinned still emits cleanly',
-  agentMdToToml(futureNoEffortMd, 'scout', REFRESHED).indexOf('model = "gpt-6-nova"') !== -1);
+  agentMdToToml(futureNoEffortMd, 'scout', REFRESHED, function (m) { quietWarnings.push(m); })
+    .indexOf('model = "gpt-6-nova"') !== -1);
+assert('...and warns about nothing (no effort pinned = nothing to validate)', quietWarnings.length === 0);
+
+// A malformed ceilings entry degrades to "unrecorded" (warn + emit), never to a crash and
+// never to silent acceptance — harness.json is hand-editable.
+var MALFORMED = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+MALFORMED.efforts = { 'gpt-5.6-luna': 'low,medium,high' }; // a string, not an array
+var malformedWarnings = [];
+var malformedErr = null;
+try {
+  agentMdToToml(futureMd, 'scout', MALFORMED, function (m) { malformedWarnings.push(m); });
+} catch (e) { malformedErr = e; }
+assert('a malformed efforts entry warns rather than crashing the emit',
+  malformedErr === null && malformedWarnings.length === 1);
 
 // An unknown tier must fail loudly rather than silently emit no model.
 var badTierMd = ['---', 'name: x', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
@@ -748,6 +794,169 @@ console.log('\nagent registration in .codex/config.toml:');
     aliasLeaks.join(', '), aliasLeaks.length === 0);
 
   fs.rmSync(REG_DIR, { recursive: true, force: true });
+}
+
+// ─── EFFORT CEILINGS LIVE IN THE MAP, NOT IN THIS PACKAGE ──────────────────
+// The defect, reproduced end-to-end against the REAL shipped payload (qa-evaluator pins
+// `effort: high`, tier: deep):
+//
+//   1. The user runs /models. A vendor shipped gpt-5.7-nova; the map's codex.deep is
+//      refreshed to it — which is the entire job of that command.
+//   2. emit THREW, because the new ID was not in the CODEX_EFFORTS table.
+//   3. The user could not fix it. CODEX_EFFORTS lived in cli/emit-codex.js — npm package
+//      source. An adopter's project has .claude/, not cli/. The refresh command bricked
+//      the Codex emit and left no way out.
+//
+// The ceilings now live in .claude/harness.json -> models.efforts, in the adopter's own
+// project, refreshed by /models alongside the IDs.
+console.log('\neffort ceilings live in .claude/harness.json -> models.efforts:');
+{
+  var CEIL_DIR = path.join(os.tmpdir(), 'emit-codex-ceilings-' + crypto.randomUUID());
+  var CEIL_REPO = path.join(__dirname, '..');
+
+  // A project with the REAL payload, whose map has been through a /models refresh.
+  function refreshedProj(name, mutate) {
+    var proj = path.join(CEIL_DIR, name);
+    fs.cpSync(path.join(CEIL_REPO, 'template', '.claude'), path.join(proj, '.claude'), { recursive: true });
+    var cfgPath = path.join(proj, '.claude', 'harness.json');
+    var cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+    mutate(cfg.models);
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+    return proj;
+  }
+
+  function tomlFor(proj, agent) {
+    return fs.readFileSync(path.join(proj, '.codex', 'agents', agent + '.toml'), 'utf-8');
+  }
+
+  // Snapshot of the whole generated tree: path -> content. Compared byte-for-byte to prove
+  // a failed emit changed NOTHING.
+  function snapshot(dir) {
+    var out = {};
+    if (!fs.existsSync(dir)) return out;
+    var walkSnap = function (d) {
+      var entries = fs.readdirSync(d, { withFileTypes: true });
+      for (var i = 0; i < entries.length; i++) {
+        var p = path.join(d, entries[i].name);
+        if (entries[i].isDirectory()) walkSnap(p);
+        else if (entries[i].isFile()) out[path.relative(dir, p)] = fs.readFileSync(p, 'utf-8');
+      }
+    };
+    walkSnap(dir);
+    return out;
+  }
+
+  // (1) THE TRAP: refresh deep to a brand-new ID whose ceilings nobody has recorded yet.
+  // Before this fix: emitCodexPayload() THREW here and the Codex tree was left half-written.
+  (function () {
+    var proj = refreshedProj('refreshed-unknown-model', function (models) {
+      models.codex.deep = 'gpt-5.7-nova'; // shipped after this package was cut
+      models.checkedAt = '2026-09-01';
+    });
+
+    var warnings = [];
+    var err = null;
+    var counts = null;
+    try {
+      counts = emitCodexPayload(proj, function (m) { warnings.push(m); });
+    } catch (e) { err = e; }
+
+    assert('a /models refresh to an unrecorded model does NOT brick the emit', err === null);
+    assert('...the emit completes (agents emitted)', counts !== null && counts.agents >= 5);
+    assert('...config.toml is written (the emit is not left half-done)',
+      fs.existsSync(path.join(proj, '.codex', 'config.toml')));
+    assert('...the refreshed model reaches the agent that pins an effort',
+      tomlFor(proj, 'qa-evaluator').indexOf('model = "gpt-5.7-nova"') !== -1);
+    assert('...and its pinned effort is emitted as-is',
+      tomlFor(proj, 'qa-evaluator').indexOf('model_reasoning_effort = "high"') !== -1);
+
+    // Loud, not silent: silently emitting an unvalidatable effort is the OTHER bug.
+    var named = warnings.filter(function (w) { return /gpt-5\.7-nova/.test(w); });
+    assert('...but it WARNS, naming the unrecorded model', named.length > 0);
+    assert('...the warning names the agent file that pinned the effort',
+      named.length > 0 && /qa-evaluator\.md/.test(named[0]));
+    assert('...and sends the user to /models + harness.json, NOT to cli/emit-codex.js',
+      named.length > 0 && /harness\.json/.test(named[0]) && /\/models/.test(named[0]) &&
+      named[0].indexOf('cli/emit-codex.js') === -1);
+    assert('...the warnings are also returned to the caller', counts.warnings.length === named.length);
+  })();
+
+  // (2) The user's WAY OUT, in a file they actually have: record the new model's levels in
+  // .claude/harness.json -> models.efforts. Then the emit is silent AND validated.
+  (function () {
+    var proj = refreshedProj('refreshed-ceilings-recorded', function (models) {
+      models.codex.deep = 'gpt-5.7-nova';
+      models.efforts['gpt-5.7-nova'] = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+    });
+
+    var warnings = [];
+    var counts = emitCodexPayload(proj, function (m) { warnings.push(m); });
+    assert('recording the ceilings in harness.json silences the warning', warnings.length === 0);
+    assert('...and the emit still completes', counts.agents >= 5);
+    assert('...with the refreshed model and its validated effort',
+      tomlFor(proj, 'qa-evaluator').indexOf('model = "gpt-5.7-nova"') !== -1 &&
+      tomlFor(proj, 'qa-evaluator').indexOf('model_reasoning_effort = "high"') !== -1);
+  })();
+
+  // (3) The ORIGINAL PROTECTION SURVIVES: a KNOWN model + an effort it does not support is
+  // still a hard refusal. The ceilings moved; the guard did not weaken.
+  (function () {
+    var proj = refreshedProj('recorded-but-illegal-effort', function (models) {
+      models.codex.deep = 'gpt-5.7-nova';
+      models.efforts['gpt-5.7-nova'] = ['low', 'medium']; // qa-evaluator pins `high`
+    });
+
+    var err = null;
+    try { emitCodexPayload(proj, function () {}); } catch (e) { err = e; }
+    assert('a recorded model + an unsupported effort still THROWS', err instanceof Error);
+    assert('...the throw names the model, the effort, and the levels it does support',
+      err instanceof Error && /gpt-5\.7-nova/.test(err.message) && /high/.test(err.message) &&
+      /low, medium/.test(err.message));
+  })();
+
+  // (4) FAIL BEFORE MUTATING. A throw mid-emit used to leave a MIXED tree: skills copied,
+  // SOME agent TOMLs rewritten, config.toml never written. Codex loads that tree happily.
+  // Nothing may be written unless everything can be.
+  (function () {
+    // 4a: a fresh project — a failed emit leaves NO generated tree at all.
+    var fresh = refreshedProj('atomic-fresh', function (models) {
+      models.efforts['gpt-5.6-sol'] = ['low']; // qa-evaluator (tier: deep) pins `high`
+    });
+    var freshErr = null;
+    try { emitCodexPayload(fresh, function () {}); } catch (e) { freshErr = e; }
+    assert('a failing emit throws on a fresh project', freshErr instanceof Error);
+    assert('...and writes NO .agents/ tree', !fs.existsSync(path.join(fresh, '.agents')));
+    assert('...and writes NO .codex/ tree', !fs.existsSync(path.join(fresh, '.codex')));
+
+    // 4b: a project with a GOOD generated tree — a failing re-emit must not touch a byte of
+    // it. This is the mixed-tree case: half-new agent TOMLs beside a stale config.toml.
+    var proj = refreshedProj('atomic-existing', function () {});
+    emitCodexPayload(proj, function () {});
+    var before = snapshot(path.join(proj, '.codex'));
+    var beforeSkills = snapshot(path.join(proj, '.agents'));
+    assert('sanity: the good emit produced a tree to protect', Object.keys(before).length > 1);
+
+    // Now break the map exactly as a bad hand-edit or a wrong /models accept would.
+    var cfgPath = path.join(proj, '.claude', 'harness.json');
+    var cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+    cfg.models.codex.deep = 'gpt-5.7-nova';
+    cfg.models.efforts['gpt-5.7-nova'] = ['low']; // qa-evaluator pins `high` -> throws
+    fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2) + '\n');
+
+    var reErr = null;
+    try { emitCodexPayload(proj, function () {}); } catch (e) { reErr = e; }
+    assert('the failing re-emit throws', reErr instanceof Error);
+    assert('...leaving .codex/ byte-identical (no half-new TOMLs, no stale config.toml)',
+      JSON.stringify(snapshot(path.join(proj, '.codex'))) === JSON.stringify(before));
+    assert('...and leaving .agents/ byte-identical',
+      JSON.stringify(snapshot(path.join(proj, '.agents'))) === JSON.stringify(beforeSkills));
+    assert('...so no agent TOML names the model the failed emit was resolving',
+      Object.keys(snapshot(path.join(proj, '.codex'))).every(function (f) {
+        return fs.readFileSync(path.join(proj, '.codex', f), 'utf-8').indexOf('gpt-5.7-nova') === -1;
+      }));
+  })();
+
+  fs.rmSync(CEIL_DIR, { recursive: true, force: true });
 }
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
