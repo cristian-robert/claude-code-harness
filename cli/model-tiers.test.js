@@ -8,7 +8,7 @@ const os = require('os');
 
 const {
   DEFAULT_MODELS, readModels, writeModels,
-  resolveModel, resolveReviewer, reviewerRoleFor, isStale,
+  resolveModel, resolveReviewer, reviewerRoleFor, isStale, supportedEfforts,
 } = require('./model-tiers');
 
 var passed = 0;
@@ -65,6 +65,37 @@ assert('an unknown role throws rather than silently picking a model',
   /unknown role/i.test(String(threw(function () { resolveModel(DEFAULT_MODELS, 'claude', 'reviewer'); }))));
 assert('an unknown harness throws',
   /unknown harness/i.test(String(threw(function () { resolveModel(DEFAULT_MODELS, 'gemini', 'deep'); }))));
+
+// --- effort ceilings ---
+// The levels a model supports churn WITH the model ID, so they live in the map beside the IDs
+// (harness.json -> models.efforts) and not in a constant inside cli/, which an adopter's
+// project does not contain. /models refreshes both halves in the same accepted change.
+assert('the shipped map records luna WITHOUT ultra (the one 5.6 model that lacks it)',
+  supportedEfforts(DEFAULT_MODELS, 'gpt-5.6-luna').indexOf('ultra') === -1);
+assert('the shipped map records sol WITH ultra',
+  supportedEfforts(DEFAULT_MODELS, 'gpt-5.6-sol').indexOf('ultra') !== -1);
+assert('the shipped map records terra WITH ultra',
+  supportedEfforts(DEFAULT_MODELS, 'gpt-5.6-terra').indexOf('ultra') !== -1);
+assert('every codex role in the shipped map has recorded ceilings',
+  ['scout', 'build', 'deep'].every(function (r) {
+    return supportedEfforts(DEFAULT_MODELS, DEFAULT_MODELS.codex[r]) !== null;
+  }));
+
+// null means "we have no ceilings for this model" — a REAL, expected answer, not an error.
+// /models can refresh an ID to a model that postdates this package; callers must handle the
+// unknown without refusing to work (emit warns and proceeds). Every malformed shape degrades
+// to the same null, for the same reason readModels degrades: harness.json is hand-editable
+// and a bad map must never crash init/update.
+assert('a model with no recorded ceilings resolves to null, not a throw',
+  supportedEfforts(DEFAULT_MODELS, 'gpt-5.7-nova') === null);
+assert('a map with no efforts key at all resolves to null',
+  supportedEfforts({ codex: { deep: 'x' } }, 'x') === null);
+assert('a non-array ceilings entry resolves to null (never a crash)',
+  supportedEfforts({ efforts: { x: 'low,medium' } }, 'x') === null);
+assert('an empty ceilings array resolves to null (an empty list vouches for nothing)',
+  supportedEfforts({ efforts: { x: [] } }, 'x') === null);
+assert('an efforts key that is an array resolves to null', supportedEfforts({ efforts: [] }, 'x') === null);
+assert('a null map resolves to null', supportedEfforts(null, 'x') === null);
 
 // --- staleness ---
 var NOW = new Date('2026-07-12T00:00:00Z');

@@ -23,11 +23,26 @@ const HARNESSES = ['claude', 'codex'];
 // and the Anthropic model reference. Claude values are ALIASES on purpose: Claude Code
 // floats `opus`/`sonnet`/`haiku` to the newest family member, so they never need a bump.
 // Codex has no alias mechanism, so its IDs are pinned and DO need /models to refresh them.
+//
+// `efforts` records the reasoning levels each model ID supports (models.json ->
+// supported_reasoning_levels); luna is the ONE 5.6 model without `ultra`. It lives HERE, in
+// the map, and not in a constant inside cli/emit-codex.js, because a ceiling is a property of
+// the model ID — so it churns on exactly the same schedule as the ID, and must be refreshable
+// by whoever refreshes the ID. `/models` runs in the ADOPTER's project, which contains
+// .claude/ and no cli/: a ceiling table in package source is a table they cannot reach.
+// Keyed by ID rather than by role for the same reason — swap deep from sol to a new model and
+// its ceiling travels with it, instead of being silently inherited from the model it replaced.
+// Codex-only: Claude's aliases float, so there is no stable ID to key a ceiling to.
 const DEFAULT_MODELS = {
   checkedAt: '2026-07-12',
   staleDays: 30,
   claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
   codex: { scout: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-5.6-sol' },
+  efforts: {
+    'gpt-5.6-luna': ['low', 'medium', 'high', 'xhigh', 'max'],
+    'gpt-5.6-terra': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+    'gpt-5.6-sol': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
+  },
 };
 
 // THE RULE: the reviewer is the SIBLING of whoever implemented, same harness.
@@ -73,6 +88,21 @@ function resolveModel(models, harness, role) {
 
 function resolveReviewer(models, harness, implementerRole) {
   return resolveModel(models, harness, reviewerRoleFor(implementerRole));
+}
+
+// The reasoning levels a model ID supports, or null when the map records none for it.
+//
+// null is a real, expected answer, not an error: `/models` can refresh an ID to a model that
+// shipped after this package was cut, and the map is hand-editable. Callers must handle "we
+// do not know this model's ceilings" WITHOUT refusing to work — see the effort guard in
+// emit-codex.js. Every malformed shape (missing `efforts`, a non-array entry, an empty array)
+// degrades to null for the same reason readModels does: a bad map must not crash init/update.
+function supportedEfforts(models, modelId) {
+  var efforts = models && models.efforts;
+  if (!efforts || typeof efforts !== 'object' || Array.isArray(efforts)) return null;
+  var levels = efforts[modelId];
+  if (!Array.isArray(levels) || levels.length === 0) return null;
+  return levels;
 }
 
 function harnessJsonPath(projectRoot) {
@@ -158,6 +188,7 @@ module.exports = {
   reviewerRoleFor: reviewerRoleFor,
   resolveModel: resolveModel,
   resolveReviewer: resolveReviewer,
+  supportedEfforts: supportedEfforts,
   readModels: readModels,
   writeModels: writeModels,
   isStale: isStale,
