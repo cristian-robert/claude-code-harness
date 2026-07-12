@@ -604,7 +604,13 @@ console.log('architect-agent emits to Codex:');
   var aa = fs.readFileSync(aaToml, 'utf-8');
   assert('architect-agent.toml has name', aa.indexOf('name = "architect-agent"') !== -1);
   assert('architect-agent.toml has developer_instructions', aa.indexOf('developer_instructions') !== -1);
-  assert('architect-agent.toml has NO model line (Phase 3 owns model keys)', /^model\s*=/m.test(aa) === false);
+  // Phase 3 landed: the tier map now owns model keys, so this agent MUST carry one.
+  // Asserting the exact model (not merely "a model line exists") is the point — a
+  // Claude alias reaching the Codex tree is the precise bug this phase exists to kill.
+  assert('architect-agent.toml resolves tier: deep -> the codex deep model',
+    aa.indexOf('model = "gpt-5.6-sol"') !== -1);
+  assert('architect-agent.toml leaks no Claude alias',
+    /\b(opus|sonnet|haiku|fable)\b/.test(aa) === false);
   assert('architect-agent instructions mention the vault', aa.toLowerCase().indexOf('vault') !== -1);
   fs.rmSync(AA_DIR, { recursive: true, force: true });
 }

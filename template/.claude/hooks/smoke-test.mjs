@@ -378,13 +378,15 @@ console.log("verdict-gate.mjs");
 
 // Mechanical proof that agent frontmatter uses only real subagent keys — a wrong
 // key (e.g. the globs:/paths: class of typo) fails SILENTLY at runtime. Allowlist
-// is the documented sub-agents frontmatter schema (code.claude.com/docs/en/sub-agents).
+// is the documented sub-agents frontmatter schema (code.claude.com/docs/en/sub-agents),
+// plus `tier` — a PHE-defined cross-harness key the Codex emitter resolves to a model;
+// Claude Code itself ignores it, same as any other unknown key.
 console.log("agent frontmatter");
 {
   const AGENT_KEYS = new Set([
     "name", "description", "tools", "disallowedTools", "model", "permissionMode",
     "maxTurns", "skills", "mcpServers", "hooks", "memory", "background", "effort",
-    "isolation", "color", "initialPrompt",
+    "isolation", "color", "initialPrompt", "tier",
   ]);
   const agentsDir = join(dirname(HOOKS), "agents");
   let files = [];

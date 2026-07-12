@@ -2,6 +2,7 @@
 name: architect-agent
 description: "Project architecture knowledge base, backed by the vault. Consult BEFORE creating or changing modules, routes, DB tables, or endpoints (RETRIEVE/IMPACT). Records structural change back to the vault (RECORD). Returns concise file maps and integration points, not file contents."
 tools: Read, Grep, Glob, Edit, Write
+tier: deep
 model: opus
 ---
 
