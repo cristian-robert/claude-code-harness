@@ -8,8 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
-const { readVaultConfig, writeVaultConfig } = require('./vault-config');
-const { readModels, writeModels } = require('./model-tiers');
+const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -86,6 +85,15 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
         continue;
       }
 
+      // harness.json is USER CONFIG, not template content — it holds the stop gate,
+      // the protected base branch, work tracking and the model map. Copying the
+      // template over it is what destroyed all three (see harness-config.js);
+      // installHarnessConfig below installs or merges it instead. Never copied here,
+      // so the user's file is never even briefly in a wiped state.
+      if (entry.name === 'harness.json') {
+        continue;
+      }
+
       if (entry.isDirectory()) {
         copy(srcPath, destPath);
       } else if (entry.isFile()) {
@@ -152,34 +160,26 @@ async function main() {
   var projectRoot = process.cwd();
   var previousVersion = getVersion(projectRoot);
 
+  // Validate .claude/harness.json BEFORE anything is downloaded or written. It is the
+  // user's config (stop gate, protected base branch, work tracking, model map), and the
+  // update merges INTO it — so a file we cannot parse has to stop the run here, with
+  // nothing touched, rather than be silently replaced by the template's defaults. That
+  // replacement is the worst outcome available: it disarms the stop gate without a word.
+  try {
+    readHarnessConfig(projectRoot);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    process.exit(1);
+  }
+
   // Non-interactive: the harness choice was made at init. A project installed
   // before multi-harness support has no `harness` key — it is Claude-only.
-  // The actual persist happens right after the .claude/ backupAndCopy below
-  // (see writeHarnessTargets there) — the copy overwrites harness.json with
-  // the framework's default (no `harness` key), so writing it here would
-  // just be clobbered.
   var targets = readHarnessTargets(projectRoot);
   if (targets === null) {
     targets = ['claude'];
     console.log('No harness recorded — assuming Claude Code. Re-run `init` to add Codex.');
   }
   console.log('Harness: ' + targets.join(' + '));
-
-  // The vault (if any) recorded at init — same "asked once" fact as `harness`,
-  // read before the .claude/ copy overwrites harness.json with the framework's
-  // default (no `vault` key). A pre-vault project has `vault === null`; the
-  // write-back after the copy only fires when there was one to restore.
-  var vault = readVaultConfig(projectRoot);
-
-  // The model map, same read-before-the-copy reason as `vault` — but this one is the
-  // user's WORK, not a setup answer: /models re-verifies the IDs against the live
-  // catalogs and rewrites checkedAt. The .claude/ copy below replaces harness.json with
-  // the template's map (the IDs the package was CUT with, and a checkedAt that reads
-  // FRESH), so without this read + the write-back after the copy, every `update`
-  // silently reverts the refresh — and the stale-map warning stays quiet about it.
-  // A project that never ran /models has no map to restore (null): the copy's shipped
-  // default is exactly what it should get.
-  var models = readModels(projectRoot);
 
   // UUID-based tmp dir — avoids collisions when two update runs start in the
   // same millisecond (Date.now() has millisecond granularity).
@@ -228,27 +228,28 @@ async function main() {
       projectRoot
     );
 
-    // Persist the harness choice IMMEDIATELY after the .claude/ copy — that
-    // copy just overwrote .claude/harness.json with the framework's default
-    // (no `harness` key). Recording it right here, before anything else can
-    // throw (EACCES in the instruction-file copy, a settings-merge failure,
-    // ...), closes the crash window where a project's harness choice could
-    // be silently lost: a later `update` would then print "No harness
-    // recorded — assuming Claude Code" and silently drop Codex.
+    // harness.json: the user's file WINS, and the template contributes only the keys the
+    // user does not have yet (a newly-shipped key arrives with its default). backupAndCopy
+    // above deliberately skipped it. This replaces the old snapshot-and-restore of
+    // `harness`, `vault` and `models` — three keys added reactively, one per incident,
+    // while stopGate, baseBranch, workTracking, requireEvolveBeforePush, autonomous and the
+    // two gate timeouts were silently reset to the shipped defaults on every update.
+    //
+    // Must run BEFORE the Codex emit below: emit-codex.js reads `models` from this file and
+    // BAKES the resolved IDs into .codex/agents/*.toml, so merging afterwards would leave
+    // the generated tree pinned to the package's IDs while harness.json showed the user's.
+    var harnessDelta = installHarnessConfig(
+      projectRoot,
+      path.join(sourceDir, 'template', '.claude', 'harness.json')
+    );
+    stats.created += harnessDelta.created;
+    stats.updated += harnessDelta.updated;
+
+    // Materialize the harness choice for a project that has none: a pre-multi-harness
+    // harness.json has no `harness` key, and neither does the template, so the merge above
+    // cannot supply one. Without this, the assumed ['claude'] is re-assumed on every run.
+    // (A project that HAS the key keeps it through the merge; this write is then a no-op.)
     writeHarnessTargets(projectRoot, targets);
-
-    // Same crash-window rationale as writeHarnessTargets above, and the same
-    // merge-preserving write (see vault-config.js) — but only if a vault was
-    // actually recorded; don't write a spurious `vault` key for a pre-vault
-    // project (readVaultConfig returned null).
-    if (vault !== null) writeVaultConfig(projectRoot, vault);
-
-    // Restore the refreshed model map (same merge-preserving write, same crash-window
-    // rationale). MUST land before the Codex emit below: emit-codex.js reads this file
-    // and BAKES the resolved IDs into .codex/agents/*.toml — restoring after it would
-    // leave the generated tree pinned to the package's IDs while harness.json showed
-    // the user's.
-    if (models !== null) writeModels(projectRoot, models);
 
     // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
     var instructionFiles = ['AGENTS.md'];
