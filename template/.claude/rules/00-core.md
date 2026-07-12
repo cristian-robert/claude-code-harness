@@ -17,7 +17,7 @@ Always-on rules beyond AGENTS.md. Each traces to a real failure.
 
 ## Dispatch
 
-Every brief has four elements — objective · output format + size cap · tool guidance · boundaries — and pins `tier:` + `effort:`. Roles resolve via `.claude/harness.json` → `models`. Full protocol: `.claude/references/dispatch-protocol.md`.
+Every brief has four elements — objective · output format + size cap · tool guidance · boundaries — and pins `tier:` + `effort:`. Full protocol: `.claude/references/dispatch-protocol.md`.
 
 | Work | Dispatch |
 |---|---|
@@ -26,8 +26,8 @@ Every brief has four elements — objective · output format + size cap · tool 
 | Understand / synthesize | `scout` agent (`build` tier) |
 | Architecture — where new code goes / what a change touches, before a new module/route/table/endpoint | `architect-agent` (`deep`); reads the vault wiki, /evolve RECORDs back |
 | External tool/library docs & how-to | `/research <tool>[@version]` — cache-first at `wiki/stack/<tool>/`, then context7 + official docs (dispatches `research-gatherer`); never code an external API from memory |
-| Implement | general-purpose — tier per the plan's `tier:` hint |
-| Code review | `code-reviewer` — model is the SIBLING of the implementer's tier (deep↔build); never the same model that wrote the code |
+| Implement | general-purpose — the plan's `tier:` |
+| Code review | `code-reviewer` at the SIBLING tier (deep↔build) — never the model that wrote the code |
 | Runtime check (drive the app) | `qa-evaluator` |
 
 - Returns are summaries — ≤30 lines, paths not contents. File-mutating subagents run sequentially unless the plan marks disjoint `Wave:` groups; parallel is for read-only work.
