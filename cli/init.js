@@ -383,6 +383,21 @@ async function main() {
   // Get previous version before overwriting
   var previousVersion = getVersion(targetDir);
 
+  // Validate an EXISTING harness.json BEFORE anything is downloaded or written. On a
+  // re-init, installHarnessConfig merges it and backupAndCopy mutates the rest of
+  // .claude/ — a malformed file discovered late would leave a half-applied re-init. Run
+  // this FIRST, ahead of even the temp-dir download, so a bad file stops the run with
+  // nothing created and nothing to clean up. Parity with update.js's preflight. A fresh
+  // project has no file: readHarnessConfig returns null.
+  try {
+    readHarnessConfig(targetDir);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    closeAsk();
+    process.exit(1);
+    return;
+  }
+
   // Download framework to temp dir. UUID-based to avoid collisions between
   // parallel CLI runs (Date.now() has millisecond granularity).
   var tmpDir = __test_tmpPath('ai-framework-');
@@ -411,19 +426,6 @@ async function main() {
     console.log('Existing configuration detected. All files will be backed up as .backup');
     console.log('before installing new framework versions.');
     console.log('');
-  }
-
-  // Validate an EXISTING harness.json BEFORE the install touches any file. On a re-init,
-  // installHarnessConfig (below) parses and merges it — but backupAndCopy runs FIRST and
-  // mutates the rest of .claude/, so a malformed file discovered late would leave a
-  // half-applied re-init. Parse it up front and stop with nothing touched. Parity with
-  // update.js's preflight. A fresh project has no file: readHarnessConfig returns null.
-  try {
-    readHarnessConfig(targetDir);
-  } catch (cfgErr) {
-    console.error(cfgErr.message);
-    process.exit(1);
-    return;
   }
 
   // From here the install writes to disk — run it under try/finally so the temp
