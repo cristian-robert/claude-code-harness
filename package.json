@@ -1,6 +1,6 @@
 {
   "name": "perfect-harness-engineering",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "The harness around Claude Code that makes it reliable — tested hooks, two-tier context, a PIV+E pipeline with an agile delivery layer, doc-grounded research reuse, and a vault-linked knowledge loop. Installs a hardened .claude/ payload.",
   "bin": {
     "perfect-harness-engineering": "cli/index.js"
