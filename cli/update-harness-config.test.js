@@ -348,5 +348,27 @@ try {
   fs.rmSync(TMP, { recursive: true, force: true });
 } catch (_) {}
 
+// The atomic writer renames a FRESH temp inode over the target. A fresh file is created at
+// the writeFileSync default (0666 & ~umask), so without re-applying the prior mode it would
+// silently WIDEN a locked-down config — a 0600 harness.json (it can hold a stop gate) leaking
+// to 0644. Regression guard for the permission-preservation fix.
+test('writeJsonAtomic preserves an existing file\'s 0600 permissions', function () {
+  const { writeJsonAtomic } = require('./harness-config');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atomic-perm-'));
+  const p = path.join(dir, 'harness.json');
+  fs.writeFileSync(p, '{}');
+  fs.chmodSync(p, 0o600);
+  writeJsonAtomic(p, { stopGate: ['npm test'] });
+  assert.strictEqual(fs.statSync(p).mode & 0o777, 0o600, 'a private config must stay private after an atomic rewrite');
+});
+
+test('writeJsonAtomic uses the default mode for a brand-new file (no crash on missing target)', function () {
+  const { writeJsonAtomic } = require('./harness-config');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atomic-new-'));
+  const p = path.join(dir, 'harness.json');
+  writeJsonAtomic(p, { a: 1 });
+  assert.ok(fs.existsSync(p), 'a new file is created');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed > 0 ? 1 : 0);

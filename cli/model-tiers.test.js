@@ -76,6 +76,18 @@ assert('the shipped map records sol WITH ultra',
   supportedEfforts(DEFAULT_MODELS, 'gpt-5.6-sol').indexOf('ultra') !== -1);
 assert('the shipped map records terra WITH ultra',
   supportedEfforts(DEFAULT_MODELS, 'gpt-5.6-terra').indexOf('ultra') !== -1);
+
+// A ceiling with NON-STRING elements must degrade to null, not sail through. The Codex
+// catalog lists supported_reasoning_levels as OBJECTS, and /models points the maintainer
+// there — so [{effort:"low"},...] pasted verbatim is the realistic bad input. If it reached
+// emit as a "known ceiling", the pinned effort string would never match at indexOf and a
+// KNOWN model would brick. null means emit warns and proceeds instead.
+assert('a ceiling of objects (catalog levels pasted verbatim) degrades to null',
+  supportedEfforts({ efforts: { 'gpt-x': [{ effort: 'low' }, { effort: 'high' }] } }, 'gpt-x') === null);
+assert('a ceiling with a numeric element degrades to null',
+  supportedEfforts({ efforts: { 'gpt-x': ['low', 123] } }, 'gpt-x') === null);
+assert('an all-strings ceiling is honored',
+  JSON.stringify(supportedEfforts({ efforts: { 'gpt-x': ['low', 'high'] } }, 'gpt-x')) === '["low","high"]');
 assert('every codex role in the shipped map has recorded ceilings',
   ['scout', 'build', 'deep'].every(function (r) {
     return supportedEfforts(DEFAULT_MODELS, DEFAULT_MODELS.codex[r]) !== null;

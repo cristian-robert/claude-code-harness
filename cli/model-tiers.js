@@ -106,6 +106,15 @@ function supportedEfforts(models, modelId) {
   if (!efforts || typeof efforts !== 'object' || Array.isArray(efforts)) return null;
   var levels = efforts[modelId];
   if (!Array.isArray(levels) || levels.length === 0) return null;
+  // Elements must be plain effort STRINGS. The Codex catalog's supported_reasoning_levels
+  // are OBJECTS, and /models points the maintainer there, so `[{effort:"low"},...]` pasted
+  // verbatim is the realistic bad input. A non-string element sails past the length check,
+  // then never matches the pinned effort string at emit's indexOf — bricking a KNOWN model.
+  // Degrade to null: emit warns it cannot validate and proceeds, which is the right "we do
+  // not understand this ceiling" behaviour, not a hard failure.
+  for (var i = 0; i < levels.length; i++) {
+    if (typeof levels[i] !== 'string') return null;
+  }
   return levels;
 }
 

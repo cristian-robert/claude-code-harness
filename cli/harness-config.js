@@ -55,6 +55,17 @@ function writeJsonAtomic(p, obj) {
   // publishes the other's half-written bytes. Dot-prefixed so a crashed run leaves
   // something obviously not-the-config behind.
   var tmp = path.join(dir, '.' + path.basename(p) + '.' + crypto.randomUUID() + '.tmp');
+  // Preserve the existing file's permission bits. The temp is a FRESH inode at the
+  // writeFileSync default (0666 & ~umask, typically 0644), so renaming it over the target
+  // silently WIDENS a locked-down config — a 0600 harness.json (it can hold a stop gate)
+  // would leak to 0644. Capture the mode before touching anything, re-apply after fsync.
+  // Missing target (statSync throws): leave the default — correct for a new file.
+  var priorMode = null;
+  try {
+    priorMode = fs.statSync(p).mode & 0o777;
+  } catch (_) {
+    // Target does not exist yet — the default mode is correct for a new file.
+  }
   try {
     fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
     // Flush the bytes before publishing the name. Without this, a power loss can land the
@@ -66,6 +77,7 @@ function writeJsonAtomic(p, obj) {
     } finally {
       fs.closeSync(fd);
     }
+    if (priorMode !== null) fs.chmodSync(tmp, priorMode);
     fs.renameSync(tmp, p);
   } catch (e) {
     try {

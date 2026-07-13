@@ -39,7 +39,10 @@ the newest family member on their own, so they need no maintenance. Only pin an 
 gone. On Codex there are no aliases — its IDs are pinned and are the real reason this command exists.
 
 Also re-check the **effort ceilings** — `models.efforts` in the same file maps each Codex model ID to
-the reasoning levels it supports (its catalog's `supported_reasoning_levels`). As of 2026-07-12
+the reasoning levels it supports. Take those from the catalog's `supported_reasoning_levels`, but record
+them as a plain array of level **strings** (`["low","medium","high","xhigh","max","ultra"]`) — the
+catalog lists them as objects; extract the names, do not paste the objects (a non-string element is
+ignored as unreadable and the model emits unvalidated). As of 2026-07-12
 `gpt-5.6-luna` is the one 5.6 model with no `ultra`. A ceiling belongs to the ID, so it churns with
 the ID: **a new model must arrive with its levels, in the same change.** Emit validates every agent's
 pinned `effort:` against these and refuses an unsupported level; a model with no entry still emits,
