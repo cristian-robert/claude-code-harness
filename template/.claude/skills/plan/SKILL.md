@@ -8,7 +8,7 @@ allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merg
 
 # /plan
 
-Turn `$ARGUMENTS` into an executable plan at `plans/<slug>-plan.md`. No code is written in this stage; `/implement` runs the plan in a fresh session.
+Turn **the invocation argument** (the text typed after the command) into an executable plan at `plans/<slug>-plan.md`. No code is written in this stage; `/implement` runs the plan in a fresh session.
 
 ## Current state
 
@@ -22,12 +22,12 @@ Existing plans (pick a slug that does not collide):
 
 ## 0. Work item (when workTracking is active)
 
-- `$ARGUMENTS` is a backlog item path (`backlog/<id>-<slug>.md`) → read the item. Its `## Acceptance criteria` are this plan's success contract: the plan REFERENCES them ("Verification: satisfies AC in backlog/<id>-<slug>.md") and NEVER copies them — the item is their single home. Reuse the item's slug for the plan filename. `plans/<slug>-plan.md` already exists for this item (reject → re-plan round) → REVISE it in place — the item Log preserves prior rounds; the no-collision rule below applies only to NEW slugs.
-- Free-text `$ARGUMENTS` while `harness.json` `workTracking` is active → offer to create the item first via `/backlog new`; proceed without one only if the user declines.
+- The invocation argument is a backlog item path (`backlog/<id>-<slug>.md`) → read the item. Its `## Acceptance criteria` are this plan's success contract: the plan REFERENCES them ("Verification: satisfies AC in backlog/<id>-<slug>.md") and NEVER copies them — the item is their single home. Reuse the item's slug for the plan filename. `plans/<slug>-plan.md` already exists for this item (reject → re-plan round) → REVISE it in place — the item Log preserves prior rounds; the no-collision rule below applies only to NEW slugs.
+- Free-text invocation argument while `harness.json` `workTracking` is active → offer to create the item first via `/backlog new`; proceed without one only if the user declines.
 
 ## 1. Clarify first — do not guess
 
-Extract goal, affected surfaces, and acceptance criteria from `$ARGUMENTS`. Collect ALL open questions and ask them in ONE batched, numbered message. Wait for answers before planning — a wrong guess here costs a full implement cycle.
+Extract goal, affected surfaces, and acceptance criteria from the invocation argument. Collect ALL open questions and ask them in ONE batched, numbered message. Wait for answers before planning — a wrong guess here costs a full implement cycle.
 
 Autonomous mode (activation: `.claude/references/autonomous-mode.md` — never self-inferred) only: skip the questions, pick the most conservative reading, and log every assumption under `## Assumptions` inside the plan's Risks & assumptions section.
 
@@ -41,11 +41,11 @@ Autonomous mode (activation: `.claude/references/autonomous-mode.md` — never s
 
 ## 3. Load knowledge
 
-Match the work against this repo's knowledge skills (architecture-map etc.) and the CLAUDE.md on-demand context table; READ every match NOW. Then LIST the consulted knowledge skills and context files in the plan's Context section under `Knowledge to load first:` — `/implement` runs after `/clear` and reloads only what the plan names.
+Match the work against this repo's knowledge skills (architecture-map etc.) and the AGENTS.md on-demand context table; READ every match NOW. Then LIST the consulted knowledge skills and context files in the plan's Context section under `Knowledge to load first:` — `/implement` runs after `/clear` and reloads only what the plan names.
 
 ## 4. Explore the codebase
 
-- Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `model: sonnet` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
+- Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `tier: build` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
 - External tools/services the plan builds against (major frameworks & services — NOT transitive deps): read `wiki/stack/<tool>/` frontmatter for version + freshness; on a miss/stale/version-mismatch run `/research <tool>@<pinned>`. Cite the `wiki/stack/<tool>/` path in the plan's Context. Never plan tool usage from memory. Detail: `.claude/references/research-and-docs.md`.
 - Read directly only what the plan will name: files to be modified (real line numbers), the closest existing analogue, relevant rules/context modules.
 
@@ -70,7 +70,7 @@ Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`,
 
 ## 7. Self-assess
 
-Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `model:` implementer hint (`opus` default; `sonnet` only for pinned S mechanical work).
+Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step). /review inverts it to choose the reviewer, so an honest tier matters twice.
 
 - Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan` run when its turn comes.
 - Tasks provably independent (pairwise-disjoint `Files:` lists, no ordering) → mark them with the same `Wave: N` per the template rule; otherwise omit Wave — sequential is the default. One judgment, made NOW by the planner, not re-litigated at implement time.

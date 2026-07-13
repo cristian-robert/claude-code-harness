@@ -11,7 +11,7 @@ argument-hint: "[backlog/<id>-<slug>.md]"
 
 ## 1 · Read the item
 
-Item discovery: `$ARGUMENTS` if given; else the `item:` frontmatter of the plan referenced by the newest `reports/*-review.md` (or `*-implementation-report.md`); none → blocker: name the item. Read that item FILE, resolving it against the TRACKING ROOT (first line of `git worktree list` — `backlog/` lives only there, not in a worktree); all status/Log writes below commit there as `track(<id>): <event>`. Files are canonical in BOTH backends (optional github cross-check: `gh issue view <issue#>` from the item's `issue: #<n>` Log line). Status precondition: the item must be `status: done` (a recorded `/review` PASS). Not `done` → blocker: `item <id> is <status>, not done — run /review to PASS it before acceptance` (the state machine forbids skipping review). `## Acceptance criteria` missing or empty → blocker: item has no acceptance criteria — `/backlog refine <id>` first. The criteria ARE the contract; without them there is nothing to accept.
+Item discovery: the invocation argument if given; else the `item:` frontmatter of the plan referenced by the newest `reports/*-review.md` (or `*-implementation-report.md`); none → blocker: name the item. Read that item FILE, resolving it against the TRACKING ROOT (first line of `git worktree list` — `backlog/` lives only there, not in a worktree); all status/Log writes below commit there as `track(<id>): <event>`. Files are canonical in BOTH backends (optional github cross-check: `gh issue view <issue#>` from the item's `issue: #<n>` Log line). Status precondition: the item must be `status: done` (a recorded `/review` PASS). Not `done` → blocker: `item <id> is <status>, not done — run /review to PASS it before acceptance` (the state machine forbids skipping review). `## Acceptance criteria` missing or empty → blocker: item has no acceptance criteria — `/backlog refine <id>` first. The criteria ARE the contract; without them there is nothing to accept.
 
 ## 2 · Evidence pass (QA hat)
 
@@ -20,7 +20,7 @@ Verify EVERY criterion observably — each was written to be checkable:
 | Criterion kind | How to verify |
 |---|---|
 | Command/test observable | Run the exact command yourself; capture exit code + output tail |
-| Runtime behavior (drive the app) | Dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `model: opus`) with the criteria list pasted into the brief + the entrypoint (its spec source accepts either a plan path or a criteria list) |
+| Runtime behavior (drive the app) | Dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`) with the criteria list pasted into the brief + the entrypoint (its spec source accepts either a plan path or a criteria list) |
 | Browser UI flow | `~/.claude/agents/tester-agent/AGENT.md` exists → dispatch it via the Agent tool, including that AGENT.md path in the brief, and grade from its evidence; absent → `UNVERIFIABLE (no browser driver)` — the human exercises it manually |
 | Static only (config/doc presence) | Cite `file:line` |
 

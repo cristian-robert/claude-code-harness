@@ -2,6 +2,7 @@
 name: scout
 description: "Read-only codebase scout: answers understanding/synthesis questions ('how does X work', 'what would Y touch') and returns a compact structured brief. Use for exploration that feeds a plan; use built-in Explore for simple file/symbol location."
 tools: Read, Grep, Glob, Bash
+tier: build
 model: sonnet
 maxTurns: 25
 ---

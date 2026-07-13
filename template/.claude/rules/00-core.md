@@ -1,6 +1,6 @@
 # Core discipline
 
-Always-on rules beyond CLAUDE.md. Each traces to a real failure.
+Always-on rules beyond AGENTS.md. Each traces to a real failure.
 
 ## Context economy
 
@@ -17,16 +17,17 @@ Always-on rules beyond CLAUDE.md. Each traces to a real failure.
 
 ## Dispatch
 
-Every brief has four elements — objective · output format + size cap · tool guidance · boundaries — and pins `model:` + `effort:`. Full protocol: `.claude/references/dispatch-protocol.md`.
+Every brief has four elements — objective · output format + size cap · tool guidance · boundaries — and pins `tier:` + `effort:`. Full protocol: `.claude/references/dispatch-protocol.md`.
 
 | Work | Dispatch |
 |---|---|
 | Locate/trace a SYMBOL (def, callers, module API) | `codebase-search` MCP (`where_is`/`find_references`/`outline`) if wired; LSP diagnostics for type errors — NOT grep (see `.claude/references/symbol-navigation.md`) |
-| Locate files / text / patterns | built-in Explore (haiku-class; skips CLAUDE.md) |
-| Understand / synthesize | `scout` (sonnet) |
+| Locate files / text / patterns | built-in Explore (`scout` tier; skips CLAUDE.md) |
+| Understand / synthesize | `scout` agent (`build` tier) |
+| Architecture — where new code goes / what a change touches, before a new module/route/table/endpoint | `architect-agent` (`deep`); reads the vault wiki, /evolve RECORDs back |
 | External tool/library docs & how-to | `/research <tool>[@version]` — cache-first at `wiki/stack/<tool>/`, then context7 + official docs (dispatches `research-gatherer`); never code an external API from memory |
-| Implement | general-purpose — model per the plan's hint |
-| Code review | `code-reviewer` (opus floor — never downgrade a reviewer) |
+| Implement | general-purpose — the plan's `tier:` |
+| Code review | `code-reviewer` at the SIBLING tier (deep↔build) — never the model that wrote the code |
 | Runtime check (drive the app) | `qa-evaluator` |
 
 - Returns are summaries — ≤30 lines, paths not contents. File-mutating subagents run sequentially unless the plan marks disjoint `Wave:` groups; parallel is for read-only work.
@@ -37,8 +38,8 @@ Never claim done/fixed/passing without the command and its real output. Applies 
 
 ## Memory
 
-Auto-memory holds MACHINE-LOCAL facts only: env quirks, ports, local workarounds. Team knowledge (conventions, gotchas, commands) → CLAUDE.md/rules via /evolve — never duplicate into memory. Task state lives in plans/ + reports/, never in memory.
+Auto-memory holds MACHINE-LOCAL facts only: env quirks, ports, local workarounds. Team knowledge (conventions, gotchas, commands) → AGENTS.md/rules via /evolve — never duplicate into memory. Task state lives in plans/ + reports/, never in memory.
 
 ## Harness changes
 
-Touching hooks, rules, skills, or CLAUDE.md → read `.claude/references/harness-maintenance.md` FIRST. After any hook edit: `node .claude/hooks/smoke-test.mjs`.
+Touching hooks, rules, skills, or AGENTS.md/CLAUDE.md → read `.claude/references/harness-maintenance.md` FIRST. After any hook edit: `node .claude/hooks/smoke-test.mjs`.

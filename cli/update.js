@@ -7,6 +7,9 @@ const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
+const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
+const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
+const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -82,6 +85,15 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
         continue;
       }
 
+      // harness.json is USER CONFIG, not template content — it holds the stop gate,
+      // the protected base branch, work tracking and the model map. Copying the
+      // template over it is what destroyed all three (see harness-config.js);
+      // installHarnessConfig below installs or merges it instead. Never copied here,
+      // so the user's file is never even briefly in a wiped state.
+      if (entry.name === 'harness.json') {
+        continue;
+      }
+
       if (entry.isDirectory()) {
         copy(srcPath, destPath);
       } else if (entry.isFile()) {
@@ -148,6 +160,34 @@ async function main() {
   var projectRoot = process.cwd();
   var previousVersion = getVersion(projectRoot);
 
+  // Validate .claude/harness.json BEFORE anything is downloaded, written or DELETED. It is
+  // the user's config (stop gate, protected base branch, work tracking, model map), and the
+  // update merges INTO it — so a file we cannot parse, or a `harness` key we cannot act on,
+  // has to stop the run here, with nothing touched.
+  //
+  // Both halves are destructive if waved through. An unparseable file silently replaced by
+  // the template's defaults disarms the stop gate without a word. And an invalid `harness`
+  // value (a typo like ["codx"]) read as "no harness recorded" would take the legacy default
+  // below — rewriting the key to ['claude'] and then letting cleanupDroppedTargets delete
+  // .agents/ and .codex/ to match. Neither may be guessed at.
+  var targets = null;
+  try {
+    readHarnessConfig(projectRoot);
+    targets = readHarnessTargets(projectRoot);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    process.exit(1);
+  }
+
+  // Non-interactive: the harness choice was made at init. A project installed before
+  // multi-harness support has no `harness` key at all — it is Claude-only. This default is
+  // reachable ONLY from a genuinely absent key; an invalid one threw above.
+  if (targets === null) {
+    targets = ['claude'];
+    console.log('No harness recorded — assuming Claude Code. Re-run `init` to add Codex.');
+  }
+  console.log('Harness: ' + targets.join(' + '));
+
   // UUID-based tmp dir — avoids collisions when two update runs start in the
   // same millisecond (Date.now() has millisecond granularity).
   var tmpDir = path.join(os.tmpdir(), 'ai-framework-update-' + crypto.randomUUID());
@@ -195,16 +235,46 @@ async function main() {
       projectRoot
     );
 
-    // Update CLAUDE.md with backup + rollback on failure. See
-    // cli/claude-md-copy.js for the rollback semantics.
-    var claudeMdSource = path.join(sourceDir, 'template', 'CLAUDE.md');
-    var claudeMdDest = path.join(projectRoot, 'CLAUDE.md');
-    var claudeMdDelta = copyClaudeMdWithBackup(claudeMdSource, claudeMdDest);
-    stats.created += claudeMdDelta.created;
-    stats.updated += claudeMdDelta.updated;
-    stats.backedUp += claudeMdDelta.backedUp;
-    for (var bi = 0; bi < claudeMdDelta.backedUpFiles.length; bi++) {
-      stats.backedUpFiles.push(claudeMdDelta.backedUpFiles[bi]);
+    // harness.json: the user's file WINS, and the template contributes only the keys the
+    // user does not have yet (a newly-shipped key arrives with its default). backupAndCopy
+    // above deliberately skipped it. This replaces the old snapshot-and-restore of
+    // `harness`, `vault` and `models` — three keys added reactively, one per incident,
+    // while stopGate, baseBranch, workTracking, requireEvolveBeforePush, autonomous and the
+    // two gate timeouts were silently reset to the shipped defaults on every update.
+    //
+    // Must run BEFORE the Codex emit below: emit-codex.js reads `models` from this file and
+    // BAKES the resolved IDs into .codex/agents/*.toml, so merging afterwards would leave
+    // the generated tree pinned to the package's IDs while harness.json showed the user's.
+    var harnessDelta = installHarnessConfig(
+      projectRoot,
+      path.join(sourceDir, 'template', '.claude', 'harness.json')
+    );
+    stats.created += harnessDelta.created;
+    stats.updated += harnessDelta.updated;
+
+    // Materialize the harness choice for a project that has none: a pre-multi-harness
+    // harness.json has no `harness` key, and neither does the template, so the merge above
+    // cannot supply one. Without this, the assumed ['claude'] is re-assumed on every run.
+    // (A project that HAS the key keeps it through the merge; this write is then a no-op.)
+    writeHarnessTargets(projectRoot, targets);
+
+    // Instructions: AGENTS.md always; the CLAUDE.md shim only for a Claude target.
+    var instructionFiles = ['AGENTS.md'];
+    if (targets.indexOf('claude') !== -1) instructionFiles.push('CLAUDE.md');
+
+    for (var ifI = 0; ifI < instructionFiles.length; ifI++) {
+      var ifName = instructionFiles[ifI];
+      var ifDelta = copyClaudeMdWithBackup(
+        path.join(sourceDir, 'template', ifName),
+        path.join(projectRoot, ifName),
+        { backupLabel: ifName }
+      );
+      stats.created += ifDelta.created;
+      stats.updated += ifDelta.updated;
+      stats.backedUp += ifDelta.backedUp;
+      for (var bi = 0; bi < ifDelta.backedUpFiles.length; bi++) {
+        stats.backedUpFiles.push(ifDelta.backedUpFiles[bi]);
+      }
     }
 
     // Update root symbol-search config: .mcp.json (codebase-search MCP) and
@@ -252,6 +322,20 @@ async function main() {
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
     }
+
+    // Re-derive the Codex tree so a payload change (new skill, edited agent)
+    // reaches Codex. Generated trees are overwritten, never backed up.
+    if (targets.indexOf('codex') !== -1) {
+      var codexCounts = emitCodexPayload(projectRoot);
+      console.log('Re-emitted Codex payload: ' + codexCounts.skills + ' skills, ' + codexCounts.agents + ' agents.');
+    }
+
+    // A recorded target that was DROPPED since the last run (harness.json
+    // narrowed from ['claude','codex'] to one) must not leave that target's
+    // generated tree behind, stale forever — same point as the conditional
+    // emit above.
+    var cleanupMsg = cleanupDroppedTargets(projectRoot, targets);
+    if (cleanupMsg) console.log(cleanupMsg);
 
     // Create init metadata for /harness-init merge
     if (stats.backedUp > 0) {

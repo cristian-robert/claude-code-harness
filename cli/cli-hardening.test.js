@@ -311,7 +311,7 @@ test('harness-init names an npx package + subcommand the CLI actually provides',
 const GATE_PATTERN = /<[A-Za-z][^<>]*>/;
 const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog'];
 const GATE_CMD =
-  "grep -rnoE '<[A-Za-z][^<>]*>' CLAUDE.md .claude/rules/ .claude/skills/architecture-map/ " +
+  "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ .claude/skills/architecture-map/ " +
   '.claude/skills/debugging-this-repo/ \\| grep -vE ' +
   "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
 
@@ -325,7 +325,7 @@ test('harness-init step 4 ships exactly the pinned placeholder gate', () => {
 });
 
 test('the placeholder gate catches every placeholder the pristine templates ship', () => {
-  const pristine = ['CLAUDE.md', path.join('.claude', 'skills', 'architecture-map', 'SKILL.md'),
+  const pristine = ['AGENTS.md', path.join('.claude', 'skills', 'architecture-map', 'SKILL.md'),
     path.join('.claude', 'skills', 'debugging-this-repo', 'SKILL.md')];
   const tokens = pristine.flatMap((f) => readTemplate(f).match(/<[A-Za-z][^<>]*>/g) || []);
 
@@ -343,13 +343,13 @@ test('the placeholder gate catches every placeholder the pristine templates ship
 });
 
 test('every gate allowlist entry is earned by a real token in the templates', () => {
-  // Over-match guard. Path notation survives /harness-init in CLAUDE.md; the HTML tags
+  // Over-match guard. Path notation survives /harness-init in AGENTS.md; the HTML tags
   // are real prose in rules/frontend.md. An allowlist entry with no such use would be
   // silently hiding a placeholder instead of exempting notation.
-  const claudeMd = readTemplate('CLAUDE.md');
+  const claudeMd = readTemplate('AGENTS.md');
   const frontend = readTemplate('.claude', 'rules', 'frontend.md');
   for (const t of ['<id>', '<slug>', '<n>', '<tool>']) {
-    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/CLAUDE.md — drop it');
+    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/AGENTS.md — drop it');
   }
   for (const t of ['<a>', '<div>', '<button>', '<dialog>']) {
     assert.ok(frontend.includes(t), 'allowlisted ' + t + ' is unused in rules/frontend.md — drop it');
@@ -373,6 +373,94 @@ test('the eslint flat-config fragment ships with the payload', () => {
     fs.existsSync(path.join(TEMPLATE, '.claude', 'tooling', 'eslint.harness.mjs')),
     'harness-init tells operators to wire .claude/tooling/eslint.harness.mjs before arming a lint gate'
   );
+});
+
+// ─── Minor 2: harness.json crash window ─────────────────────────────────────
+// backupAndCopy(.claude/) SKIPS harness.json (it is user config); installHarnessConfig
+// then installs-or-merges it, and writeHarnessTargets records the resolved targets. If
+// anything throws in the gap before the targets are recorded (EACCES in the instruction
+// copy, a settings-merge failure, ...), the project could be left with a harness.json
+// that has no `harness` key -- the next `update` then prints "No harness recorded --
+// assuming Claude Code" and silently drops Codex. Fix: installHarnessConfig +
+// writeHarnessTargets run IMMEDIATELY after backupAndCopy, before anything else that can
+// throw. Pinned structurally (source-order) below, since faking a mid-flight filesystem
+// failure inside a full init/update run is impractical.
+
+test('update.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'update.js'), 'utf-8');
+  const backupCopyIdx = src.indexOf("backupAndCopy(\n      path.join(sourceDir, 'template', '.claude')");
+  const writeIdx = src.indexOf('writeHarnessTargets(projectRoot, targets)');
+  const instructionFilesIdx = src.indexOf("var instructionFiles = ['AGENTS.md']");
+  assert.ok(backupCopyIdx !== -1, 'the .claude/ backupAndCopy call was not found where expected');
+  assert.ok(writeIdx !== -1, 'writeHarnessTargets(projectRoot, targets) call not found');
+  assert.ok(instructionFilesIdx !== -1, 'the instruction-file copy block was not found where expected');
+  assert.ok(
+    backupCopyIdx < writeIdx && writeIdx < instructionFilesIdx,
+    'writeHarnessTargets must run between the .claude/ backupAndCopy and the instruction-file copy — found backupAndCopy@' +
+      backupCopyIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
+  );
+  // Exactly one call site — a stray second call (the old late-write left in
+  // by mistake) would silently re-widen the crash window it closes.
+  const callCount = src.split('writeHarnessTargets(projectRoot, targets)').length - 1;
+  assert.strictEqual(callCount, 1, 'writeHarnessTargets(projectRoot, targets) must be called exactly once, found ' + callCount);
+});
+
+test('init.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'init.js'), 'utf-8');
+  const backupCopyIdx = src.indexOf("backupAndCopy(\n    path.join(sourceDir, 'template', '.claude')");
+  const installIdx = src.indexOf('installHarnessConfig(\n    targetDir');
+  const writeIdx = src.indexOf('writeHarnessTargets(targetDir, targets)');
+  const instructionFilesIdx = src.indexOf("var instructionFiles = [{ name: 'AGENTS.md' }]");
+  assert.ok(backupCopyIdx !== -1, 'the .claude/ backupAndCopy call was not found where expected');
+  assert.ok(installIdx !== -1, 'the installHarnessConfig call was not found — harness.json would never be installed/merged');
+  assert.ok(writeIdx !== -1, 'writeHarnessTargets(targetDir, targets) call not found');
+  assert.ok(instructionFilesIdx !== -1, 'the instruction-file copy block was not found where expected');
+  // installHarnessConfig must run AFTER the copy (which skips harness.json) and BEFORE the
+  // instruction copy that can throw — otherwise a re-init could leave harness.json missing
+  // or the harness key unrecorded. Without asserting installHarnessConfig's presence here,
+  // deleting it would still pass (the exact vacuity that let init clobber configs silently).
+  assert.ok(
+    backupCopyIdx < installIdx && installIdx < writeIdx && writeIdx < instructionFilesIdx,
+    'order must be backupAndCopy < installHarnessConfig < writeHarnessTargets < instruction copy — found backupAndCopy@' +
+      backupCopyIdx + ', installHarnessConfig@' + installIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
+  );
+  const callCount = src.split('writeHarnessTargets(targetDir, targets)').length - 1;
+  assert.strictEqual(callCount, 1, 'writeHarnessTargets(targetDir, targets) must be called exactly once, found ' + callCount);
+});
+
+// Dynamic companion: exercise the ACTUAL update sequence — backupAndCopy (skips
+// harness.json) → installHarnessConfig (merge) → writeHarnessTargets — against an
+// EXISTING user harness.json, and prove both halves of the invariant: the user's
+// config survives the copy AND the harness key is recorded. The old version called
+// only backupAndCopy + writeHarnessTargets and passed vacuously (writeHarnessTargets
+// creates the file), never touching the installHarnessConfig merge that now carries
+// the risk. This version fails if the merge ever drops a user key or the copy clobbers.
+test('the real update sequence records targets AND preserves the user\'s existing harness.json config', () => {
+  const dir = path.join(TMP, 'harness-crash-window');
+  fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
+
+  delete require.cache[require.resolve('./update.js')];
+  delete require.cache[require.resolve('./harness-targets.js')];
+  delete require.cache[require.resolve('./harness-config.js')];
+  const { backupAndCopy } = require('./update.js');
+  const { writeHarnessTargets, readHarnessTargets } = require('./harness-targets.js');
+  const { installHarnessConfig } = require('./harness-config.js');
+
+  // A user who has configured a stop gate and refreshed their model map.
+  fs.writeFileSync(
+    path.join(dir, '.claude', 'harness.json'),
+    JSON.stringify({ stopGate: ['npm test'], models: { checkedAt: '2030-01-01' } })
+  );
+
+  const repoRoot = path.join(__dirname, '..');
+  backupAndCopy(path.join(repoRoot, 'template', '.claude'), path.join(dir, '.claude'), dir);
+  installHarnessConfig(dir, path.join(repoRoot, 'template', '.claude', 'harness.json'));
+  writeHarnessTargets(dir, ['claude', 'codex']);
+
+  const after = JSON.parse(fs.readFileSync(path.join(dir, '.claude', 'harness.json'), 'utf-8'));
+  assert.deepStrictEqual(readHarnessTargets(dir), ['claude', 'codex'], 'the recorded targets must be present');
+  assert.deepStrictEqual(after.stopGate, ['npm test'], 'the user stop gate must survive the copy+merge');
+  assert.strictEqual(after.models.checkedAt, '2030-01-01', 'the user model refresh must survive the copy+merge');
 });
 
 // Cleanup

@@ -12,7 +12,7 @@ inline fallback given per step. On conflict, this repo's rules win.
 
 ## 1 · Load the contract
 
-Read the plan file at `$ARGUMENTS`. Missing, unreadable, or no argument → stop; final line becomes:
+Read the plan file named by **the invocation argument** (the text typed after the command). Missing, unreadable, or no argument → stop; final line becomes:
 
 ```
 BLOCKED: plan file <path> missing or unreadable — run /plan first
@@ -44,7 +44,7 @@ The plan must exist in THIS working copy before any code. The item file stays in
 
 Dispatcher rules for subagent-driven mode:
 
-- Implementer subagents get the task text **verbatim** plus the closest `CLAUDE.md` and scoped rules — no paraphrasing; pass `model:` explicitly per the plan's hint (default opus).
+- Implementer subagents get the task text **verbatim** plus the closest `AGENTS.md` (imported by `CLAUDE.md` on Claude Code) and scoped rules — no paraphrasing; pass the plan's `tier:` explicitly (default `deep`).
 - File-mutating subagents run **sequentially** (parallel worktree agents have collided and leaked edits). Parallelize read-only research only. Sole exception: Wave mode.
 - Building against an external tool/library? Consult its `wiki/stack/<tool>/` cache or current docs (the plan should name it) BEFORE writing tool-specific code — do not code the API from memory. Missing/stale → `/research <tool>@<pinned>` first.
 

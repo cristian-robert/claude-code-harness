@@ -2,6 +2,7 @@
 name: qa-evaluator
 description: "Runtime evaluator: exercises the RUNNING app against its plan and grades each spec item as genuinely working vs stubbed. Catches dead buttons, stub handlers, and missing depth that static review cannot. Dispatched by /validate and /accept when the work has a runtime surface."
 tools: Read, Grep, Glob, Bash
+tier: deep
 model: opus
 effort: high
 maxTurns: 50

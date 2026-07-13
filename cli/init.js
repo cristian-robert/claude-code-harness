@@ -7,12 +7,31 @@ const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
+const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
+const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
+const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
 const TARBALL_URL = 'https://github.com/' + REPO + '/archive/refs/heads/' + BRANCH + '.tar.gz';
 
-// Lazy-init readline so requiring this module for tests doesn't open stdin.
+// Two input mechanisms, chosen once per process by ask() below, based on
+// whether stdin is a TTY:
+//
+// - TTY (a human typing): today's readline behaviour, unchanged. Lazy-init
+//   so requiring this module for tests doesn't open stdin.
+// - Piped/redirected (not a TTY): readline is unsafe here. main() asks
+//   MULTIPLE questions in sequence (harness, then vault, then maybe git-init).
+//   If a script pipes every answer in one chunk
+//   (`printf '1\n/path\n' | node cli/init.js`), readline delivers line 1 to
+//   the first ask(), then the pipe hits EOF before the second ask()'s
+//   rl.question() callback ever fires -- that `await` never resolves, the
+//   event loop drains with nothing left to do, and the process exits 0
+//   having installed nothing. Fix: read ALL of stdin to EOF up front and
+//   hand out one queued line per ask() call (createPipedAsker below).
+//   Running out of queued answers is a loud, non-zero failure -- never a
+//   silent no-op and never a hang.
 var _rl = null;
 function getRl() {
   if (!_rl) {
@@ -24,11 +43,67 @@ function getRl() {
   return _rl;
 }
 
-function ask(question) {
+function askTTY(question) {
   var rl = getRl();
   return new Promise(function (resolve) {
     rl.question(question, resolve);
   });
+}
+
+// Splits pre-read stdin text into a line queue. A trailing '\n' produces one
+// trailing empty-string artifact from String#split -- that's the terminator
+// of the last real line, not an extra blank answer, so it's dropped. A blank
+// line in the MIDDLE of the input (a genuine empty answer) is kept.
+function splitStdinLines(text) {
+  if (!text) return [];
+  var lines = text.split('\n');
+  if (lines.length > 0 && lines[lines.length - 1] === '') {
+    lines.pop();
+  }
+  return lines;
+}
+
+// Pure-ish and unit-testable in isolation (see init-input.test.js): takes the
+// full stdin text and returns an asker whose ask(prompt) shifts the next
+// queued line, writing the prompt (and echoing the answer) the way a human
+// typing at a TTY would see. Throws -- does not hang, does not silently
+// return "" -- once the queue is exhausted, per the module comment above.
+function createPipedAsker(stdinText) {
+  var queue = splitStdinLines(stdinText);
+  return {
+    ask: function (prompt) {
+      process.stdout.write(prompt);
+      if (queue.length === 0) {
+        throw new Error(
+          'perfect-harness-engineering init: ran out of piped input (needed an answer to a prompt). ' +
+          'Provide all answers, or run interactively.'
+        );
+      }
+      var line = queue.shift();
+      console.log(line);
+      return line;
+    },
+  };
+}
+
+var _pipedAsker = null;
+function ask(question) {
+  if (process.stdin.isTTY) {
+    return askTTY(question);
+  }
+  if (!_pipedAsker) {
+    _pipedAsker = createPipedAsker(fs.readFileSync(0, 'utf-8'));
+  }
+  return _pipedAsker.ask(question);
+}
+
+// Releases whatever input mechanism was actually used. The piped path never
+// creates a readline interface (see ask() above), so this is a no-op there --
+// calling getRl() here instead would create one just to close it.
+function closeAsk() {
+  if (_rl) {
+    _rl.close();
+  }
 }
 
 // Collision-resistant temp path (UUID-based). Replaces Date.now() which
@@ -178,6 +253,15 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
         continue;
       }
 
+      // harness.json is USER CONFIG, not template content — it holds the stop gate,
+      // the protected base branch, work tracking and the model map. Copying the
+      // template over it on a RE-init would reset all of them (the exact bug fixed
+      // in update.js). installHarnessConfig installs-or-merges it after this copy,
+      // so a re-init never even briefly wipes the user's file.
+      if (entry.name === 'harness.json') {
+        continue;
+      }
+
       if (entry.isDirectory()) {
         copy(srcPath, destPath);
       } else if (entry.isFile()) {
@@ -270,8 +354,49 @@ async function main() {
     console.log('');
   }
 
+  // Which harness(es)? Asked once, at init; recorded in .claude/harness.json so
+  // `update` re-emits the same payload without prompting.
+  var targets = null;
+  while (targets === null) {
+    var answer = await ask('\n' + HARNESS_PROMPT);
+    targets = parseHarnessAnswer(answer);
+    if (targets === null) {
+      console.log('  Please answer 1, 2, or 3 (or claude / codex / both).');
+    }
+  }
+  console.log('  Harness: ' + targets.join(' + '));
+  console.log('');
+
+  // Which Obsidian vault (if any) backs architecture & knowledge? Asked once,
+  // recorded in harness.json; /harness-init does the scaffolding + wiring.
+  var vault = null;
+  while (vault === null) {
+    var vaultAnswer = await ask(VAULT_PROMPT);
+    vault = parseVaultAnswer(vaultAnswer);
+    if (vault === null) {
+      console.log('  Enter an absolute path, or "s" to scaffold, or "skip".');
+    }
+  }
+  console.log('  Vault: ' + (vault.mode === 'existing' ? vault.path : vault.mode));
+  console.log('');
+
   // Get previous version before overwriting
   var previousVersion = getVersion(targetDir);
+
+  // Validate an EXISTING harness.json BEFORE anything is downloaded or written. On a
+  // re-init, installHarnessConfig merges it and backupAndCopy mutates the rest of
+  // .claude/ — a malformed file discovered late would leave a half-applied re-init. Run
+  // this FIRST, ahead of even the temp-dir download, so a bad file stops the run with
+  // nothing created and nothing to clean up. Parity with update.js's preflight. A fresh
+  // project has no file: readHarnessConfig returns null.
+  try {
+    readHarnessConfig(targetDir);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    closeAsk();
+    process.exit(1);
+    return;
+  }
 
   // Download framework to temp dir. UUID-based to avoid collisions between
   // parallel CLI runs (Date.now() has millisecond granularity).
@@ -290,7 +415,7 @@ async function main() {
     } else {
       console.error('No framework source available. Check your internet connection.');
       cleanupTmpDir(tmpDir);
-      getRl().close();
+      closeAsk();
       process.exit(1);
     }
   }
@@ -314,16 +439,46 @@ async function main() {
     targetDir
   );
 
-  // Install CLAUDE.md with backup + rollback on failure. See
-  // cli/claude-md-copy.js for the rollback semantics.
-  var claudeMdSource = path.join(sourceDir, 'template', 'CLAUDE.md');
-  var claudeMdDest = path.join(targetDir, 'CLAUDE.md');
-  var claudeMdDelta = copyClaudeMdWithBackup(claudeMdSource, claudeMdDest);
-  stats.created += claudeMdDelta.created;
-  stats.updated += claudeMdDelta.updated;
-  stats.backedUp += claudeMdDelta.backedUp;
-  for (var bi = 0; bi < claudeMdDelta.backedUpFiles.length; bi++) {
-    stats.backedUpFiles.push(claudeMdDelta.backedUpFiles[bi]);
+  // Install harness.json (skipped by the copy above): a fresh project gets the
+  // template's file; a RE-init MERGES — the user's existing keys win, the template
+  // only contributes newly-shipped keys. Parity with update.js, so init and update
+  // treat user config identically instead of one preserving and one resetting it.
+  var harnessDelta = installHarnessConfig(
+    targetDir,
+    path.join(sourceDir, 'template', '.claude', 'harness.json')
+  );
+  stats.created += harnessDelta.created;
+  stats.updated += harnessDelta.updated;
+
+  // Persist the harness choice IMMEDIATELY after — that install left harness.json
+  // with no `harness` key (neither the template nor a legacy user file has one).
+  // Recording it right here, before anything else can throw (EACCES in the
+  // instruction-file copy, a settings-merge failure, ...), closes the crash
+  // window where a project's harness choice could be silently lost: a later
+  // `update` would then print "No harness recorded — assuming Claude Code"
+  // and silently drop Codex.
+  writeHarnessTargets(targetDir, targets);
+  writeVaultConfig(targetDir, vault);
+
+  // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
+  // reads it directly). CLAUDE.md is a thin `@AGENTS.md` import shim and is only
+  // installed when Claude Code is a target. Both use the backup+rollback copier.
+  var instructionFiles = [{ name: 'AGENTS.md' }];
+  if (targets.indexOf('claude') !== -1) instructionFiles.push({ name: 'CLAUDE.md' });
+
+  for (var ifI = 0; ifI < instructionFiles.length; ifI++) {
+    var ifName = instructionFiles[ifI].name;
+    var ifDelta = copyClaudeMdWithBackup(
+      path.join(sourceDir, 'template', ifName),
+      path.join(targetDir, ifName),
+      { backupLabel: ifName }
+    );
+    stats.created += ifDelta.created;
+    stats.updated += ifDelta.updated;
+    stats.backedUp += ifDelta.backedUp;
+    for (var bi = 0; bi < ifDelta.backedUpFiles.length; bi++) {
+      stats.backedUpFiles.push(ifDelta.backedUpFiles[bi]);
+    }
   }
 
   // Install root symbol-search config: .mcp.json (codebase-search MCP) and
@@ -378,6 +533,21 @@ async function main() {
     console.warn('Could not merge your existing settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
   }
 
+  // Derive the Codex tree from the canonical .claude/ payload.
+  var codexCounts = null;
+  if (targets.indexOf('codex') !== -1) {
+    codexCounts = emitCodexPayload(targetDir);
+    console.log('Emitted Codex payload: ' + codexCounts.skills + ' skills -> .agents/skills/, ' +
+      codexCounts.agents + ' agents -> .codex/agents/');
+  }
+
+  // A re-run that DROPPED a target (init(both) -> init(claude), or the
+  // symmetric init(both) -> init(codex)) must not leave that target's
+  // generated tree behind, stale forever — same point as the conditional
+  // emit above.
+  var cleanupMsg = cleanupDroppedTargets(targetDir, targets);
+  if (cleanupMsg) console.log(cleanupMsg);
+
   // Create init metadata if files were backed up
   if (stats.backedUp > 0) {
     createInitMeta(targetDir, previousVersion, newVersion, stats.backedUpFiles);
@@ -398,7 +568,7 @@ async function main() {
         console.error('Could not initialize git: ' + e.message);
         console.error('You explicitly opted in to git init, but it failed. Aborting.');
         cleanupTmpDir(tmpDir);
-        getRl().close();
+        closeAsk();
         process.exit(1);
       }
     }
@@ -423,10 +593,22 @@ async function main() {
   console.log('');
 
   console.log('Next steps:');
-  console.log('  1. Open Claude Code in this project');
-  console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
+  if (targets.indexOf('claude') !== -1) {
+    console.log('  1. Open Claude Code in this project');
+    console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
+  }
+  if (targets.indexOf('codex') !== -1) {
+    console.log('  Codex: instructions are in AGENTS.md. Run $harness-init in Codex — it fits the payload to your stack and arms the gate.');
+    console.log('  Pipeline skills are invocable as $plan, $implement, $validate, $review.');
+    console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — after $harness-init (or any later hand-edit of .claude/), run `npx perfect-harness-engineering emit` to push the changes into the Codex tree. `update` is NOT a substitute — it reverts .claude/ to the framework template before re-emitting.');
+    console.log('  Enforcement hooks are not wired for Codex yet (guidance-only).');
+  }
   if (stats.backedUp > 0) {
     console.log('  (existing files were backed up as .backup — reconcile any you had customized)');
+  }
+  if (vault.mode === 'scaffold' || vault.mode === 'existing') {
+    console.log('  Vault: /harness-init will ' + (vault.mode === 'scaffold' ? 'scaffold it and ' : '') +
+      'wire the pointer block and point the architect agent at projects/<name>/.');
   }
   console.log('');
 
@@ -441,7 +623,7 @@ async function main() {
 
   } finally {
     cleanupTmpDir(tmpDir);
-    getRl().close();
+    closeAsk();
   }
 }
 
@@ -452,6 +634,7 @@ module.exports = {
   backupAndCopy: backupAndCopy,
   __test_tmpPath: __test_tmpPath,
   shouldMergeUserSettings: shouldMergeUserSettings,
+  createPipedAsker: createPipedAsker,
   main: main,
 };
 

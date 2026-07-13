@@ -7,7 +7,7 @@ argument-hint: "[slug]"
 
 # /handoff — reset beats compaction
 
-Write `reports/<slug>-handoff.md` (slug from `$ARGUMENTS`; none given → derive from the branch name), then stop. No code changes in this stage.
+Write `reports/<slug>-handoff.md` (slug from the invocation argument; none given → derive from the branch name), then stop. No code changes in this stage.
 
 ## The artifact
 

@@ -17,16 +17,18 @@ In scrum mode this IS the retrospective (dispatched by `/sprint close`).
 - `git log` since the base branch: churn, reverts, fix-of-a-fix commits
 - Accepted/rejected backlog items' `## Log` lines since the last evolve (Dev/QA/review/acceptance evidence)
 - Surprising discoveries: undocumented gotchas, assumptions that proved wrong
+- Structural changes this session — new/removed modules, routes, DB tables, or endpoints — from the plan's affected-surfaces list and the diff since the base branch (new files under module/route dirs, migrations, new endpoints).
 
 ## 2. Choose a destination — decision ladder, first match wins
 
 | Candidate is... | Destination |
 |---|---|
 | Must never happen again AND mechanically checkable | Hook or permission deny (enforcement, not prose) |
-| Broadly applicable session guidance | CLAUDE.md Conventions — ~60-line budget: adding may mean cutting |
+| Broadly applicable session guidance | AGENTS.md Conventions — ~60-line budget: adding may mean cutting |
 | File-type-specific | `paths:`-scoped rule in `.claude/rules/` (key is `paths:`, NEVER `globs:`) |
-| Place-specific | That directory's CLAUDE.md |
+| Place-specific | That directory's `AGENTS.md` |
 | Repeated manual prompt (3+ times) | New skill |
+| Structural change to record | Dispatch `architect-agent` **RECORD** → updates `projects/<name>/architecture.md` + `decisions.md` in the vault (no vault → skip, say so) |
 | Generalizes beyond this project | Vault: inbox/raw capture or project wiki, per vault conventions |
 | Everything else | Drop — a rule that doesn't earn its tokens taxes every future session |
 
@@ -37,7 +39,7 @@ No speculative hardening. A candidate without an incident is rejected at proposa
 
 ## 4. Pruning pass (mandatory — the step every other framework lacks)
 
-Scan CLAUDE.md + unscoped `.claude/rules/*.md` for lines no longer earning their tokens:
+Scan AGENTS.md + unscoped `.claude/rules/*.md` for lines no longer earning their tokens:
 
 - Rules the model now follows unprompted
 - Rules for retired code, tools, or workflows
@@ -55,8 +57,9 @@ Present ALL candidates in ONE numbered message, destination-tagged:
 
 ```
 1. [hook] Deny `curl | sh` — traces to: ran unreviewed installer in session
-2. [prune: CLAUDE.md] Drop "use pnpm" — followed unprompted 3 sessions running
+2. [prune: AGENTS.md] Drop "use pnpm" — followed unprompted 3 sessions running
 3. [rules/tests.md] Fixtures live in tests/fixtures/ — traces to: duplicated fixture dir
+4. [vault: architecture] Record the new `orders` table + tenant_id FK — traces to: this session's migration
 Apply which? ("1,3" / "all" / "none")
 ```
 
@@ -65,8 +68,8 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 
 ## 6. Apply selections
 
-- Smallest diff; adapt existing files in place — never rewrite rules/CLAUDE.md from scratch.
-- Selections touched CLAUDE.md/rules → reconcile auto-memory: remove any MEMORY.md lines now covered by team rules (memory holds machine-local facts only).
+- Smallest diff; adapt existing files in place — never rewrite rules/AGENTS.md from scratch.
+- Selections touched AGENTS.md/rules → reconcile auto-memory: remove any MEMORY.md lines now covered by team rules (memory holds machine-local facts only).
 - Always — even on "none": write `.claude/state/.evolve-ran` (timestamp) — the opt-in push gate (`harness.json` `requireEvolveBeforePush`) reads it. `.claude/state/` is gitignored by adopters.
 - Vault writes follow the vault's Index Law: update that folder's `_index.md` in the same change.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.

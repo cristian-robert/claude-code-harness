@@ -11,14 +11,14 @@ allowed-tools: Bash(git diff *) Bash(git show *) Bash(git log *) Bash(git merge-
 ## 1. Gather inputs
 
 - Status precondition (item-linked): the item must be `status: review` (set by `/implement` when the report was written). Not `review` → blocker: `item <id> is <status>, not review — /implement must finish first`.
-- Plan: `$ARGUMENTS` if given; else the plan referenced by the newest `reports/*-implementation-report.md`.
+- Plan: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`.
 - Base branch: `.claude/harness.json` `baseBranch` if set, else `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`), else `main`/`master` — whichever exists. Diff the WHOLE branch: `git diff <base>...HEAD` (single commit: `git show HEAD`). Never review per-task slices: cross-task bugs are invisible to per-task lenses (two real incidents).
 
 ## 2. Dispatch the reviewer
 
 1. Invoke `superpowers:requesting-code-review` via the Skill tool for the discipline. Plugin unavailable → fallback below.
 2. Dispatch the `code-reviewer` subagent (`.claude/agents/code-reviewer.md`) with exactly: the diff (or ref), the plan path, the verdict contract below. Fresh context by design — it sees only diff + plan + protocol, never the reasoning that produced the code.
-3. Pass `model:` explicitly (fable/opus). Never downgrade a reviewer to save money — a reviewer that misses real bugs is worse than none.
+3. Pin the reviewer's model explicitly: it is the SIBLING of the plan's `tier:` (deep-written → review at `build`; build-written → review at `deep`), always at `effort: xhigh`. Never let the reviewer be the model that wrote the code — it does not find the bug it just made. No plan/tier? Review at `build` — an implementer with no stated tier ran at `/plan`'s default (`deep`), so `build` IS the sibling here; reviewing at `deep` would be the model grading its own work. Do not "fix" this to `deep`.
 4. The reviewer keeps persistent project memory (`.claude/agent-memory/code-reviewer/`): recurring defect classes and past waived findings carry across sessions — but only if recorded (step 4).
 
 ## 3. Record the verdict
@@ -34,11 +34,11 @@ Apply `superpowers:receiving-code-review`:
 - Verify each finding against the code BEFORE implementing it. Reviewers prompted to find gaps will report some even when the work is sound.
 - Push back with evidence when the reviewer is wrong. Fix only what affects correctness or stated requirements.
 - Waiving a finding you verified false → TELL the reviewer to record the waiver in its memory (fingerprint, reason, decider) — in the next loop dispatch or a one-line follow-up. An unrecorded waiver is re-litigated next session.
-- Loop: fix → **re-run the full gate** (CLAUDE.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch → until the first line is `PASS`. Append each round's verdict to the report.
+- Loop: fix → **re-run the full gate** (AGENTS.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch → until the first line is `PASS`. Append each round's verdict to the report.
 
 ## 5. Security lens (when the diff warrants)
 
-Diff touches auth, sessions, crypto, input handling, file/network I/O, deserialization, SQL, secrets management, payments, or PII → run a dedicated security pass, not just the reviewer's checklist line. Invoke the global `security-audit` skill (or `pentest-expert` / `web-security-testing` for their domains) if available; absent → have `code-reviewer` treat the security checklist item as blocking-priority and say the deep skill was unavailable. Dependency/supply-chain: run the audit command from CLAUDE.md's Commands table (`npm audit` / `pip-audit` / `uv pip audit`) if `/harness-init` configured one.
+Diff touches auth, sessions, crypto, input handling, file/network I/O, deserialization, SQL, secrets management, payments, or PII → run a dedicated security pass, not just the reviewer's checklist line. Invoke the global `security-audit` skill (or `pentest-expert` / `web-security-testing` for their domains) if available; absent → have `code-reviewer` treat the security checklist item as blocking-priority and say the deep skill was unavailable. Dependency/supply-chain: run the audit command from AGENTS.md's Commands table (`npm audit` / `pip-audit` / `uv pip audit`) if `/harness-init` configured one.
 
 ## 6. Optional second lens (L/XL changes)
 

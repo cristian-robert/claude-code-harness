@@ -291,6 +291,31 @@ check("survives malformed input", runHook("post-edit.mjs", null).code === 0);
   check("editing smoke-test.mjs itself does not self-trigger", self.code === 0 && self.out === "");
 }
 
+// The user's LOCAL calendar date (what /models records), not the UTC one.
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// The MAXIMUM legitimate skew a bare `checkedAt` can carry, made deterministic.
+//
+// /models writes the user's LOCAL date; Date.parse reads a bare date as midnight UTC. So
+// east of UTC a map checked "today" parses in the FUTURE, and a naive `age < 0 => stale`
+// nags the user who just re-verified it. localToday() alone does NOT reliably catch that:
+// the skew it produces is (local time-of-day − UTC offset), so the fixture only goes
+// future-dated in the host's own timezone, before the offset hour — under TZ=UTC (i.e. on
+// CI) it is future-dated NEVER, and the regression sails through green. Forcing a TZ on
+// the hook does not help either: the hook's math is TZ-independent by construction.
+//
+// A user at UTC+14 (Kiritimati) writing their local date at 00:30 records TOMORROW's UTC
+// date. Pinning that is what makes the fixture bite: it parses ahead of Date.now() by
+// (24h − now's UTC time-of-day), which is > 0 at every instant, in every timezone — while
+// still inside the one-day tolerance the correct guard allows. Naive guard: always stale
+// (test fails). Correct guard: always fresh (test passes).
+function maxSkewDate() {
+  return new Date(Date.now() + 864e5).toISOString().slice(0, 10); // tomorrow, in UTC
+}
+
 console.log("session-start.mjs");
 {
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" });
@@ -352,6 +377,63 @@ console.log("session-start.mjs");
   let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
   check("uninitialized template nudges /harness-init", res.code === 0 && ctx.includes("/harness-init"));
 }
+{
+  // A model map nobody has re-checked is how a retired model ID stays in the dispatch
+  // path long after the vendor pulled it. Staleness must be LOUD, at session start.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-models-stale-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: "2020-01-01", staleDays: 30, claude: { scout: "haiku", build: "sonnet", deep: "opus" } },
+  }));
+  const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
+  check("stale model map warns and names /models", res.code === 0 && ctx.includes("Model map is stale") && ctx.includes("/models"));
+
+  // Fresh map: silent. A warning that fires every session is a warning nobody reads.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    // The user's LOCAL date — what /models actually writes. NOT toISOString() (UTC):
+    // east of UTC those differ, and a bare date parses as midnight UTC, so a map checked
+    // "today" looks FUTURE-dated. A UTC fixture here passes while the real case fails.
+    models: { checkedAt: localToday(), staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const fresh = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let freshCtx = ""; try { freshCtx = JSON.parse(fresh.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: freshCtx stays "" */ }
+  check("fresh model map emits no staleness warning", fresh.code === 0 && !freshCtx.includes("Model map is stale"));
+
+  // The regression guard proper (see maxSkewDate): a checkedAt at the maximum legitimate
+  // timezone skew is FRESH, not stale. The fixture above only reproduces that east of UTC
+  // and only before the offset hour — it passed under TZ=UTC with the bug present, which
+  // is to say it passed on CI. This one is future-dated at every instant in every zone, so
+  // a naive `age < 0` fails it everywhere and can no longer ship green.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: maxSkewDate(), staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const skew = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let skewCtx = ""; try { skewCtx = JSON.parse(skew.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: skewCtx stays "" */ }
+  check("a map at MAX timezone skew (bare date parsed ahead of now) is fresh, in every timezone",
+    skew.code === 0 && !skewCtx.includes("Model map is stale"));
+
+  // ...and the tolerance is a tolerance, not a hole: past one day, a future date is a typo
+  // or a hand-edit, and must still read STALE.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    stopGate: [],
+    models: { checkedAt: "2099-01-01", staleDays: 30, claude: { deep: "opus" } },
+  }));
+  const future = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let futureCtx = ""; try { futureCtx = JSON.parse(future.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout */ }
+  check("an implausibly future checkedAt is still STALE (skew tolerance is not a hole)",
+    future.code === 0 && futureCtx.includes("Model map is stale"));
+
+  // No models key at all (an adopter who never ran /models): say nothing. Absent config
+  // is not a stale map — nagging about a feature they never opted into is noise.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: [] }));
+  const none = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let noneCtx = ""; try { noneCtx = JSON.parse(none.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: noneCtx stays "" */ }
+  check("no models key emits no staleness warning", none.code === 0 && !noneCtx.includes("Model map is stale"));
+}
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
 
 console.log("pre-compact.mjs");
@@ -378,13 +460,17 @@ console.log("verdict-gate.mjs");
 
 // Mechanical proof that agent frontmatter uses only real subagent keys — a wrong
 // key (e.g. the globs:/paths: class of typo) fails SILENTLY at runtime. Allowlist
-// is the documented sub-agents frontmatter schema (code.claude.com/docs/en/sub-agents).
+// is the documented sub-agents frontmatter schema (code.claude.com/docs/en/sub-agents),
+// plus `tier` — a PHE-defined cross-harness key the Codex emitter resolves to a model.
+// UNVERIFIED: the docs list the supported keys but say nothing about unknown ones —
+// not ignored, not rejected. This allowlist is OURS; it does not exercise Claude Code's
+// parser. Re-check on upgrade (docs/99 · unverified claims).
 console.log("agent frontmatter");
 {
   const AGENT_KEYS = new Set([
     "name", "description", "tools", "disallowedTools", "model", "permissionMode",
     "maxTurns", "skills", "mcpServers", "hooks", "memory", "background", "effort",
-    "isolation", "color", "initialPrompt",
+    "isolation", "color", "initialPrompt", "tier",
   ]);
   const agentsDir = join(dirname(HOOKS), "agents");
   let files = [];
@@ -394,7 +480,7 @@ console.log("agent frontmatter");
     const m = /^---\n([\s\S]*?)\n---/.exec(text);
     const keys = m ? [...m[1].matchAll(/^([A-Za-z][\w-]*)\s*:/gm)].map(x => x[1]) : [];
     const bad = keys.filter(k => !AGENT_KEYS.has(k));
-    check(`${f}: frontmatter keys all in documented schema`, m && bad.length === 0, bad.length ? `unknown: ${bad.join(", ")}` : "no frontmatter");
+    check(`${f}: frontmatter keys all in documented schema (+ PHE \`tier\`)`, m && bad.length === 0, bad.length ? `unknown: ${bad.join(", ")}` : "no frontmatter");
   }
 }
 

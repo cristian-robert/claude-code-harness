@@ -128,7 +128,8 @@ out — multi-agent "struggles with tasks requiring shared context", i.e. most c
 Effort bands, the 4-element brief, and the per-stage fan-out map ship in the template:
 `.claude/rules/00-core.md` + `.claude/references/dispatch-protocol.md`. Embed the numbers
 in dispatch prompts ("agents struggle to judge appropriate effort"); every dispatch is
-self-contained and pins `model:` + `effort:`.
+self-contained and pins `tier:` + `effort:` — a ROLE (`scout`/`build`/`deep`), never a model
+name. `.claude/harness.json` → `models` resolves the role, and is the one file that names a model.
 
 ## Sources
 

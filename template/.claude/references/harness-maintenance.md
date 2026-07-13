@@ -12,7 +12,7 @@ Read this BEFORE modifying anything under `.claude/` or `CLAUDE.md`. The harness
 | Subdir memory | `<dir>/CLAUDE.md` | Lazy-loads when a file in `<dir>` is first read |
 | References | `.claude/references/*.md` | Load ONLY when a rule/skill cites them — never preload |
 | Skills | `.claude/skills/<name>/SKILL.md` | Pipeline commands (`/plan`…`/evolve`); `disable-model-invocation: true` |
-| Agents | `.claude/agents/*.md` | Subagent definitions; dispatches pass `model:` explicitly |
+| Agents | `.claude/agents/*.md` | Subagent definitions; dispatches pin a ROLE — `tier:` (`scout`/`build`/`deep`) + `effort:`, never a model name. `.claude/harness.json` → `models` is the one place a model is named; `/models` re-verifies it |
 | Hooks | `.claude/hooks/*.mjs` | Deterministic enforcement; wired in `.claude/settings.json` |
 | Gate config | `.claude/harness.json` | `stopGate` commands run by `stop-gate.mjs` |
 | Session state | `.claude/state/` | Machine state — `compact-snapshot.md`, `last-gate.json`; adopters gitignore it |
@@ -97,7 +97,7 @@ Every "load when" cell (CLAUDE.md context table, rule reference citations, skill
 | task-shaped | `any export work (CSV/PDF/XLSX)` — name the operation |
 | diff-driven | `<glob> files in diff` |
 | plan-driven | `plan frontmatter complexity: M+` |
-| argument-driven | `$ARGUMENTS contains <token>` |
+| argument-driven | `invocation argument contains <token>` |
 
 Combine with `+` (AND) or `,` (OR), two clauses max — more logic belongs inside the loaded file.
 

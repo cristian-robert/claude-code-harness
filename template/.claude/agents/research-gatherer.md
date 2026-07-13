@@ -2,6 +2,7 @@
 name: research-gatherer
 description: "Read-only external-docs gatherer: reads official documentation + web for a specific tool@version per the dispatcher's brief and returns a structured, sourced summary. Use from /research; use scout for codebase questions."
 tools: WebFetch, WebSearch, Read
+tier: build
 model: sonnet
 maxTurns: 20
 ---

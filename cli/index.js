@@ -15,6 +15,14 @@ switch (command) {
       process.exit(1);
     });
     break;
+  case 'emit':
+    try {
+      require('./emit.js').main();
+    } catch (err) {
+      console.error('Error: ' + err.message);
+      process.exit(1);
+    }
+    break;
   case 'merge-settings': {
     const { spawnSync } = require('child_process');
     const result = spawnSync(
@@ -48,12 +56,13 @@ perfect-harness-engineering — the harness around Claude Code that makes it rel
 Usage:
   npx perfect-harness-engineering init             Install the harness payload into the current project
   npx perfect-harness-engineering update           Update payload files, preserving customizations (three-way merge)
+  npx perfect-harness-engineering emit             Re-derive .agents//.codex/ from the current .claude/ tree (codex targets only; no download/backup/prompt)
   npx perfect-harness-engineering merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
-  npx perfect-harness-engineering file-size-check  Lint always-loaded context (CLAUDE.md, rules, skills) against budgets
+  npx perfect-harness-engineering file-size-check  Lint always-loaded context (AGENTS.md/CLAUDE.md, rules, skills) against budgets
   npx perfect-harness-engineering --version        Show version
   npx perfect-harness-engineering --help           Show this help
 
-Then run /harness-init inside Claude Code to fit the payload to your project.
+Then run the harness-init skill in your agent (/harness-init in Claude Code, $harness-init in Codex) to fit the payload to your project.
 Docs: https://github.com/cristian-robert/claude-code-harness
     `);
     break;
