@@ -408,15 +408,21 @@ test('update.js records harness targets immediately after the .claude/ copy, bef
 test('init.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
   const src = fs.readFileSync(path.join(__dirname, 'init.js'), 'utf-8');
   const backupCopyIdx = src.indexOf("backupAndCopy(\n    path.join(sourceDir, 'template', '.claude')");
+  const installIdx = src.indexOf('installHarnessConfig(\n    targetDir');
   const writeIdx = src.indexOf('writeHarnessTargets(targetDir, targets)');
   const instructionFilesIdx = src.indexOf("var instructionFiles = [{ name: 'AGENTS.md' }]");
   assert.ok(backupCopyIdx !== -1, 'the .claude/ backupAndCopy call was not found where expected');
+  assert.ok(installIdx !== -1, 'the installHarnessConfig call was not found — harness.json would never be installed/merged');
   assert.ok(writeIdx !== -1, 'writeHarnessTargets(targetDir, targets) call not found');
   assert.ok(instructionFilesIdx !== -1, 'the instruction-file copy block was not found where expected');
+  // installHarnessConfig must run AFTER the copy (which skips harness.json) and BEFORE the
+  // instruction copy that can throw — otherwise a re-init could leave harness.json missing
+  // or the harness key unrecorded. Without asserting installHarnessConfig's presence here,
+  // deleting it would still pass (the exact vacuity that let init clobber configs silently).
   assert.ok(
-    backupCopyIdx < writeIdx && writeIdx < instructionFilesIdx,
-    'writeHarnessTargets must run between the .claude/ backupAndCopy and the instruction-file copy — found backupAndCopy@' +
-      backupCopyIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
+    backupCopyIdx < installIdx && installIdx < writeIdx && writeIdx < instructionFilesIdx,
+    'order must be backupAndCopy < installHarnessConfig < writeHarnessTargets < instruction copy — found backupAndCopy@' +
+      backupCopyIdx + ', installHarnessConfig@' + installIdx + ', writeHarnessTargets@' + writeIdx + ', instructionFiles@' + instructionFilesIdx
   );
   const callCount = src.split('writeHarnessTargets(targetDir, targets)').length - 1;
   assert.strictEqual(callCount, 1, 'writeHarnessTargets(targetDir, targets) must be called exactly once, found ' + callCount);

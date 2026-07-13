@@ -360,6 +360,7 @@ test('writeJsonAtomic preserves an existing file\'s 0600 permissions', function 
   fs.chmodSync(p, 0o600);
   writeJsonAtomic(p, { stopGate: ['npm test'] });
   assert.strictEqual(fs.statSync(p).mode & 0o777, 0o600, 'a private config must stay private after an atomic rewrite');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('writeJsonAtomic uses the default mode for a brand-new file (no crash on missing target)', function () {
@@ -368,6 +369,7 @@ test('writeJsonAtomic uses the default mode for a brand-new file (no crash on mi
   const p = path.join(dir, 'harness.json');
   writeJsonAtomic(p, { a: 1 });
   assert.ok(fs.existsSync(p), 'a new file is created');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');

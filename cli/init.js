@@ -10,7 +10,7 @@ const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
-const { installHarnessConfig } = require('./harness-config');
+const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -413,6 +413,19 @@ async function main() {
     console.log('');
   }
 
+  // Validate an EXISTING harness.json BEFORE the install touches any file. On a re-init,
+  // installHarnessConfig (below) parses and merges it — but backupAndCopy runs FIRST and
+  // mutates the rest of .claude/, so a malformed file discovered late would leave a
+  // half-applied re-init. Parse it up front and stop with nothing touched. Parity with
+  // update.js's preflight. A fresh project has no file: readHarnessConfig returns null.
+  try {
+    readHarnessConfig(targetDir);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    process.exit(1);
+    return;
+  }
+
   // From here the install writes to disk — run it under try/finally so the temp
   // dir is always cleaned up even if a copy throws (parity with update.js).
   try {
@@ -428,10 +441,12 @@ async function main() {
   // template's file; a RE-init MERGES — the user's existing keys win, the template
   // only contributes newly-shipped keys. Parity with update.js, so init and update
   // treat user config identically instead of one preserving and one resetting it.
-  installHarnessConfig(
+  var harnessDelta = installHarnessConfig(
     targetDir,
     path.join(sourceDir, 'template', '.claude', 'harness.json')
   );
+  stats.created += harnessDelta.created;
+  stats.updated += harnessDelta.updated;
 
   // Persist the harness choice IMMEDIATELY after — that install left harness.json
   // with no `harness` key (neither the template nor a legacy user file has one).

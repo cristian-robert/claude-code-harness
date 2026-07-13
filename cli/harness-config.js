@@ -67,7 +67,11 @@ function writeJsonAtomic(p, obj) {
     // Target does not exist yet — the default mode is correct for a new file.
   }
   try {
-    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n');
+    // Create the temp ALREADY at the target's mode, not at the default 0644 then narrowed
+    // later — otherwise the file's full contents sit world-readable for the write+fsync
+    // interval before the chmod. Passing `mode` sets the CREATE mode, so a 0600 config is
+    // never briefly readable. (umask only clears bits; 0600 has none for it to clear.)
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2) + '\n', priorMode !== null ? { mode: priorMode } : undefined);
     // Flush the bytes before publishing the name. Without this, a power loss can land the
     // rename while the temp file's contents are still in the page cache — atomically
     // publishing an empty file, which is the exact outcome this function exists to prevent.
@@ -77,6 +81,9 @@ function writeJsonAtomic(p, obj) {
     } finally {
       fs.closeSync(fd);
     }
+    // Belt-and-suspenders: an inherited umask could still have cleared a bit at create
+    // time, so pin the exact mode before publishing. Never a WIDENING window — the create
+    // mode above is already <= priorMode.
     if (priorMode !== null) fs.chmodSync(tmp, priorMode);
     fs.renameSync(tmp, p);
   } catch (e) {
