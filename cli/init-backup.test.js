@@ -209,6 +209,11 @@ function runTests() {
     // init #1 (fresh project): settings.json is CREATED, not backed up.
     var pheBefore1 = pheHere(RPROJ);
     var st1 = realInit.backupAndCopy(RSRC, RPC, RPROJ);
+    // backupAndCopy now SKIPS harness.json (it is user config); the real init flow
+    // installs it right after via installHarnessConfig. Mirror that here so the
+    // "PHE already here" marker (harness.json) exists on the re-init below — the same
+    // sequencing the CLI runs, not the old behaviour where the copy carried it.
+    require('./harness-config').installHarnessConfig(RPROJ, path.join(RSRC, 'harness.json'));
     var flag1 = realInit.shouldMergeUserSettings(pheBefore1, st1.backedUpFiles);
     reconcile(RPROJ, { userBackupJustCreated: flag1 });
     assert('init#1 flag is false (nothing to adopt)', flag1 === false);

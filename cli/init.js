@@ -10,6 +10,7 @@ const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+const { installHarnessConfig } = require('./harness-config');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -252,6 +253,15 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
         continue;
       }
 
+      // harness.json is USER CONFIG, not template content — it holds the stop gate,
+      // the protected base branch, work tracking and the model map. Copying the
+      // template over it on a RE-init would reset all of them (the exact bug fixed
+      // in update.js). installHarnessConfig installs-or-merges it after this copy,
+      // so a re-init never even briefly wipes the user's file.
+      if (entry.name === 'harness.json') {
+        continue;
+      }
+
       if (entry.isDirectory()) {
         copy(srcPath, destPath);
       } else if (entry.isFile()) {
@@ -414,8 +424,17 @@ async function main() {
     targetDir
   );
 
-  // Persist the harness choice IMMEDIATELY after the .claude/ copy — that
-  // copy just installed the framework's harness.json (no `harness` key).
+  // Install harness.json (skipped by the copy above): a fresh project gets the
+  // template's file; a RE-init MERGES — the user's existing keys win, the template
+  // only contributes newly-shipped keys. Parity with update.js, so init and update
+  // treat user config identically instead of one preserving and one resetting it.
+  installHarnessConfig(
+    targetDir,
+    path.join(sourceDir, 'template', '.claude', 'harness.json')
+  );
+
+  // Persist the harness choice IMMEDIATELY after — that install left harness.json
+  // with no `harness` key (neither the template nor a legacy user file has one).
   // Recording it right here, before anything else can throw (EACCES in the
   // instruction-file copy, a settings-merge failure, ...), closes the crash
   // window where a project's harness choice could be silently lost: a later

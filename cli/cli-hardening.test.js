@@ -376,16 +376,15 @@ test('the eslint flat-config fragment ships with the payload', () => {
 });
 
 // ─── Minor 2: harness.json crash window ─────────────────────────────────────
-// backupAndCopy(.claude/) overwrites harness.json with the framework default
-// (no `harness` key); writeHarnessTargets re-merges the recorded targets
-// into it. If anything throws in the gap between those two calls (EACCES in
-// the instruction-file copy, a settings-merge failure, ...), the project is
-// left with a harness.json that has no `harness` key -- the next `update`
-// then prints "No harness recorded -- assuming Claude Code" and silently
-// drops Codex. Fix: writeHarnessTargets runs IMMEDIATELY after
-// backupAndCopy, before anything else that could throw. Pinned structurally
-// (source-order), since exercising the crash itself would require faking a
-// mid-flight filesystem failure inside a full init/update run.
+// backupAndCopy(.claude/) SKIPS harness.json (it is user config); installHarnessConfig
+// then installs-or-merges it, and writeHarnessTargets records the resolved targets. If
+// anything throws in the gap before the targets are recorded (EACCES in the instruction
+// copy, a settings-merge failure, ...), the project could be left with a harness.json
+// that has no `harness` key -- the next `update` then prints "No harness recorded --
+// assuming Claude Code" and silently drops Codex. Fix: installHarnessConfig +
+// writeHarnessTargets run IMMEDIATELY after backupAndCopy, before anything else that can
+// throw. Pinned structurally (source-order) below, since faking a mid-flight filesystem
+// failure inside a full init/update run is impractical.
 
 test('update.js records harness targets immediately after the .claude/ copy, before anything else can throw', () => {
   const src = fs.readFileSync(path.join(__dirname, 'update.js'), 'utf-8');
@@ -423,28 +422,39 @@ test('init.js records harness targets immediately after the .claude/ copy, befor
   assert.strictEqual(callCount, 1, 'writeHarnessTargets(targetDir, targets) must be called exactly once, found ' + callCount);
 });
 
-// Dynamic companion to the structural checks above: prove the INVARIANT the
-// ordering exists for -- once backupAndCopy + writeHarnessTargets have both
-// run, the harness key is durably recorded, independent of anything that
-// happens afterward (simulated here by simply not running anything after).
-test('harness.json retains the harness key immediately after backupAndCopy + writeHarnessTargets (no later step required)', () => {
+// Dynamic companion: exercise the ACTUAL update sequence — backupAndCopy (skips
+// harness.json) → installHarnessConfig (merge) → writeHarnessTargets — against an
+// EXISTING user harness.json, and prove both halves of the invariant: the user's
+// config survives the copy AND the harness key is recorded. The old version called
+// only backupAndCopy + writeHarnessTargets and passed vacuously (writeHarnessTargets
+// creates the file), never touching the installHarnessConfig merge that now carries
+// the risk. This version fails if the merge ever drops a user key or the copy clobbers.
+test('the real update sequence records targets AND preserves the user\'s existing harness.json config', () => {
   const dir = path.join(TMP, 'harness-crash-window');
   fs.mkdirSync(path.join(dir, '.claude'), { recursive: true });
 
   delete require.cache[require.resolve('./update.js')];
   delete require.cache[require.resolve('./harness-targets.js')];
+  delete require.cache[require.resolve('./harness-config.js')];
   const { backupAndCopy } = require('./update.js');
   const { writeHarnessTargets, readHarnessTargets } = require('./harness-targets.js');
+  const { installHarnessConfig } = require('./harness-config.js');
+
+  // A user who has configured a stop gate and refreshed their model map.
+  fs.writeFileSync(
+    path.join(dir, '.claude', 'harness.json'),
+    JSON.stringify({ stopGate: ['npm test'], models: { checkedAt: '2030-01-01' } })
+  );
 
   const repoRoot = path.join(__dirname, '..');
   backupAndCopy(path.join(repoRoot, 'template', '.claude'), path.join(dir, '.claude'), dir);
+  installHarnessConfig(dir, path.join(repoRoot, 'template', '.claude', 'harness.json'));
   writeHarnessTargets(dir, ['claude', 'codex']);
 
-  assert.deepStrictEqual(
-    readHarnessTargets(dir),
-    ['claude', 'codex'],
-    'harness.json must carry the recorded targets right after these two calls, with nothing else run yet'
-  );
+  const after = JSON.parse(fs.readFileSync(path.join(dir, '.claude', 'harness.json'), 'utf-8'));
+  assert.deepStrictEqual(readHarnessTargets(dir), ['claude', 'codex'], 'the recorded targets must be present');
+  assert.deepStrictEqual(after.stopGate, ['npm test'], 'the user stop gate must survive the copy+merge');
+  assert.strictEqual(after.models.checkedAt, '2030-01-01', 'the user model refresh must survive the copy+merge');
 });
 
 // Cleanup
