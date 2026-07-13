@@ -50,13 +50,51 @@ assert('harness.json without harness key -> null (legacy project)', readHarnessT
 fs.writeFileSync(PROJ_HARNESS, '{ not json');
 assert('malformed harness.json -> null (no throw)', readHarnessTargets(PROJ) === null);
 
-// Finding 3: unrecognised harness names must not round-trip as if they were valid —
-// downstream code (init.js/update.js) branches on these values with indexOf('codex').
-fs.writeFileSync(PROJ_HARNESS, JSON.stringify({ harness: ['foo'] }));
-assert('unknown harness name -> null', readHarnessTargets(PROJ) === null);
+fs.writeFileSync(PROJ_HARNESS, JSON.stringify({ harness: ['claude', 'codex'] }));
+assert('valid targets -> sorted array', JSON.stringify(readHarnessTargets(PROJ)) === '["claude","codex"]');
+fs.writeFileSync(PROJ_HARNESS, JSON.stringify({ harness: ['codex', 'claude'] }));
+assert('valid targets are sorted on read', JSON.stringify(readHarnessTargets(PROJ)) === '["claude","codex"]');
 
-fs.writeFileSync(PROJ_HARNESS, JSON.stringify({ harness: ['claude', 'bogus'] }));
-assert('mixed known/unknown harness names -> null', readHarnessTargets(PROJ) === null);
+// CRITICAL: an ABSENT `harness` key and a PRESENT-but-INVALID one are different answers.
+// Absent is a legacy project and update's "assume claude-only" default is correct for it.
+// Invalid is a BROKEN config, and every caller's null-handling is destructive when applied
+// to it: update.js reads null as legacy, OVERWRITES `harness` with ['claude'], then calls
+// cleanupDroppedTargets -- which DELETES .agents/ and .codex/. So returning null for a typo
+// like ["codx"] silently destroyed the user's generated Codex tree and rewrote their config
+// to agree. Present-but-invalid must THROW, so the caller aborts having deleted nothing.
+console.log('readHarnessTargets rejects a present-but-invalid harness value:');
+
+var INVALID_VALUES = [
+  { label: 'a typo\'d harness name (["codx"])', value: ['codx'] },
+  { label: 'an unknown harness name (["foo"])', value: ['foo'] },
+  { label: 'a mix of known and unknown (["claude","bogus"])', value: ['claude', 'bogus'] },
+  { label: 'an empty array ([])', value: [] },
+  { label: 'a bare string ("claude", not an array)', value: 'claude' },
+  { label: 'an object ({claude:true})', value: { claude: true } },
+  { label: 'null', value: null },
+  { label: 'a number (1)', value: 1 },
+  { label: 'a non-string array member ([1])', value: [1] },
+];
+
+for (var iv = 0; iv < INVALID_VALUES.length; iv++) {
+  var badCase = INVALID_VALUES[iv];
+  var raw = JSON.stringify({ stopGate: ['npm test'], harness: badCase.value }, null, 2);
+  fs.writeFileSync(PROJ_HARNESS, raw);
+  var invalidErr = threw((function (p) { return function () { readHarnessTargets(p); }; })(PROJ));
+  assert('throws on ' + badCase.label, invalidErr instanceof Error);
+  assert(
+    'error for ' + badCase.label + ' names the bad value',
+    !!invalidErr && invalidErr.message.indexOf(JSON.stringify(badCase.value)) !== -1
+  );
+  assert(
+    'error for ' + badCase.label + ' names the valid harnesses',
+    !!invalidErr && invalidErr.message.indexOf('claude') !== -1 && invalidErr.message.indexOf('codex') !== -1
+  );
+  assert(
+    'reading ' + badCase.label + ' does not modify the file',
+    fs.readFileSync(PROJ_HARNESS, 'utf-8') === raw
+  );
+}
 
 console.log('writeHarnessTargets:');
 // Preserving other keys is the whole point — harness.json holds the stop gate.

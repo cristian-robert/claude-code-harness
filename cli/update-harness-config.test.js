@@ -207,6 +207,85 @@ test('update FAILS LOUDLY on a malformed harness.json and leaves it untouched', 
   );
 });
 
+// ─── An invalid `harness` value must not be read as a destructive instruction ──
+//
+// The defect: readHarnessTargets returned null for an ABSENT `harness` key AND for a
+// PRESENT-but-invalid one. update read null as "legacy project", overwrote `harness` with
+// ['claude'], and handed that to cleanupDroppedTargets -- which DELETES .agents/ and .codex/.
+// So a one-character typo silently deleted the user's generated Codex tree and rewrote their
+// config to agree with the deletion. Fail-open on a destructive path.
+
+test('a typo in `harness` FAILS LOUDLY — it never deletes the Codex payload', () => {
+  const typo = installProject('typo');
+
+  // The install really did generate the Codex tree -- otherwise "not deleted" proves nothing.
+  assert.ok(fs.existsSync(path.join(typo, '.codex')), 'precondition: init emitted .codex/');
+  assert.ok(fs.existsSync(path.join(typo, '.agents')), 'precondition: init emitted .agents/');
+
+  const config = Object.assign({}, USER_CONFIG, { harness: ['codx'] }); // codex, mistyped
+  writeHarness(typo, config);
+  const raw = fs.readFileSync(path.join(typo, HARNESS_REL), 'utf-8');
+
+  const run = runCliExpectingFailure(['update'], typo, '');
+
+  assert.notStrictEqual(run.status, 0, 'update must exit non-zero on an invalid `harness` value');
+  assert.ok(
+    /codx/.test(run.output) && /claude/.test(run.output) && /codex/.test(run.output),
+    'the failure must name the bad value AND the valid ones, got: ' + run.output
+  );
+  assert.ok(fs.existsSync(path.join(typo, '.codex')), '.codex/ was DELETED because of a typo');
+  assert.ok(fs.existsSync(path.join(typo, '.agents')), '.agents/ was DELETED because of a typo');
+  assert.strictEqual(
+    fs.readFileSync(path.join(typo, HARNESS_REL), 'utf-8'),
+    raw,
+    'a `harness` value we cannot act on must be left EXACTLY as the user wrote it, never ' +
+      'silently rewritten to the value that justifies deleting their payload'
+  );
+});
+
+test('an empty `harness` array FAILS LOUDLY rather than defaulting', () => {
+  const empty = installProject('empty-harness');
+  writeHarness(empty, Object.assign({}, USER_CONFIG, { harness: [] }));
+
+  const run = runCliExpectingFailure(['update'], empty, '');
+  assert.notStrictEqual(run.status, 0, 'update must exit non-zero on an empty `harness` array');
+  assert.ok(fs.existsSync(path.join(empty, '.codex')), '.codex/ was deleted for an empty array');
+  assert.deepStrictEqual(readHarness(empty).harness, [], '`harness` was silently rewritten');
+});
+
+test('a `harness` string (not an array) FAILS LOUDLY rather than defaulting', () => {
+  const str = installProject('string-harness');
+  writeHarness(str, Object.assign({}, USER_CONFIG, { harness: 'claude' }));
+
+  const run = runCliExpectingFailure(['update'], str, '');
+  assert.notStrictEqual(run.status, 0, 'update must exit non-zero on a `harness` string');
+  assert.ok(fs.existsSync(path.join(str, '.codex')), '.codex/ was deleted for a bad type');
+  assert.strictEqual(readHarness(str).harness, 'claude', '`harness` was silently rewritten');
+});
+
+// The other half: a genuinely ABSENT key is the pre-multi-harness migration path, and it
+// must keep working. This is the case the null-return exists for, and the fix must not
+// break it while closing the invalid-value hole.
+test('an ABSENT `harness` key still migrates to claude-only (legacy project)', () => {
+  const legacy = installProject('legacy');
+
+  // A project installed before multi-harness support: no `harness` key, no generated trees.
+  const trimmed = Object.assign({}, USER_CONFIG);
+  delete trimmed.harness;
+  writeHarness(legacy, trimmed);
+  fs.rmSync(path.join(legacy, '.codex'), { recursive: true, force: true });
+  fs.rmSync(path.join(legacy, '.agents'), { recursive: true, force: true });
+
+  const out = runCli(['update'], legacy, '');
+  assertLocalFallback(out);
+
+  assert.ok(/No harness recorded/.test(out), 'the legacy default must still announce itself');
+  const after = readHarness(legacy);
+  assert.deepStrictEqual(after.harness, ['claude'], 'the assumed target must be materialized');
+  assert.deepStrictEqual(after.stopGate, USER_CONFIG.stopGate, 'migration clobbered stopGate');
+  assert.deepStrictEqual(after.baseBranch, USER_CONFIG.baseBranch, 'migration clobbered baseBranch');
+});
+
 // ─── A write that dies partway must not take harness.json with it ────────────
 //
 // harness.json is no longer backed up by update (it is user config, not template content),

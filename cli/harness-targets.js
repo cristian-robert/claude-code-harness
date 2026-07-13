@@ -34,6 +34,28 @@ function harnessJsonPath(projectRoot) {
   return path.join(projectRoot, '.claude', 'harness.json');
 }
 
+function invalidHarnessError(p, value) {
+  return new Error(
+    p + ' has an invalid "harness" value: ' + JSON.stringify(value) + '. It must be a ' +
+    'non-empty array of ' + KNOWN_HARNESS_NAMES.join(' / ') + ' (e.g. ["claude"], ' +
+    '["claude","codex"]). Fix the file by hand, or re-run `init` to choose again — ' +
+    'refusing to guess, because guessing rewrites this key and deletes the generated ' +
+    'payload of any harness the guess leaves out.'
+  );
+}
+
+// The recorded harness targets, or null when the project never recorded any.
+//
+// ABSENT and INVALID are different answers and must not collapse into one. An absent
+// `harness` key is a project installed before multi-harness support: null, and the caller
+// migrates it to claude-only. That path is a legitimate default and has to keep working.
+//
+// A PRESENT-but-invalid value is not a default — it is a broken config, and every caller's
+// null-handling is destructive when applied to it. `update` reads null as "legacy project",
+// OVERWRITES the key with ['claude'], and hands that to cleanupDroppedTargets, which deletes
+// .agents/ and .codex/ outright. So a one-character typo (["codx"]) silently deleted the
+// user's generated Codex tree and rewrote their config to agree with the deletion. Fail
+// LOUDLY instead: the caller aborts with nothing written and nothing deleted.
 function readHarnessTargets(projectRoot) {
   var p = harnessJsonPath(projectRoot);
   if (!fs.existsSync(p)) return null;
@@ -41,16 +63,24 @@ function readHarnessTargets(projectRoot) {
   try {
     parsed = JSON.parse(fs.readFileSync(p, 'utf-8'));
   } catch (e) {
-    // A malformed harness.json must not crash init/update — the caller falls
-    // back to asking (init) or to claude-only (update).
+    // Unparseable JSON is not a bad `harness` value — it is a bad FILE, and it is caught
+    // upstream where it can be reported properly (update.js validates via
+    // harness-config.readHarnessConfig before it touches anything). Reads stay total here.
     return null;
   }
-  if (!parsed || !Array.isArray(parsed.harness) || parsed.harness.length === 0) return null;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  if (!Object.prototype.hasOwnProperty.call(parsed, 'harness')) return null; // legacy project
+
+  if (!Array.isArray(parsed.harness) || parsed.harness.length === 0) {
+    throw invalidHarnessError(p, parsed.harness);
+  }
   var sorted = parsed.harness.slice().sort();
   for (var i = 0; i < sorted.length; i++) {
     // An unrecognised value means the file isn't something we can act on —
     // downstream code trusts this array and branches on indexOf('codex').
-    if (KNOWN_HARNESS_NAMES.indexOf(sorted[i]) === -1) return null;
+    if (KNOWN_HARNESS_NAMES.indexOf(sorted[i]) === -1) {
+      throw invalidHarnessError(p, parsed.harness);
+    }
   }
   return sorted;
 }

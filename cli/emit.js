@@ -28,7 +28,17 @@ function main() {
     return;
   }
 
-  var targets = readHarnessTargets(projectRoot);
+  // readHarnessTargets throws on a present-but-INVALID `harness` value (a typo like
+  // ["codx"]) — distinct from an absent key (legacy → null). A bad value must stop
+  // emit with a clean message, never a raw stack trace and never a wrong guess.
+  var targets;
+  try {
+    targets = readHarnessTargets(projectRoot);
+  } catch (cfgErr) {
+    console.error(cfgErr.message);
+    process.exit(1);
+    return;
+  }
   if (!targets || targets.indexOf('codex') === -1) {
     console.log('codex is not a harness target for this project (see .claude/harness.json) -- nothing to emit.');
     return;

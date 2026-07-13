@@ -12,6 +12,10 @@
 
 const fs = require('fs');
 const path = require('path');
+// harness.json is user config holding the stop gate; a torn write can destroy it. Reuse
+// the ONE atomic writer (temp + fsync + rename) rather than a second bare writeFileSync.
+// Safe one-way edge: harness-config depends only on fs/path/crypto, never on this module.
+const { writeJsonAtomic } = require('./harness-config');
 
 // Implementer roles, weakest to strongest. `review` is deliberately NOT here — it is
 // derived from who implemented (see reviewerRoleFor).
@@ -149,9 +153,7 @@ function writeModels(projectRoot, models) {
     current = parsed;
   }
   current.models = models;
-  var dir = path.dirname(p);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(current, null, 2) + '\n');
+  writeJsonAtomic(p, current);
 }
 
 // Unknown, missing, or unparseable checkedAt is STALE. A map whose freshness we cannot

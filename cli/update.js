@@ -160,21 +160,28 @@ async function main() {
   var projectRoot = process.cwd();
   var previousVersion = getVersion(projectRoot);
 
-  // Validate .claude/harness.json BEFORE anything is downloaded or written. It is the
-  // user's config (stop gate, protected base branch, work tracking, model map), and the
-  // update merges INTO it — so a file we cannot parse has to stop the run here, with
-  // nothing touched, rather than be silently replaced by the template's defaults. That
-  // replacement is the worst outcome available: it disarms the stop gate without a word.
+  // Validate .claude/harness.json BEFORE anything is downloaded, written or DELETED. It is
+  // the user's config (stop gate, protected base branch, work tracking, model map), and the
+  // update merges INTO it — so a file we cannot parse, or a `harness` key we cannot act on,
+  // has to stop the run here, with nothing touched.
+  //
+  // Both halves are destructive if waved through. An unparseable file silently replaced by
+  // the template's defaults disarms the stop gate without a word. And an invalid `harness`
+  // value (a typo like ["codx"]) read as "no harness recorded" would take the legacy default
+  // below — rewriting the key to ['claude'] and then letting cleanupDroppedTargets delete
+  // .agents/ and .codex/ to match. Neither may be guessed at.
+  var targets = null;
   try {
     readHarnessConfig(projectRoot);
+    targets = readHarnessTargets(projectRoot);
   } catch (cfgErr) {
     console.error(cfgErr.message);
     process.exit(1);
   }
 
-  // Non-interactive: the harness choice was made at init. A project installed
-  // before multi-harness support has no `harness` key — it is Claude-only.
-  var targets = readHarnessTargets(projectRoot);
+  // Non-interactive: the harness choice was made at init. A project installed before
+  // multi-harness support has no `harness` key at all — it is Claude-only. This default is
+  // reachable ONLY from a genuinely absent key; an invalid one threw above.
   if (targets === null) {
     targets = ['claude'];
     console.log('No harness recorded — assuming Claude Code. Re-run `init` to add Codex.');
