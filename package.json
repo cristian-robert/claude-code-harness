@@ -1,6 +1,6 @@
 {
   "name": "perfect-harness-engineering",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "The harness around Claude Code that makes it reliable — tested hooks, two-tier context, a PIV+E pipeline with an agile delivery layer, doc-grounded research reuse, and a vault-linked knowledge loop. Installs a hardened .claude/ payload.",
   "bin": {
     "perfect-harness-engineering": "cli/index.js"
@@ -17,7 +17,7 @@
     "test:init": "node cli/init-backup.test.js",
     "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/vault-config.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js",
     "test:hooks": "node template/.claude/hooks/smoke-test.mjs",
-    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/vault-config.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js && node template/.claude/hooks/smoke-test.mjs"
+    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/vault-config.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js && node cli/skill-preview-guards.test.js && node template/.claude/hooks/smoke-test.mjs"
   },
   "engines": {
     "node": ">=18"

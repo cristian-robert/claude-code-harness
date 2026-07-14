@@ -14,7 +14,7 @@ Ceremonies edit item/sprint files in the TRACKING ROOT (work-tracking.md) — mi
 
 ## Current state (cwd preview — from a worktree resolve `<tracking-root>/sprints` per work-tracking.md; the `/sprint plan` step is authoritative)
 
-!`ls sprints/ 2>/dev/null`
+!`ls sprints/ 2>/dev/null || echo "(no sprints/ yet)"`
 
 Next sprint `<n>` = highest existing number + 1 (none → 1). The invocation argument (the text typed after the command) picks the ceremony; missing → ask which.
 
