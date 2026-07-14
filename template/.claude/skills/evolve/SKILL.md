@@ -29,7 +29,7 @@ In scrum mode this IS the retrospective (dispatched by `/sprint close`).
 | Place-specific | That directory's `AGENTS.md` |
 | Repeated manual prompt (3+ times) | New skill |
 | Structural change to record | Dispatch `architect-agent` **RECORD** → updates `projects/<name>/architecture.md` + `decisions.md` in the vault (no vault → skip, say so) |
-| Generalizes beyond this project | Vault: inbox/raw capture or project wiki, per vault conventions |
+| Generalizes beyond this project | Vault: inbox/raw or project wiki (agents auto-append there mid-work); promotion to wiki//agent-kb/ happens HERE and only here, ask-first — `.claude/references/vault-protocol.md` |
 | Everything else | Drop — a rule that doesn't earn its tokens taxes every future session |
 
 ## 3. Ratchet rule

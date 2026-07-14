@@ -370,6 +370,19 @@ console.log("session-start.mjs");
   check("WIP breach flagged in standup", res.code === 0 && ctx.includes("WIP 2/2"));
 }
 {
+  // Vault = second brain: a configured vault surfaces ONE orientation line; no key, no line.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-vault-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ vault: { mode: "existing", path: "/tmp/x-vault" } }));
+  const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
+  check("vault configured -> vault line present", res.code === 0 && ctx.includes("Vault: /tmp/x-vault"));
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({}));
+  const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
+  check("no vault key -> no vault line", off.code === 0 && !offCtx.includes("Vault:"));
+}
+{
   // Uninitialized template: session-start nudges toward /harness-init.
   const tmp = mkdtempSync(join(tmpdir(), "phe-uninit-"));
   writeFileSync(join(tmp, "CLAUDE.md"), "# <Project Name>\n<placeholder>\n");

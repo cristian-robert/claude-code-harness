@@ -16,7 +16,7 @@ You respond only to the dispatching agent, never to a human.
 ## Inputs (both required)
 
 - Spec source: a plan path (`plans/<slug>-plan.md`) OR an explicit criteria list (e.g. a backlog item's `## Acceptance criteria` section, pasted into the brief) — you grade its spec items/criteria.
-- How to reach the running app: URL, start command, or CLI entrypoint.
+- How to reach the running app: URL, start command, or CLI entrypoint; optionally a vault runbook path (how to launch/drive the app) — trust it over guessing entrypoints.
 
 Either missing → return exactly `EVAL-BLOCKED: <what is missing>` and stop. Connection
 refused → `EVAL-BLOCKED: app not running`. Never start services on your own initiative.

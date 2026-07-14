@@ -38,6 +38,7 @@ The board is a VIEW computed now — never a committed index file.
 
 ## refine <id> — BA hat drafts, PO (the human) decides
 
+0. RETRIEVE prior art (vault-protocol: `.claude/references/vault-protocol.md`): search `projects/<name>/decisions.md` + `wiki/` for decisions touching this item's surface; surface conflicts/duplicates to the PO before drafting AC. No vault → say so and continue.
 1. Read the item. Tighten Story + AC: vague → observable, oversize → split proposal, uncited Context → sourced pointers.
 2. Any scope change (AC added/removed/reworded, split, type change) → present a before/after diff and WAIT for approval before writing.
 3. Priority and ordering are ALWAYS the human's call — propose with a one-line reason; never set unilaterally.

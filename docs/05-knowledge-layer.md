@@ -56,6 +56,16 @@ closes every pipeline run by proposing the harvest, ask-first — session lesson
 `projects/<name>/` (or `inbox/` if raw); anything that generalizes → `wiki/`, or `agent-kb/`
 when it's about building agents. Index Law applies at every write.
 
+## Second brain loop — retrieve/capture at every stage
+
+Every stage that can benefit RETRIEVEs from the vault before acting and CAPTUREs confirmed
+knowledge back, per one contract: `.claude/references/vault-protocol.md` (load-on-cite). The
+retrieval ladder tries the official `obsidian` CLI first (`search:context` scoped to
+`projects/<name>/`, `wiki/`, or `agent-kb/`), degrading to `_index.md` file reads on any error —
+never both for one lookup. Auto-writes are confined to `inbox/` and `projects/<name>/` (Index Law
+applies); promotion to evergreen `wiki/`/`agent-kb/` stays ask-first, owned by `/evolve`; the
+reviewer stays vault-isolated. Spec: `docs/design/2026-07-14-vault-second-brain.md`.
+
 ## Frontmatter contract
 
 Universal: `type`, `updated: YYYY-MM-DD`, lowercase-hyphenated `tags`. Types: `index`

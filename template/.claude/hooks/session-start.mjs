@@ -71,6 +71,12 @@ async function main() {
       const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
       const n = Array.isArray(cfg.stopGate) ? cfg.stopGate.length : 0;
       lines.push(n ? `Stop gate: ${n} check(s) armed — the turn cannot end red.` : "Stop gate: not configured (set stopGate in .claude/harness.json).");
+      // Vault = the agent's second brain. One line so every fresh session knows it exists;
+      // the protocol reference carries the how (retrieval ladder, write policy).
+      const v = cfg.vault;
+      if (v && v.mode === "existing" && typeof v.path === "string" && v.path) {
+        lines.push(`Vault: ${v.path} — RETRIEVE before structural work, CAPTURE after; protocol: .claude/references/vault-protocol.md`);
+      }
       // A model map nobody has re-checked in a month is how a retired ID gets dispatched.
       // Duplicated (not imported) from cli/model-tiers.js on purpose: hooks are ESM and must
       // stay dependency-free and copy-safe into any adopter repo. Keep the two in sync.
