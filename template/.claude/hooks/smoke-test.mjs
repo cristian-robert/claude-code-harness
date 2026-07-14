@@ -158,6 +158,19 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("decoy `git -C` in echo does not bypass the commit deny", denies(bypass));
 }
 {
+  // Worktrees stay INSIDE the project root — a sibling folder (../wt-x) appearing
+  // next to the repo reads as the agent going rogue on the user's filesystem.
+  // Traces to: /implement's old ../wt-<slug> convention, 2026-07-14 incident.
+  const repo = mkdtempSync(join(tmpdir(), "phe-wtguard-"));
+  execFileSync("git", ["init", "-q", "-b", "master", repo]);
+  const esc = runHook("guard.mjs", { ...base, cwd: repo, tool_name: "Bash", tool_input: { command: "git worktree add -b feat/x ../wt-x" } });
+  check("denies git worktree add escaping the project root", denies(esc));
+  const inRepo = runHook("guard.mjs", { ...base, cwd: repo, tool_name: "Bash", tool_input: { command: "git worktree add -b feat/x .worktrees/x" } });
+  check("allows git worktree add inside .worktrees/", !denies(inRepo));
+  const list = runHook("guard.mjs", { ...base, cwd: repo, tool_name: "Bash", tool_input: { command: "git worktree list --porcelain" } });
+  check("git worktree list stays allowed (hooks depend on it)", !denies(list));
+}
+{
   // A -C-like token inside the commit MESSAGE must not steer resolution away
   // from the real repo — code commit on master stays denied (Opus finding).
   const repo = mkdtempSync(join(tmpdir(), "phe-msgflag-"));
