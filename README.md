@@ -57,7 +57,31 @@ Codex support in this release is **guidance-only**: instructions, skills, and su
 
 Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
 
-Then work through the pipeline: `/plan-work` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review-branch`, `/evolve`. The superpowers plugin is the execution discipline inside each stage (skills degrade to inline fallbacks without it).
+## Workflow
+
+Day zero, once per project: `npx perfect-harness-engineering init`, then `/harness-init` inside Claude Code. After that there is no manual "prime" step — the `session-start.mjs` hook injects branch, dirty files, the latest plan, and gate state into every new session.
+
+Per work item — the PIV+E loop. Every stage's state lives on disk, never in the chat window:
+
+| Step | Command | Writes to disk |
+|---|---|---|
+| 0 · Track (optional) | `/backlog` new → refine → next | `backlog/<id>-<slug>.md` — the single home of acceptance criteria |
+| 1 · Plan | `/plan-work backlog/<id>-<slug>.md` (or a brain dump) | `plans/<slug>-plan.md` |
+| 2 · Reset | `/clear` | — (fresh session; the plan file IS the handoff) |
+| 3 · Implement | `/implement plans/<slug>-plan.md` | code on a feature branch + `reports/<slug>-implementation-report.md` |
+| 4 · Validate | `/validate` | GATE GREEN/RED verdict |
+| 5 · Review | `/review-branch` | `reports/<slug>-review.md` — PASS / REQUEST_CHANGES |
+| 6 · Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence; the human verdict |
+| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns |
+
+Merge/PR happens after review PASS (superpowers `finishing-a-development-branch` owns the mechanics). Scrum mode adds `/sprint plan` / `/sprint close` around the loop. The superpowers plugin is the execution discipline inside each stage; skills degrade to inline fallbacks without it.
+
+Anytime:
+
+- `/handoff` — context running low mid-task: write the handoff artifact, `/clear`, resume fresh.
+- `/research <tool>[@version]` — before coding against an external library; caches docs in the vault.
+- `/models` — when session-start warns the model map is stale.
+- A diff you can describe in one sentence skips the ceremony entirely (routing rule in `00-core.md`).
 
 ## Maintain
 
