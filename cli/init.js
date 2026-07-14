@@ -584,7 +584,7 @@ async function main() {
     console.log('  Backed up: ' + stats.backedUp + ' files (saved as .backup)');
   }
   console.log('');
-  console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan …/research)');
+  console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan-work …/research)');
   console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer');
   console.log('  .claude/rules/       always-on core + paths-scoped domain rules');
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
@@ -599,7 +599,7 @@ async function main() {
   }
   if (targets.indexOf('codex') !== -1) {
     console.log('  Codex: instructions are in AGENTS.md. Run $harness-init in Codex — it fits the payload to your stack and arms the gate.');
-    console.log('  Pipeline skills are invocable as $plan, $implement, $validate, $review.');
+    console.log('  Pipeline skills are invocable as $plan-work, $implement, $validate, $review-branch.');
     console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — after $harness-init (or any later hand-edit of .claude/), run `npx perfect-harness-engineering emit` to push the changes into the Codex tree. `update` is NOT a substitute — it reverts .claude/ to the framework template before re-emitting.');
     console.log('  Enforcement hooks are not wired for Codex yet (guidance-only).');
   }

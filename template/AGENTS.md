@@ -19,15 +19,15 @@
 | Stage | Command | Writes to disk |
 |---|---|---|
 | Backlog | `/backlog` new·refine·board·next | `backlog/<id>-<slug>.md` — the single home of acceptance criteria |
-| Plan | `/plan backlog/<id>-<slug>.md` (or brain dump) | `plans/<slug>-plan.md` |
+| Plan | `/plan-work backlog/<id>-<slug>.md` (or brain dump) | `plans/<slug>-plan.md` |
 | Implement | `/implement plans/<slug>-plan.md` | code + `reports/<slug>-implementation-report.md` |
 | Validate | `/validate` | verdict (GATE GREEN/RED) |
-| Review | `/review` | `reports/<slug>-review.md` |
+| Review | `/review-branch` | `reports/<slug>-review.md` |
 | Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence → item `accepted` |
 | Evolve | `/evolve` | rule/vault updates (ask-first); scrum: this is the retro |
 | Sprint (scrum mode) | `/sprint` plan·close | `sprints/<n>.md` |
 
-**Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); BA/PM draft, refine, and PROPOSE backlog order (the PO decides priority and order), the Architect hat designs in `/plan`, Dev owns `/implement`, QA owns `/validate` + runtime checks, the reviewer agent brings fresh eyes (with a security lens on sensitive diffs — `/review` invokes the global `security-audit` skill when available, else the reviewer's security checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.
+**Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); BA/PM draft, refine, and PROPOSE backlog order (the PO decides priority and order), the Architect hat designs in `/plan-work`, Dev owns `/implement`, QA owns `/validate` + runtime checks, the reviewer agent brings fresh eyes (with a security lens on sensitive diffs — `/review-branch` invokes the global `security-audit` skill when available, else the reviewer's security checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.
 
 Plan and Implement run in **separate sessions** (`/clear` between): a fresh context executing a written plan beats a long session's accumulated bias. Plans must pass the no-prior-knowledge test — executable by an agent that never saw this conversation.
 

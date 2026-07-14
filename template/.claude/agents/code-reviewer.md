@@ -1,6 +1,6 @@
 ---
 name: code-reviewer
-description: "Reviews a diff against its plan and the repo's rules. Dispatched by /review; returns a machine-parseable verdict."
+description: "Reviews a diff against its plan and the repo's rules. Dispatched by /review-branch; returns a machine-parseable verdict."
 tools: Read, Grep, Glob, Bash
 effort: xhigh
 memory: project

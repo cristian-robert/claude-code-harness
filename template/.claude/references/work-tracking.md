@@ -1,6 +1,6 @@
 # Work tracking — backend adapter contract
 
-Read by /backlog, /plan, /implement, /review, /accept, /sprint before any tracking operation. One canonical item model (`.claude/references/item-template.md`); the backend only changes where state is mirrored. Chosen once at /harness-init.
+Read by /backlog, /plan-work, /implement, /review-branch, /accept, /sprint before any tracking operation. One canonical item model (`.claude/references/item-template.md`); the backend only changes where state is mirrored. Chosen once at /harness-init.
 
 ## Config (`.claude/harness.json`)
 
@@ -20,7 +20,7 @@ Read by /backlog, /plan, /implement, /review, /accept, /sprint before any tracki
 
 ## The tracking root — items live OUTSIDE the code branches
 
-`backlog/` and `sprints/` live in the PRIMARY checkout only (the tracking root — first line of `git worktree list`; in a plain checkout that is the cwd). The tracking root **stays on the base branch** (`main`/`master`); feature work lives in worktrees, so item state sits outside every code branch — boards/WIP/sprints read one coherent global view and item files can never merge-conflict. From a worktree, skills edit the item at `<tracking-root>/backlog/...` and commit it there immediately — message `track(<id>): <event>` — which guard.mjs permits on ANY branch (including main) as long as the staged paths are all under `backlog/` or `sprints/`. `plans/` and `reports/` are work artifacts: they travel WITH the code branch and merge with it. (`/plan` writes the plan as a plain file and creates no branch — it survives `/clear` on disk; `/implement` creates the feature branch + worktree off base and moves the plan into it as the first commit. The tracking root never leaves base.)
+`backlog/` and `sprints/` live in the PRIMARY checkout only (the tracking root — first line of `git worktree list`; in a plain checkout that is the cwd). The tracking root **stays on the base branch** (`main`/`master`); feature work lives in worktrees, so item state sits outside every code branch — boards/WIP/sprints read one coherent global view and item files can never merge-conflict. From a worktree, skills edit the item at `<tracking-root>/backlog/...` and commit it there immediately — message `track(<id>): <event>` — which guard.mjs permits on ANY branch (including main) as long as the staged paths are all under `backlog/` or `sprints/`. `plans/` and `reports/` are work artifacts: they travel WITH the code branch and merge with it. (`/plan-work` writes the plan as a plain file and creates no branch — it survives `/clear` on disk; `/implement` creates the feature branch + worktree off base and moves the plan into it as the first commit. The tracking root never leaves base.)
 
 ## Operations
 

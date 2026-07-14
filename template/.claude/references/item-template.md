@@ -43,7 +43,7 @@ parent: 003          # epic children only — bare id, never a path
 | ready (fresh) | AC approved by the PO — plannable | /backlog refine (on human approval) |
 | doing | implementation in flight | /implement (start) |
 | review | report written, awaiting review | /implement (end) |
-| done | review PASS | /review |
+| done | review PASS | /review-branch |
 | accepted | human verified evidence per criterion | /accept |
 | ready (returned) | acceptance rejected/partial — back in play | /accept (reject path) |
 

@@ -7,11 +7,11 @@ argument-hint: "[backlog/<id>-<slug>.md]"
 
 # /accept — the Stakeholder ceremony
 
-`/validate` proves the checks pass; `/review` proves the code is correct; `/accept` proves the increment does what the story asked. That verdict belongs to a human.
+`/validate` proves the checks pass; `/review-branch` proves the code is correct; `/accept` proves the increment does what the story asked. That verdict belongs to a human.
 
 ## 1 · Read the item
 
-Item discovery: the invocation argument if given; else the `item:` frontmatter of the plan referenced by the newest `reports/*-review.md` (or `*-implementation-report.md`); none → blocker: name the item. Read that item FILE, resolving it against the TRACKING ROOT (first line of `git worktree list` — `backlog/` lives only there, not in a worktree); all status/Log writes below commit there as `track(<id>): <event>`. Files are canonical in BOTH backends (optional github cross-check: `gh issue view <issue#>` from the item's `issue: #<n>` Log line). Status precondition: the item must be `status: done` (a recorded `/review` PASS). Not `done` → blocker: `item <id> is <status>, not done — run /review to PASS it before acceptance` (the state machine forbids skipping review). `## Acceptance criteria` missing or empty → blocker: item has no acceptance criteria — `/backlog refine <id>` first. The criteria ARE the contract; without them there is nothing to accept.
+Item discovery: the invocation argument if given; else the `item:` frontmatter of the plan referenced by the newest `reports/*-review.md` (or `*-implementation-report.md`); none → blocker: name the item. Read that item FILE, resolving it against the TRACKING ROOT (first line of `git worktree list` — `backlog/` lives only there, not in a worktree); all status/Log writes below commit there as `track(<id>): <event>`. Files are canonical in BOTH backends (optional github cross-check: `gh issue view <issue#>` from the item's `issue: #<n>` Log line). Status precondition: the item must be `status: done` (a recorded `/review-branch` PASS). Not `done` → blocker: `item <id> is <status>, not done — run /review-branch to PASS it before acceptance` (the state machine forbids skipping review). `## Acceptance criteria` missing or empty → blocker: item has no acceptance criteria — `/backlog refine <id>` first. The criteria ARE the contract; without them there is nothing to accept.
 
 ## 2 · Evidence pass (QA hat)
 
@@ -44,13 +44,13 @@ ASK: **approve / reject / partial** (name which criteria miss expectations). The
 ## 5 · On reject / partial
 
 - Item → `status: ready`; append a Log line per rejected criterion: expected vs observed, in the stakeholder's words (github mode: set-status op per work-tracking.md — `--add-label status:ready --remove-label status:done`; degrade rules apply).
-- Route the gap: needs re-thinking → `/plan backlog/<id>-<slug>.md`; small known fix → `/implement` against the existing plan.
+- Route the gap: needs re-thinking → `/plan-work backlog/<id>-<slug>.md`; small known fix → `/implement` against the existing plan.
 
 ## Output contract
 
 The per-criterion table IS this ceremony's terminal artifact (the human reads it); the item is updated on disk. End with exactly one line:
 
 - approve: `Accepted <id> · Next: /evolve`
-- reject/partial: `Returned <id> to ready · Next: /plan backlog/<id>-<slug>.md`
+- reject/partial: `Returned <id> to ready · Next: /plan-work backlog/<id>-<slug>.md`
 
 A blocker (no criteria, human decision pending, autonomous with non-PASS verdicts) REPLACES that line.

@@ -1,6 +1,6 @@
 # Output contract
 
-Applies to PIPELINE skills only. Knowledge skills (`architecture-map`, `debugging-this-repo`) are consulted mid-task and emit no final line. Verdict-carrying stages may prefix the verdict: `/review` → `Reviewed <slug>: <PASS|REQUEST_CHANGES> · Next: <command>`, `/validate` → `Validated <slug> · Next: ...` after a `GATE GREEN/RED` line — the `<verb-past> <object> · Next:` shape still holds.
+Applies to PIPELINE skills only. Knowledge skills (`architecture-map`, `debugging-this-repo`) are consulted mid-task and emit no final line. Verdict-carrying stages may prefix the verdict: `/review-branch` → `Reviewed <slug>: <PASS|REQUEST_CHANGES> · Next: <command>`, `/validate` → `Validated <slug> · Next: ...` after a `GATE GREEN/RED` line — the `<verb-past> <object> · Next:` shape still holds.
 
 Terminal discipline for every pipeline skill: artifacts go to disk, narration is a cost.
 

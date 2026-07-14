@@ -5,11 +5,11 @@ Three loops at three timescales. All of them keep state on disk, never in a cont
 ## The three loops
 
 ```
-             +----------------- OUTER: the harness learns ------------------+
-             |                                                              v
-  ticket --> /plan ---> /implement ---> /validate ---> /review ---> ship  /evolve
-             |_____________ INNER: PIV per work item _______________|
-              (session A)   (session B, fresh)
+             +--------------------- OUTER: the harness learns ---------------------------+
+             |                                                                           v
+  ticket --> /plan-work ---> /implement ---> /validate ---> /review-branch ---> ship  /evolve
+             |___________________ INNER: PIV per work item ________________|
+              (session A)        (session B, fresh)
 
   AUTONOMOUS: loop.mjs --> fresh headless claude -p --> ONE change --> validate
               --> commit --> repeat until loop/DONE.txt exists
@@ -17,7 +17,7 @@ Three loops at three timescales. All of them keep state on disk, never in a cont
 
 | Loop | Cadence | Mechanism | State on disk |
 |---|---|---|---|
-| INNER | per work item | PIV: `/plan → /implement → /validate → /review`; superpowers skills as per-task discipline inside each stage | `plans/<slug>-plan.md`, `reports/<slug>-implementation-report.md`, `reports/<slug>-review.md` |
+| INNER | per work item | PIV: `/plan-work → /implement → /validate → /review-branch`; superpowers skills as per-task discipline inside each stage | `plans/<slug>-plan.md`, `reports/<slug>-implementation-report.md`, `reports/<slug>-review.md` |
 | OUTER | after every shipped item or failure | `/evolve`: mine the session for lessons; rules added WITH incident provenance, rules pruned when no longer earning their lines | rule/vault deltas |
 | AUTONOMOUS | per iteration until sentinel | `loop/loop.mjs` re-feeds `PROMPT.md` to a fresh headless process | commits, `fix_plan.md`, `DONE.txt` |
 
@@ -28,9 +28,9 @@ Superpowers mapping inside INNER stages (invoke via Skill tool; condensed inline
 
 | Stage | Skills |
 |---|---|
-| `/plan` | brainstorming (if design unexplored) → writing-plans |
+| `/plan-work` | brainstorming (if design unexplored) → writing-plans |
 | `/implement` | using-git-worktrees → subagent-driven-development (or executing-plans in a fresh session) → test-driven-development per task → verification-before-completion |
-| `/review` | requesting-code-review |
+| `/review-branch` | requesting-code-review |
 | any bug, any stage | systematic-debugging BEFORE any fix |
 
 ## Three ways to keep going — chooser
@@ -56,12 +56,12 @@ exactly what resets-over-compaction warns about for long work.
 ## Generator / evaluator separation
 
 - Agents "reliably skew positive when grading their own work." Tuning a skeptical standalone evaluator is tractable; making a generator self-critical is not (Anthropic).
-- The `/review` agent therefore sees only **diff + plan + reviewer protocol** — never the implementation conversation, so it can't inherit the implementer's rationalizations.
+- The `/review-branch` agent therefore sees only **diff + plan + reviewer protocol** — never the implementation conversation, so it can't inherit the implementer's rationalizations.
 - **Sprint contract:** generator and evaluator agree on done-criteria per unit of work BEFORE code exists. Our plan template's per-task `Validate:` command + Acceptance Criteria checklist IS that contract — written at plan time, graded at review time.
 - **Evaluator utility scales with task difficulty.** Trivial work gets light ceremony: if you can describe the diff in one sentence, skip the plan (routing rule in `00-core.md`). Full separation pays on M+ work; on typos it is pure tax.
 
 **No planner subagent (decision recorded — don't relitigate in v0.3).** `AskUserQuestion`
-is unavailable to subagents, and `/plan`'s batched clarify gate is load-bearing — a planner
+is unavailable to subagents, and `/plan-work`'s batched clarify gate is load-bearing — a planner
 subagent structurally cannot ask. Planning stays main-loop + plan mode. The harness-post
 planner lessons survive structurally: the spec stays high-level (errors in it cascade), and
 per-task `Validate:` contracts in the plan template prevent under-scoping.
@@ -70,10 +70,10 @@ per-task `Validate:` contracts in the plan template prevent under-scoping.
 
 | Stage | Parallelism |
 |---|---|
-| `/plan` explore | THE fan-out point: 2–4 `scout` dispatches on disjoint questions — read-only, parallel |
+| `/plan-work` explore | THE fan-out point: 2–4 `scout` dispatches on disjoint questions — read-only, parallel |
 | `/implement` | Sequential by default. `Wave:`-marked plan tasks with provably disjoint `Files:` lists may run in parallel via worktrees; full gate after each wave |
 | `/validate` | Gate commands stay main-loop; `qa-evaluator` is a single dispatch; parallel read-only re-verification OK |
-| `/review` | ONE fresh-eyes reviewer (+ optional second-vendor lens) — never a chorus by default |
+| `/review-branch` | ONE fresh-eyes reviewer (+ optional second-vendor lens) — never a chorus by default |
 | `/evolve` | Main loop only — judgment about the harness itself |
 
 NEVER parallel mutators on shared files — the worktree collision incident is on record.
@@ -88,7 +88,7 @@ Different lenses catch different defect classes; stacking is additive, not redun
 |---|---|---|
 | Per-task validation (inside `/implement`) | one task's diff | mechanical: lint/type/tests red, spec deviation |
 | Runtime lens — `qa-evaluator` (inside `/validate` and `/accept`, work with a runtime surface) | the running app vs the plan's acceptance criteria | stubs: renders-but-doesn't-respond, display-only features, broken round-trips |
-| `/review` — fresh evaluator | whole branch vs plan | plan conformance, integration seams, missed acceptance criteria |
+| `/review-branch` — fresh evaluator | whole branch vs plan | plan conformance, integration seams, missed acceptance criteria |
 | Adversarial second-vendor pass (L/XL only) | whole branch, different model backbone | shared blind spots, architectural defects |
 
 Two incidents justify the stack (AIDF v0.4 adversarial-review history):
@@ -102,7 +102,7 @@ Two incidents justify the stack (AIDF v0.4 adversarial-review history):
 
 Full mechanics: `loop/README.md`. Doctrine:
 
-- **Qualifies:** numbered spec items, each mechanically verifiable (command exits 0, behavior observable). Design-ambiguous work does not — `/plan` it first, or don't loop it.
+- **Qualifies:** numbered spec items, each mechanically verifiable (command exits 0, behavior observable). Design-ambiguous work does not — `/plan-work` it first, or don't loop it.
 - **Sentinel stop authority.** The driver stops on the EXISTENCE of `loop/DONE.txt` — model output text is never parsed. The loop, not the model, decides when work is finished.
 - **ONE change per iteration**, journaled in `fix_plan.md` (Did / Validation / Next). The next fresh iteration reads code + journal, not chat.
 

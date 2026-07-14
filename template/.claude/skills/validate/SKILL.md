@@ -74,7 +74,7 @@ Every FAIL: show the exact command and the tail of its real output (the failing 
 The verdict and per-command table ARE this stage's artifact — no extra recap. End with exactly one line:
 
 ```
-Validated <slug or diff> · Next: /review
+Validated <slug or diff> · Next: /review-branch
 ```
 
 The item discovered in step 0 has `item:`/is set → append to the item's `## Log` in the TRACKING ROOT (resolve: first line of `git worktree list` — `backlog/` never lives in the worktree; commit there as `track(<id>): validated`): `<YYYY-MM-DD> validate: GATE GREEN` (or `GATE RED (N)`) so the QA event lands in the audit trail (github mode: mirror per the link-evidence row of `.claude/references/work-tracking.md`; degrade rules apply).

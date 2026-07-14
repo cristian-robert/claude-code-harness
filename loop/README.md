@@ -11,7 +11,7 @@ model, decides when it's finished.
 
 | Use | Don't use |
 |---|---|
-| Well-specified work with mechanically verifiable spec items (lint/tests exit 0, behavior X observable) | Design-heavy or ambiguous work — run `/plan` first, or don't loop |
+| Well-specified work with mechanically verifiable spec items (lint/tests exit 0, behavior X observable) | Design-heavy or ambiguous work — run `/plan-work` first, or don't loop |
 | Grinding through a checklist a plan already settled | Anything where "done" needs human judgment |
 | Parallel independent tickets, one worktree each | Work touching shared mutable state without isolation |
 

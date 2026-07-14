@@ -95,6 +95,6 @@ Everything the operator must review — the step-0 reconcile audit (stale hooks,
 
 The terminal then gets exactly one line:
 
-`Initialized harness · Next: <command>` — workTracking backend ≠ none → `/backlog new <first item>`; backend none → `/plan <first ticket>`. Append ` · Report: reports/harness-init.md`.
+`Initialized harness · Next: <command>` — workTracking backend ≠ none → `/backlog new <first item>`; backend none → `/plan-work <first ticket>`. Append ` · Report: reports/harness-init.md`.
 
 Blockers replace that line.
