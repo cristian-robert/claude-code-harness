@@ -10,6 +10,7 @@ const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+const { migrateRenamedSkills } = require('./migrations');
 const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -458,6 +459,15 @@ async function main() {
   // `update` would then print "No harness recorded — assuming Claude Code"
   // and silently drop Codex.
   writeHarnessTargets(targetDir, targets);
+
+  // Retire framework skills the payload has renamed (RE-init over an existing
+  // install has the same additive-copy gap as update: the old `plan`/`review`
+  // dirs would survive and keep shadowing Claude Code built-ins). Runs before
+  // the Codex emit below so .agents/skills/ never re-derives the orphan.
+  var initMigration = migrateRenamedSkills(targetDir);
+  for (var mgI = 0; mgI < initMigration.messages.length; mgI++) {
+    console.log(initMigration.messages[mgI]);
+  }
   writeVaultConfig(targetDir, vault);
 
   // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex

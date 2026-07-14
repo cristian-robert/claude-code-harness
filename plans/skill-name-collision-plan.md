@@ -21,10 +21,11 @@ tier: build
 3. Validate: `npm test` green (cli suites + hook smoke test), `node tools/context-ledger.mjs template` within budgets, and a zero-hit grep sweep for bare `/plan` / `/review` in living files.
 4. Evolve: record the decision + the verified platform facts in the vault (project `decisions.md`; cross-project lesson in `wiki/`).
 
+5. (Follow-up, PO-requested) `update`/re-`init` are additive and would leave the old `plan`/`review` dirs shadowing built-ins forever → `cli/migrations.js` rename table, wired into both, old SKILL.md preserved as `.backup`; guarded to no-op against a pre-rename payload. Tests: `cli/migrations.test.js` (16) + E2E fixture run via local fallback. Version → 2.0.0 (breaking: command names are the framework's public interface). Publish ORDER: merge to main BEFORE `npm publish` — update pulls the payload from GitHub main, so a 2.0.0 CLI against pre-merge main safely no-ops.
+
 ## Out of scope
 
 - Renaming any other skill; prefixing scheme (rejected by PO in favor of minimal rename).
-- npm release/version bump (rename reaches consumers only via a release — PO decides when).
 - Rewriting historical plans/design docs/reports.
 
 ## Verification

@@ -10,6 +10,7 @@ const { reconcileSettingsJson } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+const { migrateRenamedSkills } = require('./migrations');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -251,6 +252,15 @@ async function main() {
     );
     stats.created += harnessDelta.created;
     stats.updated += harnessDelta.updated;
+
+    // Retire framework skills the payload has renamed (copy above is additive —
+    // it cannot remove the old dirs, and a leftover `plan` skill keeps shadowing
+    // the native /plan command). Must run BEFORE the Codex emit: emit derives
+    // .agents/skills/ from .claude/skills/ and would re-emit the orphan.
+    var migration = migrateRenamedSkills(projectRoot);
+    for (var mi = 0; mi < migration.messages.length; mi++) {
+      console.log(migration.messages[mi]);
+    }
 
     // Materialize the harness choice for a project that has none: a pre-multi-harness
     // harness.json has no `harness` key, and neither does the template, so the merge above
