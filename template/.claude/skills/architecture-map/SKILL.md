@@ -11,7 +11,7 @@ Golden rule: placement is a decision, not a guess — new code lands where this 
 
 ## Live tree (re-rendered at every invocation — never stale)
 
-!`find . -maxdepth 2 -type d -not -path '*/node_modules*' -not -path '*/.git*' | head -40`
+!`find . -maxdepth 2 -type d -not -path '*/node_modules*' -not -path '*/.git*' 2>/dev/null | head -40 || echo "(dir scan failed)"`
 
 <!-- filled by /harness-init: replace every <placeholder> below from detection + interview.
      Keep the file ≤70 lines; update via /evolve when the structure moves. -->

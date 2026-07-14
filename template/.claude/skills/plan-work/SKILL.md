@@ -14,11 +14,11 @@ Turn **the invocation argument** (the text typed after the command) into an exec
 
 Injected at invocation — ground truth, do not re-derive. Working tree:
 
-!`git status --porcelain`
+!`git status --porcelain 2>/dev/null || echo "(not a git repo)"`
 
 Existing plans (pick a slug that does not collide):
 
-!`ls plans/ 2>/dev/null`
+!`ls plans/ 2>/dev/null || echo "(no plans/ yet — this will be the first)"`
 
 ## 0. Work item (when workTracking is active)
 

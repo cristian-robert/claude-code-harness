@@ -12,7 +12,7 @@ Runs the FULL gate: every check in the "Commands" table of AGENTS.md (lint, type
 
 ## Changed files (injected at invocation — best-effort)
 
-!`git diff --name-only HEAD~10...HEAD 2>/dev/null || git diff --name-only`
+!`git diff --name-only HEAD~10...HEAD 2>/dev/null || git diff --name-only 2>/dev/null || echo "(no git diff available)"`
 
 Best-effort snapshot (last ≤10 commits, or working tree on fallback). Re-invoking `/validate` refreshes it.
 
