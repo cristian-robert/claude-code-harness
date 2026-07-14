@@ -108,8 +108,17 @@ async function main() {
   let runDir = startCwd, branch = null;
   if (cfg.worktree) {
     branch = `loop/run-${Date.now()}-${process.pid}`; // ms + pid: parallel launches can't collide
-    runDir = resolve(startCwd, "..", "loop-worktrees", branch.replaceAll("/", "-"));
+    // In-repo .worktrees/, NEVER a sibling folder — a folder appearing outside the
+    // project root surprises the user (guard.mjs blocks agents from doing the same).
+    runDir = resolve(startCwd, ".worktrees", branch.replaceAll("/", "-"));
     if (!cfg["dry-run"]) {
+      if (git(["check-ignore", "-q", ".worktrees"], startCwd).status !== 0) {
+        // Repo-local exclude: keeps .worktrees/ out of status with no .gitignore commit.
+        const common = git(["rev-parse", "--git-common-dir"], startCwd);
+        try {
+          if (common.status === 0) appendFileSync(resolve(startCwd, common.stdout.trim(), "info", "exclude"), "\n.worktrees/\n");
+        } catch { /* missing info/ dir: status noise only, never block the run */ }
+      }
       const r = git(["worktree", "add", "-b", branch, runDir], startCwd);
       if (r.status !== 0) fail(`git worktree add failed:\n${r.stderr || r.error || ""}`);
     }

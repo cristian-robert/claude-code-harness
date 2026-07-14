@@ -1,12 +1,12 @@
 ---
-name: plan
+name: plan-work
 description: "Architect hat: turn a ticket or brain dump into an executable plan file. Writes plans/<slug>-plan.md."
 disable-model-invocation: true
 argument-hint: "<backlog/<id>-<slug>.md | ticket-id | free-form brain dump>"
 allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merge-base *) Bash(ls *)
 ---
 
-# /plan
+# /plan-work
 
 Turn **the invocation argument** (the text typed after the command) into an executable plan at `plans/<slug>-plan.md`. No code is written in this stage; `/implement` runs the plan in a fresh session.
 
@@ -47,6 +47,7 @@ Match the work against this repo's knowledge skills (architecture-map etc.) and 
 
 - Locating files/symbols → built-in Explore. Understanding behavior or impact ("how does auth flow?", "what would X touch?") → dispatch `scout` (it loads CLAUDE.md; Explore does not). Comparisons → 2–4 scouts in parallel on DISJOINT questions; this stage is the pipeline's one natural fan-out point. Pin `tier: build` and effort per `.claude/references/dispatch-protocol.md`; scouts return ≤40-line briefs, never dumps.
 - External tools/services the plan builds against (major frameworks & services — NOT transitive deps): read `wiki/stack/<tool>/` frontmatter for version + freshness; on a miss/stale/version-mismatch run `/research <tool>@<pinned>`. Cite the `wiki/stack/<tool>/` path in the plan's Context. Never plan tool usage from memory. Detail: `.claude/references/research-and-docs.md`.
+- The product under work is itself an AI agent/LLM feature → RETRIEVE `agent-kb/` (patterns/, models/, tooling/) per `.claude/references/vault-protocol.md` before designing from scratch; cite consulted notes in the plan's Context.
 - Read directly only what the plan will name: files to be modified (real line numbers), the closest existing analogue, relevant rules/context modules.
 
 ## 5. Draft (Architect hat) — superpowers:writing-plans
@@ -66,13 +67,13 @@ Fallback (plugin unavailable), condensed:
 
 MUST use the Write tool to create `plans/<slug>-plan.md` (slug: kebab-case from ticket or title). This is a required deliverable, not optional — `/implement` reads it from disk, so the file must exist. Do NOT print the plan body to the terminal.
 
-Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`, append to the item's `## Log` (in the tracking root): `<YYYY-MM-DD> plan: plans/<slug>-plan.md`, and commit that item edit there as `track(<id>): plan linked` (guard permits tracking-only commits on any branch; github mode: mirror per work-tracking.md, degrade rules apply). Status stays untouched — /plan owns no status transition. Item still `status: backlog` → its AC are not PO-approved: the ONLY unblock is `/backlog refine <id>` (refine owns backlog→ready; an in-chat "approved" would never land on disk). Autonomous mode: run the refine transition yourself and log under `## Assumptions`.
+Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`, append to the item's `## Log` (in the tracking root): `<YYYY-MM-DD> plan: plans/<slug>-plan.md`, and commit that item edit there as `track(<id>): plan linked` (guard permits tracking-only commits on any branch; github mode: mirror per work-tracking.md, degrade rules apply). Status stays untouched — /plan-work owns no status transition. Item still `status: backlog` → its AC are not PO-approved: the ONLY unblock is `/backlog refine <id>` (refine owns backlog→ready; an in-chat "approved" would never land on disk). Autonomous mode: run the refine transition yourself and log under `## Assumptions`.
 
 ## 7. Self-assess
 
-Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step). /review inverts it to choose the reviewer, so an honest tier matters twice.
+Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step). /review-branch inverts it to choose the reviewer, so an honest tier matters twice.
 
-- Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan` run when its turn comes.
+- Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan-work` run when its turn comes.
 - Tasks provably independent (pairwise-disjoint `Files:` lists, no ordering) → mark them with the same `Wave: N` per the template rule; otherwise omit Wave — sequential is the default. One judgment, made NOW by the planner, not re-litigated at implement time.
 
 If confidence <= 6: state concretely what would raise it (unanswered question, unexplored subsystem, missing test harness) and ask the user before handing off — do not emit the Next line until resolved.
@@ -81,7 +82,7 @@ If confidence <= 6: state concretely what would raise it (unanswered question, u
 
 Artifact to disk; no terminal recap of the plan. End with exactly one line:
 
-No branch, no worktree here — `/plan` only writes the plan file and commits the item edit:
+No branch, no worktree here — `/plan-work` only writes the plan file and commits the item edit:
 
 1. `plans/<slug>-plan.md` stays as a normal file in the primary checkout (the tracking root, on its base branch). `/clear` resets the conversation, not the filesystem — the file persists for `/implement` to pick up. `/implement` creates the feature branch + worktree and moves the plan into it (do NOT create a branch here — that is what broke the fresh-worktree handoff).
 2. The item edit was already committed above as a tracking-only commit on the base branch, keeping the tracking root globally coherent (ADR: `.claude/references/work-tracking.md`).

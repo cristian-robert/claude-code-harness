@@ -11,7 +11,7 @@ Always-on rules beyond AGENTS.md. Each traces to a real failure.
 
 | Situation | Route |
 |---|---|
-| Bug, test failure, unexpected behavior | superpowers:systematic-debugging BEFORE any fix |
+| Bug, test failure, unexpected behavior | superpowers:systematic-debugging BEFORE any fix; facts from debugging-this-repo + vault runbook (vault-protocol.md) |
 | Feature or multi-file change | PIV pipeline — not ad-hoc edits |
 | Diff describable in one sentence | Skip ceremony: edit, verify, done |
 

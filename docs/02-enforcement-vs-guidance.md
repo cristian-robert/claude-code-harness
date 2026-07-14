@@ -29,7 +29,7 @@ Wiring: `template/.claude/settings.json`. Scripts: `template/.claude/hooks/`.
 | `stop-gate.mjs` | Stop · (no matcher) | Runs `stopGate` commands from `.claude/harness.json`; blocks turn end until green; honors `stop_hook_active`; persists the verdict to `.claude/state/last-gate.json` for the pre-compact snapshot | Blocking — `decision: "block"` | "Done" claimed with failing tests |
 | `session-start.mjs` | SessionStart | Injects branch/dirty state, latest plan, gate config; on `source=compact` re-injects the compact snapshot + a Tier-1-loss warning | Advisory context | Every fresh session re-explored repo state |
 | `pre-compact.mjs` | PreCompact · (no matcher — fires on `manual` and `auto`) | Snapshots branch, dirty files, active plan, latest report, last gate verdict → `.claude/state/compact-snapshot.md` | Advisory — side-effect only, NEVER blocks compaction (a failed snapshot must not strand a full window) | Compaction laundered a RED gate verdict and dropped the active-plan pointer |
-| `verdict-gate.mjs` | SubagentStop · `code-reviewer` | Requires the reviewer's first line to be exactly `PASS` or `REQUEST_CHANGES`; on violation, stderr re-prompts the reviewer to re-emit its verdict | Blocking — exit 2 + stderr | Reviewer ignored the verdict contract; a prose first line broke `/review`'s parser |
+| `verdict-gate.mjs` | SubagentStop · `code-reviewer` | Requires the reviewer's first line to be exactly `PASS` or `REQUEST_CHANGES`; on violation, stderr re-prompts the reviewer to re-emit its verdict | Blocking — exit 2 + stderr | Reviewer ignored the verdict contract; a prose first line broke `/review-branch`'s parser |
 
 `.claude/state/` is per-repo runtime state (snapshots, gate verdicts) — adopters gitignore
 it (`/harness-init` does this during setup).
@@ -82,7 +82,7 @@ hook to a rule, then out — verify with the incident log before pruning, not vi
 - **Anything needing project context a script can't have.** "Is this endpoint public API?"
   is a rule-plus-reviewer question, not a regex.
 - **Style preferences.** A blocking style hook trains workarounds; taste belongs to
-  `/review` (superpowers:requesting-code-review).
+  `/review-branch` (superpowers:requesting-code-review).
 - Every hook is latency on every matching event, forever. It pays rent or it goes.
 
 ## Sources

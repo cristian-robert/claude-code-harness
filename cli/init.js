@@ -10,6 +10,7 @@ const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
+const { migrateRenamedSkills } = require('./migrations');
 const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
 
 const REPO = 'cristian-robert/claude-code-harness';
@@ -458,6 +459,15 @@ async function main() {
   // `update` would then print "No harness recorded — assuming Claude Code"
   // and silently drop Codex.
   writeHarnessTargets(targetDir, targets);
+
+  // Retire framework skills the payload has renamed (RE-init over an existing
+  // install has the same additive-copy gap as update: the old `plan`/`review`
+  // dirs would survive and keep shadowing Claude Code built-ins). Runs before
+  // the Codex emit below so .agents/skills/ never re-derives the orphan.
+  var initMigration = migrateRenamedSkills(targetDir);
+  for (var mgI = 0; mgI < initMigration.messages.length; mgI++) {
+    console.log(initMigration.messages[mgI]);
+  }
   writeVaultConfig(targetDir, vault);
 
   // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
@@ -584,7 +594,7 @@ async function main() {
     console.log('  Backed up: ' + stats.backedUp + ' files (saved as .backup)');
   }
   console.log('');
-  console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan …/research)');
+  console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan-work …/research)');
   console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer');
   console.log('  .claude/rules/       always-on core + paths-scoped domain rules');
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
@@ -599,7 +609,7 @@ async function main() {
   }
   if (targets.indexOf('codex') !== -1) {
     console.log('  Codex: instructions are in AGENTS.md. Run $harness-init in Codex — it fits the payload to your stack and arms the gate.');
-    console.log('  Pipeline skills are invocable as $plan, $implement, $validate, $review.');
+    console.log('  Pipeline skills are invocable as $plan-work, $implement, $validate, $review-branch.');
     console.log('  .agents/skills/ and .codex/ are GENERATED from .claude/ — after $harness-init (or any later hand-edit of .claude/), run `npx perfect-harness-engineering emit` to push the changes into the Codex tree. `update` is NOT a substitute — it reverts .claude/ to the framework template before re-emitting.');
     console.log('  Enforcement hooks are not wired for Codex yet (guidance-only).');
   }

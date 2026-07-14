@@ -5,7 +5,7 @@ Every load-bearing PHE decision traces to one of these sources (1–11: research
 ## 1 · Harness design for long-running apps — anthropic.com/engineering/harness-design-long-running-apps
 Anthropic Labs on a Planner/Generator/Evaluator harness for long-running autonomous builds.
 - Context RESETS + structured handoff artifact beat compaction → Plan and Implement in separate sessions, artifacts on disk.
-- Self-evaluation bias → generator/evaluator split → `/review` dispatches an independent reviewer; self-grading is never the gate.
+- Self-evaluation bias → generator/evaluator split → `/review-branch` dispatches an independent reviewer; self-grading is never the gate.
 - Ablation discipline: on model upgrade remove one component at a time and measure → `/evolve`'s prune step.
 
 ## 2 · Effective context engineering — anthropic.com/engineering/effective-context-engineering-for-ai-agents
@@ -44,7 +44,7 @@ OKF knowledge bundle distilling five of Cole Medin's videos into cross-cutting c
 PRD-generator meta-repo for a personal AI memory assistant (one skill + memory templates; nothing else ships).
 - Memory-layer-first build order: plain-markdown memory before any automation → PHE's knowledge layer stays plain files.
 - SessionStart/PreCompact/SessionEnd memory flows informed session-start.mjs orientation context.
-- Interview-template → personalized plan-on-disk pattern echoed in `/plan`'s brain-dump intake.
+- Interview-template → personalized plan-on-disk pattern echoed in `/plan-work`'s brain-dump intake.
 
 ## 8 · AIDevelopmentFramework v0.8 — `../AIDevelopmentFramework-1` (user's prior framework)
 The hard-won defects list PHE's tests and design explicitly guard against.

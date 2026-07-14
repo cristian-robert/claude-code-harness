@@ -12,6 +12,11 @@ user-invocable: false
      /evolve appends new failure classes (each traces to a real debugging session).
      Keep the file ≤70 lines; oldest-resolved entries prune first. -->
 
+## Vault (second brain) — RETRIEVE then CAPTURE
+
+- BEFORE diagnosing: search the vault per `.claude/references/vault-protocol.md` — `projects/<name>/runbook.md` + failure classes (`obsidian search:context query="<error text>" path=projects/<name>` → fallback file reads). A prior incident match short-circuits hours.
+- AFTER systematic-debugging confirms a root cause: auto-append it to `projects/<name>/runbook.md` known-failure classes (symptom → cause → fix → incident) AND to the table below. Auto-write stops there — wiki/ promotion is /evolve's ask-first call.
+
 ## Logs & observability
 
 | Source | Where | Read with |

@@ -55,7 +55,7 @@ committed: [<ids>]
 
 Artifacts to disk; no terminal recap. End with exactly one line:
 
-- plan: `Planned sprint <n> · Next: /plan backlog/<top-item>.md` — top item = first committed by priority.
+- plan: `Planned sprint <n> · Next: /plan-work backlog/<top-item>.md` — top item = first committed by priority.
 - close: `Closed sprint <n> · Next: /evolve` — only AFTER the backend close: files mode set `state: closed` in `sprints/<n>.md`; github mode close the milestone per work-tracking.md's sprint-close row using the `milestone: #<milestone#>` recorded in the sprint file.
 
 A blocker (kanban mode, no ready items, PO decision pending) REPLACES that line.

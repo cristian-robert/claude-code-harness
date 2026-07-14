@@ -62,7 +62,7 @@ Ask ONLY what detection cannot know, all in one round:
 - `examples/`: copy `frontend.AGENTS.md` / `backend.AGENTS.md` (as `<dir>/AGENTS.md`) into real subdirs only where a dir has local traps — and, when Claude Code is a target, also copy the matching `frontend.CLAUDE.md` / `backend.CLAUDE.md` (as `<dir>/CLAUDE.md`, the one-line `@AGENTS.md` shim). Delete `examples/` if unused. `guard.mjs` denies `rm -rf`/`find -delete`/`git clean -d` — remove each file explicitly, then `rmdir` the empty dir. Same for every prune below.
 - Symbol navigation: `.lsp.json` → keep only language servers whose binary is installed (`command -v typescript-language-server`, `pyright-langserver`, …), delete the rest; `.mcp.json` codebase-search → keep if the repo has Python AND `uv` is on PATH, else delete it (it is Python-AST-only). Tell the user which are active.
   - Deleting the MCP orphans its references — prune them in the same pass, or the agent is told to call a server that is not there: delete `.claude/tooling/codebase_search.py` (that FILE only — `.claude/tooling/` also holds `eslint.harness.mjs`, keep the dir); drop the `codebase-search` row from `.claude/references/dispatch-protocol.md`; in `.claude/agents/code-reviewer.md` and `AGENTS.md`, cut the MCP clause and leave the grep fallback.
-- `.gitignore`: add `.claude/state/` — runtime state (compact snapshots, gate verdicts) never commits.
+- `.gitignore`: add `.claude/state/` + `.worktrees/` — runtime state and /implement's in-repo worktrees never commit.
 - Vault (from `harness.json` `vault`): `scaffold` → copy `.claude/references/vault-scaffold/` to the chosen path; `existing` → use that vault. Either → ensure `projects/<name>/` exists there (copy `system/templates/project-template/` and register it in `projects/_index.md` if absent); replace `<ABSOLUTE_VAULT_PATH>` in the pointer block with the vault's absolute path and paste its fenced content into the repo `AGENTS.md` slot, filling `<project-name>`. Then WIRE THE ARCHITECT AGENT: confirm it resolves its KB — the pointer block is present in `AGENTS.md` and `projects/<name>/architecture.md` exists (the agent reads them). `none` → leave the `AGENTS.md` vault comment as-is; the architect agent falls back to a codebase scan. Index Law already holds in the scaffold.
 - context7 (from question 6): yes → add `"context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }` to `.mcp.json` `mcpServers`. No → leave `.mcp.json` as-is (codebase-search only).
 - Work tracking from question 7 (backend `none`: skip all of this):
@@ -95,6 +95,6 @@ Everything the operator must review — the step-0 reconcile audit (stale hooks,
 
 The terminal then gets exactly one line:
 
-`Initialized harness · Next: <command>` — workTracking backend ≠ none → `/backlog new <first item>`; backend none → `/plan <first ticket>`. Append ` · Report: reports/harness-init.md`.
+`Initialized harness · Next: <command>` — workTracking backend ≠ none → `/backlog new <first item>`; backend none → `/plan-work <first ticket>`. Append ` · Report: reports/harness-init.md`.
 
 Blockers replace that line.

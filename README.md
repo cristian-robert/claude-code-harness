@@ -25,7 +25,7 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 
 1. **Session context** (advisory, tiered — Tier 0 always → Tier 3 explicit, per `docs/01`): root `CLAUDE.md` ≤60 lines; unscoped rules; two model-invoked knowledge skills; `paths:`-scoped rules and subdirectory `CLAUDE.md` load lazily; references load only when cited.
 2. **Enforcement** (deterministic): PreToolUse guard (secrets, recursive deletes, protected branches — survives `--dangerously-skip-permissions`); advisory post-edit lint that also self-tests hook edits; a Stop gate that blocks a turn from ending red and persists its verdict; a PreCompact snapshot so plan/gate state survives compaction; a SubagentStop verdict gate on the reviewer; `statusline.mjs` shows branch, context pressure, and gate state at a glance.
-3. **Loops** (state on disk): PIV+E pipeline — `/plan → /implement → /validate → /review → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work, and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
+3. **Loops** (state on disk): PIV+E pipeline — `/plan-work → /implement → /validate → /review-branch → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work, and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
 4. **Knowledge** (cross-project): pointer-block wiring to an Obsidian vault; doc-grounded work via `/research` (tool docs cached once at `wiki/stack/<tool>/`, reused everywhere, always current for your pinned version); `/evolve` harvests session lessons and prunes.
 
 ## Install
@@ -42,10 +42,10 @@ npx perfect-harness-engineering update    # refreshes the payload (existing file
 
 | Generated | Derived from | Read by |
 |---|---|---|
-| `.agents/skills/` | `.claude/skills/` | Codex (`$plan`, `$implement`, …) |
+| `.agents/skills/` | `.claude/skills/` | Codex (`$plan-work`, `$implement`, …) |
 | `.codex/agents/*.toml` | `.claude/agents/*.md` | Codex subagents |
 | `.codex/config.toml` | (framework) | Codex |
-| `CLAUDE.md` | `AGENTS.md` (imports it) | Claude Code (`/plan`, `/implement`, …) |
+| `CLAUDE.md` | `AGENTS.md` (imports it) | Claude Code (`/plan-work`, `/implement`, …) |
 
 **These trees are committed**, exactly like `.claude/` — "generated" means *overwritten by `update`, never hand-edited*, not gitignored or temporary. A fresh `git clone` of a Codex project must work without running the CLI first.
 
@@ -57,7 +57,31 @@ Codex support in this release is **guidance-only**: instructions, skills, and su
 
 Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
 
-Then work through the pipeline: `/plan` a ticket, `/clear`, `/implement` the plan file, `/validate`, `/review`, `/evolve`. The superpowers plugin is the execution discipline inside each stage (skills degrade to inline fallbacks without it).
+## Workflow
+
+Day zero, once per project: `npx perfect-harness-engineering init`, then `/harness-init` inside Claude Code. After that there is no manual "prime" step — the `session-start.mjs` hook injects branch, dirty files, the latest plan, and gate state into every new session.
+
+Per work item — the PIV+E loop. Every stage's state lives on disk, never in the chat window:
+
+| Step | Command | Writes to disk |
+|---|---|---|
+| 0 · Track (optional) | `/backlog` new → refine → next | `backlog/<id>-<slug>.md` — the single home of acceptance criteria |
+| 1 · Plan | `/plan-work backlog/<id>-<slug>.md` (or a brain dump) | `plans/<slug>-plan.md` |
+| 2 · Reset | `/clear` | — (fresh session; the plan file IS the handoff) |
+| 3 · Implement | `/implement plans/<slug>-plan.md` | code on a feature branch + `reports/<slug>-implementation-report.md` |
+| 4 · Validate | `/validate` | GATE GREEN/RED verdict |
+| 5 · Review | `/review-branch` | `reports/<slug>-review.md` — PASS / REQUEST_CHANGES |
+| 6 · Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence; the human verdict |
+| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns |
+
+Merge/PR happens after review PASS (superpowers `finishing-a-development-branch` owns the mechanics). Scrum mode adds `/sprint plan` / `/sprint close` around the loop. The superpowers plugin is the execution discipline inside each stage; skills degrade to inline fallbacks without it.
+
+Anytime:
+
+- `/handoff` — context running low mid-task: write the handoff artifact, `/clear`, resume fresh.
+- `/research <tool>[@version]` — before coding against an external library; caches docs in the vault.
+- `/models` — when session-start warns the model map is stale.
+- A diff you can describe in one sentence skips the ceremony entirely (routing rule in `00-core.md`).
 
 ## Maintain
 

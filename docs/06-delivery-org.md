@@ -29,15 +29,15 @@ the work-item file — not in a roster of running personas.
 
 | Role | Hat lives in | Human or agent |
 |---|---|---|
-| Architect | `/plan` design step; retrieval delegated to global `architect-agent` KB | agent (phase + KB query) |
+| Architect | `/plan-work` design step; retrieval delegated to global `architect-agent` KB | agent (phase + KB query) |
 | Product Owner | priority calls at `/backlog`, scope cut at `/sprint plan` | **human** |
 | Product Manager | `/backlog board` + `/backlog next`, `/sprint` ceremonies | agent (phase) |
 | Business Analyst | `/backlog new` + `/backlog refine` (story + criteria drafting) | agent (phase) |
 | Dev | `/implement` (the primary session) | agent (phase) |
 | QA | `/validate` + `qa-evaluator` + global `tester-agent` | agent (fresh checker) |
-| Reviewer | `code-reviewer` agent inside `/review` | agent (fresh checker) |
+| Reviewer | `code-reviewer` agent inside `/review-branch` | agent (fresh checker) |
 | Stakeholder | accept/reject verdict at `/accept` | **human** |
-| Security | `code-reviewer` checklist + `/review` security lens (global `security-audit` skill when the diff touches auth/crypto/input/secrets/PII) + dependency audit | agent (fresh checker, diff-triggered) |
+| Security | `code-reviewer` checklist + `/review-branch` security lens (global `security-audit` skill when the diff touches auth/crypto/input/secrets/PII) + dependency audit | agent (fresh checker, diff-triggered) |
 
 ## Ceremony map — what already existed is not re-encoded
 
@@ -78,7 +78,7 @@ backlog --/backlog refine (PO approves AC)--> ready --/implement--> doing
   --/accept (human verdict)--> accepted
 ```
 
-`/plan` owns no transition — it links `plans/<slug>-plan.md` into the item's Log
+`/plan-work` owns no transition — it links `plans/<slug>-plan.md` into the item's Log
 (and warns when planning an unapproved `backlog`-status item).
 
 Item files live in the TRACKING ROOT (the primary checkout — code branches never edit them; guard permits narrow `track(<id>):` commits on any branch), so boards, WIP counts, and sprint stamps read one coherent global view and item files cannot merge-conflict. Files mode: the owning skill edits `status:` and appends one Log line. GitHub mode:

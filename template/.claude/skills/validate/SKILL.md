@@ -53,7 +53,7 @@ End verdict is exactly one of — no hedging, no "mostly passing", no "should be
 
 ## 3b · Runtime evaluation (optional lens — fold in BEFORE declaring the verdict)
 
-Plan discovery: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`; neither exists → skip this lens and say so. When the diff includes user-facing behavior AND a runtime target exists (dev-server command in AGENTS.md's Commands table, or an app already running): dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`). Spec source: plan has `item:` → resolve the item (tracking root) and PASTE its `## Acceptance criteria` block into the brief (an item-linked plan only references AC, never contains them — mirror `/accept`); else pass the plan path. Plus the target URL/entrypoint. It drives the running app and grades those criteria for depth vs stubs.
+Plan discovery: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`; neither exists → skip this lens and say so. When the diff includes user-facing behavior AND a runtime target exists (dev-server command in AGENTS.md's Commands table, or an app already running): dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`). Spec source: plan has `item:` → resolve the item (tracking root) and PASTE its `## Acceptance criteria` block into the brief (an item-linked plan only references AC, never contains them — mirror `/accept`); else pass the plan path. Plus the target URL/entrypoint. Vault configured (vault-protocol resolution) → also pass `projects/<name>/runbook.md` as the how-to-drive reference. It drives the running app and grades those criteria for depth vs stubs.
 
 - `EVAL GAPS (N)` → each gapped criterion becomes a FAIL row in step 3's table. Runtime stubs are gate failures.
 - `EVAL-BLOCKED: <reason>` → a report line under the table, NOT a failure — record it verbatim, never infer a pass or fail from it.
@@ -74,7 +74,7 @@ Every FAIL: show the exact command and the tail of its real output (the failing 
 The verdict and per-command table ARE this stage's artifact — no extra recap. End with exactly one line:
 
 ```
-Validated <slug or diff> · Next: /review
+Validated <slug or diff> · Next: /review-branch
 ```
 
 The item discovered in step 0 has `item:`/is set → append to the item's `## Log` in the TRACKING ROOT (resolve: first line of `git worktree list` — `backlog/` never lives in the worktree; commit there as `track(<id>): validated`): `<YYYY-MM-DD> validate: GATE GREEN` (or `GATE RED (N)`) so the QA event lands in the audit trail (github mode: mirror per the link-evidence row of `.claude/references/work-tracking.md`; degrade rules apply).

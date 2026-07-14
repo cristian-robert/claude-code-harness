@@ -8,15 +8,15 @@ standing personas. The Rosetta stone from agile vocabulary to what this harness 
 
 | Role | Hat lives in | Human or agent |
 |---|---|---|
-| Architect | `/plan` design step; `~/.claude/agents/architect-agent` KB when present | agent (phase + KB query) |
+| Architect | `/plan-work` design step; `~/.claude/agents/architect-agent` KB when present | agent (phase + KB query) |
 | Product Owner | priority calls at `/backlog`, scope cut at `/sprint plan` | **human** |
 | Product Manager | `/backlog board` + `/backlog next`, `/sprint` ceremonies | agent (phase) |
 | Business Analyst | `/backlog new` + `/backlog refine` (story + criteria) | agent (phase) |
 | Dev | `/implement` (primary session) | agent (phase) |
 | QA | `/validate` + `qa-evaluator` + `~/.claude/agents/tester-agent` | agent (fresh checker) |
-| Reviewer | `code-reviewer` agent inside `/review` | agent (fresh checker) |
+| Reviewer | `code-reviewer` agent inside `/review-branch` | agent (fresh checker) |
 | Stakeholder | accept/reject verdict at `/accept` | **human** |
-| Security | `code-reviewer` checklist + `/review` security lens (global `security-audit` skill when the diff touches auth/crypto/input/secrets/PII) + dependency audit | agent (fresh checker, diff-triggered) |
+| Security | `code-reviewer` checklist + `/review-branch` security lens (global `security-audit` skill when the diff touches auth/crypto/input/secrets/PII) + dependency audit | agent (fresh checker, diff-triggered) |
 
 Human gates (PO priority, sprint scope, Stakeholder acceptance) are never auto-decided unless
 autonomous mode is explicitly declared — see `.claude/references/autonomous-mode.md`.

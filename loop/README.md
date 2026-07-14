@@ -11,7 +11,7 @@ model, decides when it's finished.
 
 | Use | Don't use |
 |---|---|
-| Well-specified work with mechanically verifiable spec items (lint/tests exit 0, behavior X observable) | Design-heavy or ambiguous work — run `/plan` first, or don't loop |
+| Well-specified work with mechanically verifiable spec items (lint/tests exit 0, behavior X observable) | Design-heavy or ambiguous work — run `/plan-work` first, or don't loop |
 | Grinding through a checklist a plan already settled | Anything where "done" needs human judgment |
 | Parallel independent tickets, one worktree each | Work touching shared mutable state without isolation |
 
@@ -30,8 +30,8 @@ Full chooser and doctrine: `docs/03-loops.md`.
 1. Copy `loop/PROMPT.template.md` → `loop/PROMPT.md`; fill every placeholder.
    Spec items must be independently verifiable — they are the termination contract.
 2. `node loop/loop.mjs` (in-place: commits on the current branch — sandbox only), or
-   `node loop/loop.mjs --worktree` (fresh branch `loop/run-<epoch>` in a sibling
-   worktree — required for parallel runs).
+   `node loop/loop.mjs --worktree` (fresh branch `loop/run-<epoch>` in an in-repo
+   `.worktrees/` worktree, auto-excluded from status — required for parallel runs).
 3. Flags: `--max-iter 15` · `--iter-timeout-sec 1800` · `--prompt` · `--done` · `--log` · `--dry-run`.
 4. Watch the first iterations. Steer by editing `PROMPT.md` (re-read every
    iteration) — add a guardrail whenever a bad pattern recurs.

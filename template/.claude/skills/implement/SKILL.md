@@ -15,7 +15,7 @@ inline fallback given per step. On conflict, this repo's rules win.
 Read the plan file named by **the invocation argument** (the text typed after the command). Missing, unreadable, or no argument → stop; final line becomes:
 
 ```
-BLOCKED: plan file <path> missing or unreadable — run /plan first
+BLOCKED: plan file <path> missing or unreadable — run /plan-work first
 ```
 
 Never implement from memory of a conversation. The plan on disk is the contract — if the plan and
@@ -26,11 +26,11 @@ Dev hat: plan has `item:` → (1) confirm the item is `status: ready` (not still
 
 ## 2 · Isolation
 
-`/plan` left `plans/<slug>-plan.md` as an uncommitted file in the primary checkout (the tracking root, on its base branch) and created no branch. Create the feature branch + worktree from base, then move the plan into it as the first commit:
+`/plan-work` left `plans/<slug>-plan.md` as an uncommitted file in the primary checkout (the tracking root, on its base branch) and created no branch. Create the feature branch + worktree from base — ALWAYS inside the project root at `.worktrees/<slug>` (sibling folders like `../wt-*` are guard-blocked: a folder appearing outside the repo surprises the user); TELL the user what folder you are creating before creating it:
 
-1. `git worktree add -b {type}/<slug> ../wt-<slug>` (new branch off base). Invoke `superpowers:using-git-worktrees` for the mechanics/cleanup.
-2. `mkdir -p ../wt-<slug>/plans; mv plans/<slug>-plan.md ../wt-<slug>/plans/` — bring the plan into the worktree (it was untracked in the primary checkout, so it will not appear there on its own).
-3. Commit it there (`git -C ../wt-<slug> add plans/<slug>-plan.md && git -C ../wt-<slug> commit -m "plan: <slug>"`), then **`cd ../wt-<slug>`** — every later step (report write, code, task validation) uses paths relative to THIS worktree, so the cwd must actually be here; item-status writes still target the tracking root via `git worktree list`. Fallback (worktrees unavailable): `git switch -c {type}/<slug>` in place, `git add`+commit the plan — single-checkout mode; merge promptly.
+1. Keep it out of status, then add: `git check-ignore -q .worktrees || echo '.worktrees/' >> "$(git rev-parse --git-common-dir)/info/exclude"`, then `git worktree add -b {type}/<slug> .worktrees/<slug>` (new branch off base). Invoke `superpowers:using-git-worktrees` for the mechanics/cleanup.
+2. `mkdir -p .worktrees/<slug>/plans; mv plans/<slug>-plan.md .worktrees/<slug>/plans/` — bring the plan into the worktree (it was untracked in the primary checkout, so it will not appear there on its own).
+3. Commit it there (`git -C .worktrees/<slug> add plans/<slug>-plan.md && git -C .worktrees/<slug> commit -m "plan: <slug>"`), then **`cd .worktrees/<slug>`** — every later step (report write, code, task validation) uses paths relative to THIS worktree, so the cwd must actually be here; item-status writes still target the tracking root via `git worktree list`. Fallback (worktrees unavailable): `git switch -c {type}/<slug>` in place, `git add`+commit the plan — single-checkout mode; merge promptly.
 
 The plan must exist in THIS working copy before any code. The item file stays in the tracking root — never copy it into the worktree.
 
@@ -71,7 +71,7 @@ and ask, do not guess. 3 failed attempts on one task → blocker (autonomous mod
 
 ## 5 · Report (mandatory, to disk)
 
-Write `reports/<slug>-implementation-report.md` (slug from the plan filename), leading with the machine-readable pointer line `Plan: plans/<slug>-plan.md · Item: backlog/<id>-<slug>.md` (same format /review uses — fresh /validate and /review sessions find the plan by this line, not by parsing a table cell):
+Write `reports/<slug>-implementation-report.md` (slug from the plan filename), leading with the machine-readable pointer line `Plan: plans/<slug>-plan.md · Item: backlog/<id>-<slug>.md` (same format /review-branch uses — fresh /validate and /review-branch sessions find the plan by this line, not by parsing a table cell):
 
 | Section | Content |
 |---|---|
@@ -86,7 +86,7 @@ Plan has `item:` → report written means the item moves to `status: review` + L
 ## 6 · Scope discipline
 
 Implement the plan and nothing outside it. No preemptive fixes for anticipated review findings,
-no gold-plating, no drive-by refactors — `/review` and `/evolve` exist for that. Off-plan work
+no gold-plating, no drive-by refactors — `/review-branch` and `/evolve` exist for that. Off-plan work
 belongs in Follow-ups.
 
 ## Output contract

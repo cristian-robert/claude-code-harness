@@ -11,7 +11,7 @@ Read this BEFORE modifying anything under `.claude/` or `CLAUDE.md`. The harness
 | Path-scoped rules | `.claude/rules/*.md` with `paths:` frontmatter | Load only when Claude reads a matching file |
 | Subdir memory | `<dir>/CLAUDE.md` | Lazy-loads when a file in `<dir>` is first read |
 | References | `.claude/references/*.md` | Load ONLY when a rule/skill cites them — never preload |
-| Skills | `.claude/skills/<name>/SKILL.md` | Pipeline commands (`/plan`…`/evolve`); `disable-model-invocation: true` |
+| Skills | `.claude/skills/<name>/SKILL.md` | Pipeline commands (`/plan-work`…`/evolve`); `disable-model-invocation: true` |
 | Agents | `.claude/agents/*.md` | Subagent definitions; dispatches pin a ROLE — `tier:` (`scout`/`build`/`deep`) + `effort:`, never a model name. `.claude/harness.json` → `models` is the one place a model is named; `/models` re-verifies it |
 | Hooks | `.claude/hooks/*.mjs` | Deterministic enforcement; wired in `.claude/settings.json` |
 | Gate config | `.claude/harness.json` | `stopGate` commands run by `stop-gate.mjs` |

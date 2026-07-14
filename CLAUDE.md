@@ -33,7 +33,7 @@ This project's knowledge base lives in the unified Obsidian vault at:
 - **Platform claims get verified**: anything asserting Claude Code behavior (hook schemas, frontmatter keys, load order) must match the current official docs — they version and drift. `paths:` not `globs:`; stdin JSON not argv.
 - **Budgets are enforced content design**: template CLAUDE.md ≤60 lines, rules ≤45, skill bodies ≤100 (measured by `tools/context-ledger.mjs`); docs ≤130 as a review guideline. Adding means cutting.
 - **Ratchet + prune**: every rule added to `template/` needs a traceable incident; every change considers what to remove.
-- **Dogfood the pipeline**: non-trivial changes to this repo go through `/plan → /implement → /validate → /review → /evolve` with superpowers discipline, like any harnessed project.
+- **Dogfood the pipeline**: non-trivial changes to this repo go through `/plan-work → /implement → /validate → /review-branch → /evolve` with superpowers discipline, like any harnessed project.
 
 ## Structure map (details: README.md)
 

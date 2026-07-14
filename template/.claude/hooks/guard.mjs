@@ -14,7 +14,7 @@
 // cwd (the safe default) and are the documented anti-adversary boundary: use
 // permissions.deny (settings.json) + OS sandboxing for true isolation.
 import { execFileSync } from "node:child_process";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const SECRET_FILE = /(^|[\\/])\.env(\.[^\\/]+)?$/i;
@@ -174,6 +174,37 @@ async function main() {
       deny("Recursive/forced deletion is blocked by the harness guard. Delete specific files explicitly, or ask the user to run this themselves.");
     }
     const baseCwd = event.cwd || process.cwd();
+    // Worktrees stay INSIDE the project root. A worktree added as a SIBLING of the
+    // repo (../wt-x) makes a folder appear outside the project — invisible in the
+    // user's IDE, indistinguishable from the agent roaming their filesystem.
+    // Traces to: /implement's old ../wt-<slug> convention, 2026-07-14 incident.
+    for (const seg of splitTopLevel(cmd)) {
+      const p = gitParse(seg, baseCwd);
+      if (!p || p.sub !== "worktree") continue;
+      const toks = tokenize(seg);
+      const wi = toks.indexOf("worktree");
+      if (wi < 0 || toks[wi + 1] !== "add") continue;
+      let wtPath = null; // first non-flag token after "add" = <path>; -b/-B take a value
+      for (let i = wi + 2; i < toks.length; i++) {
+        const t = toks[i];
+        if (t === "-b" || t === "-B") { i++; continue; }
+        if (t.startsWith("-")) continue;
+        wtPath = t; break;
+      }
+      if (!wtPath) continue;
+      try {
+        // Physical paths on both sides: rev-parse returns the symlink-resolved
+        // toplevel (macOS /tmp -> /private/tmp), so the base must match it.
+        const top = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+          cwd: p.dir, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"],
+        }).trim();
+        let physDir = p.dir;
+        try { physDir = realpathSync(p.dir); } catch { /* vanished dir: keep logical path */ }
+        if (top && !(resolve(physDir, wtPath) + "/").startsWith(top + "/")) {
+          deny(`git worktree add outside the project root ('${wtPath}') is blocked — a folder appearing next to the repo surprises the user. Use .worktrees/<slug> INSIDE the repo, kept out of status via: git check-ignore -q .worktrees || echo '.worktrees/' >> "$(git rev-parse --git-common-dir)/info/exclude"`);
+        }
+      } catch { /* not a git repo: nothing to protect — fail open */ }
+    }
     for (const gm of gitMutations(cmd, baseCwd)) { // deny() exits on the first violation
       const gitCwd = gm.dir; // the repo THIS commit/push really targets
       const branch = currentBranch(gitCwd);

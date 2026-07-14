@@ -51,7 +51,7 @@ chain: `wiki/stack/<tool>/_index.md` (`covers:`, `versions:`, `researched-versio
 `tags:`, `researched-version:`, `verified:`, `doc-sources:`, `related:` (link the inbox note). A second
 incompatible major → `wiki/stack/<tool>/v<major>/`. Leave a pointer stub in the inbox note.
 
-Autonomous mode (`.claude/references/autonomous-mode.md`; e.g. invoked from `/plan`): no interactive
+Autonomous mode (`.claude/references/autonomous-mode.md`; e.g. invoked from `/plan-work`): no interactive
 step — distil with the conservative default and log the write under `## Assumptions`. No vault → write
 findings to `reports/research-<tool>.md` instead (intra-repo reuse only).
 

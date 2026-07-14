@@ -38,6 +38,7 @@ The board is a VIEW computed now — never a committed index file.
 
 ## refine <id> — BA hat drafts, PO (the human) decides
 
+0. RETRIEVE prior art (vault-protocol: `.claude/references/vault-protocol.md`): search `projects/<name>/decisions.md` + `wiki/` for decisions touching this item's surface; surface conflicts/duplicates to the PO before drafting AC. No vault → say so and continue.
 1. Read the item. Tighten Story + AC: vague → observable, oversize → split proposal, uncited Context → sourced pointers.
 2. Any scope change (AC added/removed/reworded, split, type change) → present a before/after diff and WAIT for approval before writing.
 3. Priority and ordering are ALWAYS the human's call — propose with a one-line reason; never set unilaterally.
@@ -50,7 +51,7 @@ The board is a VIEW computed now — never a committed index file.
 1. Ship-stamp sweep FIRST: for each `accepted` item whose feature branch is merged into base (`git branch --merged <base>` contains `{type}/<slug>`), append `<YYYY-MM-DD> shipped: <merge-commit>` to its Log if absent, then commit `track(<id>): shipped` — this is the owner of the `shipped:` line, closing the audit trail.
 2. Candidates = `status: ready` items (scrum mode: current-sprint items first, then the rest). None ready → blocker line: `No ready items. Refine one: /backlog refine <id>` (list the top `backlog`-status items as candidates to refine).
 3. Rank by priority (P0 first), then age (oldest `created` first). Present ONE pick + one-line why, and name the runner-up.
-4. Do not start planning — hand off: `Next: /plan backlog/<id>-<slug>.md`.
+4. Do not start planning — hand off: `Next: /plan-work backlog/<id>-<slug>.md`.
 
 ## Hats here, transitions elsewhere
 
@@ -59,7 +60,7 @@ The board is a VIEW computed now — never a committed index file.
 | new / refine | BA | AC approval, scope changes, priority, ordering |
 | board / next | PM | which item actually starts |
 
-Transitions here: refine sets backlog → ready on PO approval — nothing else. Downstream: /implement → doing then review, /review PASS → done, /accept → accepted (reject path returns items to ready) — table in item-template.md.
+Transitions here: refine sets backlog → ready on PO approval — nothing else. Downstream: /implement → doing then review, /review-branch PASS → done, /accept → accepted (reject path returns items to ready) — table in item-template.md.
 
 ## Autonomous mode (activation rules: `.claude/references/autonomous-mode.md` — never self-inferred)
 
@@ -69,6 +70,6 @@ new/refine proceed without asking; set `ready` only when every criterion is obse
 
 Artifacts to disk; the board table is the only permitted terminal output beyond the final line. End with exactly one line:
 
-`<verb-past> <object> · Next: <command>` — e.g. `Created 007-dark-mode · Next: /backlog refine 007`; after refine → ready: kanban `Next: /plan backlog/<id>-<slug>.md`, scrum `Next: /sprint plan`; `Printed board · Next: /backlog next`
+`<verb-past> <object> · Next: <command>` — e.g. `Created 007-dark-mode · Next: /backlog refine 007`; after refine → ready: kanban `Next: /plan-work backlog/<id>-<slug>.md`, scrum `Next: /sprint plan`; `Printed board · Next: /backlog next`
 
 Blockers replace that line.

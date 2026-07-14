@@ -19,12 +19,14 @@ to a human. Answer in ≤30 lines: file paths, not file contents.
    read-only scout. Skip RECORD entirely — there is nowhere to write.
 3. Vault found → your KB is `<vault>/projects/<name>/`: `_index.md` (contents), `architecture.md`
    (the map), `decisions.md` (ADRs). Read `_index.md` first, then only the file the query needs.
-   Never load the whole KB.
+   Never load the whole KB. Lookup accelerator: the retrieval ladder in
+   `.claude/references/vault-protocol.md` (obsidian CLI search when present, file reads otherwise).
 
 ## Query types (from the dispatching agent)
 
 ### RETRIEVE
 Current architecture relevant to the query. Read `architecture.md` (+ `decisions.md` for rationale).
+Query about an AI-agent/LLM design → also check `agent-kb/` (patterns/, models/, tooling/).
 
     ## Modules/Files
     - <path or module → one-line responsibility>
