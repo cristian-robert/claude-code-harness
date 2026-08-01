@@ -35,7 +35,7 @@ Keep every `.backup` until the user confirms, then offer to delete them.
 | `package.json` scripts / `pyproject.toml` / `Makefile` | Candidate Commands rows (dev / test / lint / typecheck) |
 | Lockfiles (`pnpm-lock.yaml`, `uv.lock`, …) | Package manager — the command prefix, AND a dependency-audit Commands row (`npm audit` / `pip-audit` / `uv pip audit`) for the security lens |
 | Top-level src dirs (`src/`, `app/`, `backend/`, `frontend/`, …) | Backend/frontend dirs (or "none"); candidate rule `paths:` scopes |
-| CI config (`.github/workflows/`, …) | Checks CI already runs → candidate stopGate entries (cheap only, <30s each) |
+| CI config (`.github/workflows/`, …) | Checks CI already runs → candidate stopGate entries (cheap only, <30s each). Any `runs-on: self-hosted` → set `selfHostedRunner: true` in step 3 and expect the step-4 gap row to matter |
 
 Propose from this: the Commands table, 1–2 stopGate candidates, and rule `paths:` scopes.
 
@@ -50,12 +50,14 @@ Ask ONLY what detection cannot know, all in one round:
 5. Vault: read `.claude/harness.json` `vault` (recorded at `init`). `existing` → confirm the path; `scaffold` → confirm where to create it; `none` → confirm skipping, or offer to add one now. (No `vault` key — a pre-vault install — → ask as before: path / scaffold / skip.)
 6. Docs: add the context7 MCP to `.mcp.json` for live doc-fetch in `/research`? (default yes; it needs `npx`.)
 7. Work tracking — one set: backend `none` / `files` / `GitHub issues`? Method Kanban (default) / Scrum? Kanban only: WIP limit (default 3)?
+8. `.github/workflows/` exists → run CI locally in Docker via `act` (`/ci-local`)? Default yes; it edits no workflow file. Skip the question entirely when the repo has no workflows.
 
 ## 3 · GENERATE (smallest diffs; adapt in place)
 
 - `AGENTS.md`: fill EVERY `<placeholder>`; delete rows/sections that don't apply — a placeholder in a live AGENTS.md is a bug. Knowledge skills: fill their template sections from detection and DELETE the `filled by /harness-init` comment markers.
 - `.claude/harness.json`: write `stopGate` — the 1–2 cheapest deterministic checks confirmed in step 2 (<30s each; the expensive full gate stays in `/validate`). **Run each candidate ONCE before arming it.** A command that is already red must NOT be armed: the gate then blocks every turn end from the install commit onward. Red candidate → leave `stopGate: []`, record the failing command + its output in `reports/harness-init.md`, and tell the user to fix it and re-run. Never arm a gate you have not seen exit 0.
   - Repo-wide `eslint .` (or equivalent) is the usual trap: the harness's own `.claude/**/*.mjs` are Node ESM, so a bare `js.configs.recommended` reports `no-undef` on `process`/`console`/`Buffer` in files the product's linter has no business checking. Before arming `lint`, wire `.claude/tooling/eslint.harness.mjs` into the root `eslint.config.js` (or add `{ ignores: [".claude/**"] }`), then confirm `eslint .` is green.
+- Question 8 yes → `.claude/harness.json` `localCi: true`; report whether `act` is on PATH (absent → record the install hint in the report; NEVER install it, and never make it a blocker). Never edit `runs-on:` to enable local runs — `.claude/references/local-ci.md` section 1.
 - `.claude/rules/frontend.md` + `backend.md`: fix `paths:` to the real dirs (key is `paths:`, NEVER `globs:`) — or DELETE the file if the stack lacks that side.
 - Incidents from question 4 → rule/Conventions lines, each ending `traces to: <incident>`.
 - Knowledge skills: fill the TEMPLATE sections of `.claude/skills/architecture-map/SKILL.md` (module table, where new code goes, boundaries) and `.claude/skills/debugging-this-repo/SKILL.md` (logs, repro recipes, failure classes from question 4) from detection.
@@ -78,6 +80,7 @@ Ask ONLY what detection cannot know, all in one round:
 | `npx perfect-harness-engineering file-size-check` | Total vs budget — record the real output |
 | `grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ .claude/skills/architecture-map/ .claude/skills/debugging-this-repo/ \| grep -vE '<(a\|n\|id\|div\|slug\|tool\|button\|dialog)>$' \|\| true` | Prints NOTHING. This is the placeholder GRAMMAR — any `<…>` token — minus the allowlist of things that legitimately survive: path notation (`backlog/<id>-<slug>.md`, `sprints/<n>.md`, `wiki/stack/<tool>/`) and the real HTML tags in `rules/frontend.md`. Do not narrow it back to an enumeration of known names. If your rules cite other HTML tags (`<input>`, `<nav>`, …), add them to the allowlist — never to the pattern |
 | `grep -n "workTracking" .claude/harness.json` | Prints the line with the chosen backend + method |
+| `bash .claude/tooling/self-hosted-runner/status-runner.sh` | `N workflows require self-hosted · M runners online`. **Gap report, NEVER a blocker** — no runner is the normal, healthy state and `0 · 0` is a pass. Record the line; only when N>0 AND M=0 also record that those jobs queue forever (never fail) and point at `/runner status` |
 | `ls ~/.claude/agents/architect-agent/AGENT.md ~/.claude/agents/tester-agent/AGENT.md 2>&1` | Presence check — see the notice below |
 | each armed `stopGate` command | Exit 0 — the evidence for step 3's arming rule |
 
