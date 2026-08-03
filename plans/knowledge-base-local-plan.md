@@ -43,7 +43,7 @@ tier: deep
 | File | The ONE responsibility |
 |---|---|
 | `cli/knowledge-config.js` (create) | `harness.json.knowledge` read/write + the init prompt and its parser |
-| `cli/knowledge-config.test.js` (create) | The 26 asserts, ported from `cli/vault-config.test.js` |
+| `cli/knowledge-config.test.js` (create) | The 38 asserts, ported from `cli/vault-config.test.js` |
 | `cli/vault-config.js` (delete) | — replaced |
 | `cli/vault-config.test.js` (delete) | — replaced |
 | `cli/init.js` (modify) | Ask the shared-store question, record `knowledge`, print the summary |
@@ -97,7 +97,7 @@ tier: deep
   ```
   Expected output: `Switched to a new branch 'feat/knowledge-base-local'`
 
-- [ ] **Step 2: Write the failing test.** Create `cli/knowledge-config.test.js` with exactly this content (26 asserts, harness copied verbatim from `cli/vault-config.test.js:14-19,84-85`):
+- [ ] **Step 2: Write the failing test.** Create `cli/knowledge-config.test.js` with exactly this content (38 asserts, harness copied verbatim from `cli/vault-config.test.js:14-19,84-85`):
   ```js
   // cli/knowledge-config.test.js
   //
@@ -147,6 +147,10 @@ tier: deep
   assert('harness.json without knowledge key -> null', readKnowledgeConfig(PROJ) === null);
   fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), '{ not json');
   assert('malformed harness.json -> null (no throw)', readKnowledgeConfig(PROJ) === null);
+  // An array IS an object to typeof. Returning one breaks the declared return type and the
+  // first caller to touch `.shared.mode` gets a TypeError instead of the "not configured" path.
+  fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), JSON.stringify({ knowledge: [1, 2] }));
+  assert('array-valued knowledge -> null, not the array', readKnowledgeConfig(PROJ) === null);
 
   console.log('writeKnowledgeConfig preserves other keys:');
   fs.writeFileSync(
@@ -190,6 +194,61 @@ tier: deep
   assert('stampMigratedAt sets migratedAt', readKnowledgeConfig(FRESH).migratedAt === '2026-08-03T00:00:00Z');
   assert('a later writeKnowledgeConfig preserves the stamp',
     (writeKnowledgeConfig(FRESH, { mode: 'none', sharedPath: null }), readKnowledgeConfig(FRESH).migratedAt) === '2026-08-03T00:00:00Z');
+
+  console.log('input validation:');
+  // Passing the whole knowledge object instead of {mode, sharedPath} used to write
+  // `shared: { path: null }` with NO mode key and no error — a config no reader can act on.
+  var badCfg = false;
+  try { writeKnowledgeConfig(FRESH, { local: 'knowledge-base', shared: { mode: 'none', path: null } }); }
+  catch (e) { badCfg = true; }
+  assert('writeKnowledgeConfig rejects a config with no valid mode', badCfg);
+  var nullCfg = false;
+  try { writeKnowledgeConfig(FRESH, null); } catch (e) { nullCfg = true; }
+  assert('writeKnowledgeConfig rejects a null config', nullCfg);
+  assert('the rejected write left the previous config intact', readKnowledgeConfig(FRESH).shared.mode === 'none');
+
+  // stampMigratedAt('') would silently UN-SAY a completed one-way migration.
+  var emptyIso = false;
+  try { stampMigratedAt(FRESH, ''); } catch (e) { emptyIso = true; }
+  assert('stampMigratedAt refuses an empty iso', emptyIso);
+  assert('the migration record survived the refused stamp', readKnowledgeConfig(FRESH).migratedAt === '2026-08-03T00:00:00Z');
+
+  // A falsy-but-PRESENT stamp is still a stamp: preserve-if-truthy silently rewrote it.
+  fs.writeFileSync(
+    path.join(FRESH, '.claude', 'harness.json'),
+    JSON.stringify({ knowledge: { local: 'knowledge-base', shared: { mode: 'none', path: null }, migratedAt: '' } }, null, 2)
+  );
+  writeKnowledgeConfig(FRESH, { mode: 'none', sharedPath: null });
+  assert('migratedAt is preserved if PRESENT, not if truthy', readKnowledgeConfig(FRESH).migratedAt === '');
+
+  // A `null` harness.json must give the actionable message, not a raw TypeError on .knowledge.
+  var NULLJ = path.join(TEST_DIR, 'nulljson');
+  fs.mkdirSync(path.join(NULLJ, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'null');
+  var stampErr = null;
+  try { stampMigratedAt(NULLJ, '2026-08-03T00:00:00Z'); } catch (e) { stampErr = e; }
+  assert('stampMigratedAt on a null harness.json throws the actionable message, not a TypeError',
+    stampErr !== null && !(stampErr instanceof TypeError) && stampErr.message.indexOf('not a JSON object') !== -1);
+
+  // The SAME guard on the other writer, which had none of its own coverage: deleting
+  // writeKnowledgeConfig's null/array check left this suite at 34 passed, 0 failed while a
+  // `null` harness.json threw a raw TypeError at the caller. Both halves of the guard are
+  // pinned separately — dropping only `Array.isArray` sets `.knowledge` on an array, which
+  // serialises back to a plain array and silently discards the key it was asked to write.
+  var writeErr = null;
+  try { writeKnowledgeConfig(NULLJ, { mode: 'none', sharedPath: null }); } catch (e) { writeErr = e; }
+  assert('writeKnowledgeConfig on a null harness.json throws the actionable message, not a TypeError',
+    writeErr !== null && !(writeErr instanceof TypeError) && writeErr.message.indexOf('not a JSON object') !== -1);
+  assert('the refused null write left the file untouched',
+    fs.readFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'utf-8') === 'null');
+
+  fs.writeFileSync(path.join(NULLJ, '.claude', 'harness.json'), '[1,2]');
+  var arrayErr = null;
+  try { writeKnowledgeConfig(NULLJ, { mode: 'none', sharedPath: null }); } catch (e) { arrayErr = e; }
+  assert('writeKnowledgeConfig on an ARRAY harness.json refuses instead of writing a key that cannot survive',
+    arrayErr !== null && arrayErr.message.indexOf('not a JSON object') !== -1);
+  assert('the refused array write left the file untouched',
+    fs.readFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'utf-8') === '[1,2]');
 
   fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
@@ -268,7 +327,9 @@ tier: deep
       return null; // reads must never crash init/update
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-    if (!parsed.knowledge || typeof parsed.knowledge !== 'object') return null;
+    // Arrays are objects. Returning one breaks the declared return type and a caller's
+    // `k.shared.mode` TypeErrors on it — the top level is array-guarded, so this must be too.
+    if (!parsed.knowledge || typeof parsed.knowledge !== 'object' || Array.isArray(parsed.knowledge)) return null;
     return parsed.knowledge;
   }
 
@@ -276,6 +337,12 @@ tier: deep
   // through a harness.json we cannot parse — silently discarding the stop gate is never
   // acceptable (parity with harness-targets.writeHarnessTargets).
   function writeKnowledgeConfig(projectRoot, config) {
+    // Validate the INPUT, not just the file. Passing the whole knowledge object (rather than
+    // the {mode, sharedPath} the parser returns) used to write `shared: { path: null }` with
+    // no `mode` key at all, and no error — a config no reader can interpret.
+    if (!config || (config.mode !== 'existing' && config.mode !== 'none')) {
+      throw new Error('writeKnowledgeConfig requires { mode: "existing" | "none", sharedPath }.');
+    }
     var p = harnessJsonPath(projectRoot);
     var current = {};
     if (fs.existsSync(p)) {
@@ -295,7 +362,9 @@ tier: deep
     current.knowledge = {
       local: LOCAL_DIR,
       shared: { mode: config.mode, path: config.sharedPath || null },
-      migratedAt: previous.migratedAt || null,
+      // Preserve-if-PRESENT, not preserve-if-truthy: the contract is "always preserves", and
+      // a falsy-but-present stamp is still a stamp that must not be rewritten here.
+      migratedAt: Object.prototype.hasOwnProperty.call(previous, 'migratedAt') ? previous.migratedAt : null,
     };
     writeJsonAtomic(p, current);
   }
@@ -304,11 +373,21 @@ tier: deep
   // that function must never let a re-run of `init` un-say a completed migration,
   // so it always re-reads migratedAt from disk. This is the ONE writer of the field.
   function stampMigratedAt(projectRoot, iso) {
+    // The stamp IS the one-way record. An empty or non-string value would silently un-say a
+    // completed migration, which is the one thing this field exists to make impossible.
+    if (typeof iso !== 'string' || iso === '') {
+      throw new Error('stampMigratedAt requires a non-empty ISO timestamp string.');
+    }
     var p = harnessJsonPath(projectRoot);
     if (!fs.existsSync(p)) throw new Error(p + ' does not exist — nothing to stamp.');
     var current;
     try { current = JSON.parse(fs.readFileSync(p, 'utf-8')); }
     catch (e) { throw new Error(p + ' is not valid JSON. Fix it by hand and re-run — refusing to overwrite it.'); }
+    // Same guard writeKnowledgeConfig has: a `null` or array harness.json must produce the
+    // actionable message, not a raw TypeError on `.knowledge`.
+    if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+      throw new Error(p + ' is not a JSON object. Fix it by hand and re-run — refusing to overwrite it.');
+    }
     if (!current.knowledge || typeof current.knowledge !== 'object') {
       throw new Error(p + ' has no `knowledge` key — run `init` before stamping a migration.');
     }
@@ -330,7 +409,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/knowledge-config.test.js
   ```
-  Expected final line: `26 passed, 0 failed` (exit 0).
+  Expected final line: `38 passed, 0 failed` (exit 0).
 
 - [ ] **Step 6: Commit.**
   ```bash
@@ -663,7 +742,7 @@ tier: deep
 - [ ] **Step 4: Create `template/.claude/references/knowledge-base-scaffold/resources.md`:**
   ```markdown
   ---
-  type: reference
+  type: note
   project: <Project Name>
   updated: YYYY-MM-DD
   tags:
@@ -694,8 +773,9 @@ tier: deep
   ## Credentials INDEX
 
   > [!danger] Pointers only — this file is git-tracked and may be published
-  > Record **where** a credential lives, never the value itself. `.claude/hooks/guard.mjs`
-  > denies a secret-shaped write here, and `kb-check` fails the gate on one.
+  > Record **where** a credential lives, never the value itself. `kb-check` fails the gate on one.
+  > A pointer that itself looks secret-shaped is waived one line at a time by appending
+  > `<!-- kb-check:allow -->` to that line; the waiver is visible in the diff.
 
   | Credential | Lives in | Notes |
   |---|---|---|
@@ -1364,8 +1444,7 @@ tier: deep
   A harnessed repo records the absolute path to this vault in its own
   `.claude/harness.json` → `knowledge.shared` (`{ "mode": "existing", "path": "<ABSOLUTE_VAULT_PATH>" }`),
   written once by `npx perfect-harness-engineering init`. There is no pointer block to paste and
-  nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from that path, and its
-  `guard.mjs` denies any write into `projects/`.
+  nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from that path.
   ```
 
 - [ ] **Step 4: Doctrine edit 2 of 7 — `vault-scaffold/CLAUDE.md:77-88`.** Replace the whole `## Project Wiki Doctrine` section (from the heading through the `Register every new project…` paragraph) with

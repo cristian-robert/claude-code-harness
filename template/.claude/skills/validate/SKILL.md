@@ -30,11 +30,10 @@ The invocation argument (the text typed after the command) if given, else the pl
 
 If the Commands table still has `<cmd>` placeholders, stop: blocker line, ask the user to fill it.
 
-**Ratcheted greps (repo-specific).** Every grep the repo has ratcheted into its gate runs here, required output `clean`. This repo's shipped vault scaffold must teach ONE doctrine — product knowledge lives in that product's own git-tracked `knowledge-base/`, `projects/` is a registry, not a wiki:
+**Ratcheted greps (repo-specific).** Every grep this repo has ratcheted into its gate runs here, required output `clean`. Each traces to a real incident — a doctrine that drifted, a reference that dangled — and is added by `/evolve`, never invented at validate time. None recorded yet → skip this row and say so.
 
-```bash
-grep -rniE "pointer-block|project-template|projects/<name>|project wiki|one wiki per|working knowledge|vault-centric" template/.claude/references/vault-scaffold/ || echo clean
-```
+<!-- One fenced bash block per ratcheted grep, each ending `|| echo clean`. Shape:
+     grep -rniE "phrase one|phrase two" path/to/scope/ || echo clean -->
 
 ## 2 · Detect what changed
 
