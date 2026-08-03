@@ -2230,6 +2230,10 @@ tier: deep
 **Files:**
 - Modify `template/.claude/hooks/guard.mjs` (constants after `:26`; helper after `:36`; a new branch in `main()` after the Read/Edit/Write secret branch at `:141-145`)
 - Test: modify `template/.claude/hooks/smoke-test.mjs` (append a block at the end of the `guard.mjs` section, after the `configured baseBranch (develop) is protected` block that ends at `:245`)
+- Modify `template/.claude/references/knowledge-protocol.md` (Step 7 restores two claims: the boundary rule and the write policy)
+- Modify `template/.claude/agents/architect-agent.md` (Step 7 restores the claim in RECORD item 5)
+- Modify `template/.claude/references/knowledge-base-scaffold/resources.md` (Step 7 restores the claim in the `[!danger]` callout)
+- Modify `template/.claude/references/vault-scaffold/CLAUDE.md` (Step 7 restores the claim on the "How a repo reaches this vault" tail)
 
 **Interfaces:**
 - Consumes: `harness.json` → `knowledge.shared` (Task 2 writes it).
