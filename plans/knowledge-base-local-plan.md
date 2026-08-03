@@ -1678,7 +1678,7 @@ tier: deep
   **Promotion MOVES.** When a local fact generalizes, `/evolve` moves it to the shared store,
   DELETES the local file, and leaves a one-line pointer in `knowledge-base/_index.md`. Exactly one
   copy of any fact exists — this is not a mirror. Never write project knowledge into
-  `<shared>/projects/`: `.claude/hooks/guard.mjs` denies it.
+  `<shared>/projects/` — it belongs in that repo's own `knowledge-base/`.
 
   ## Retrieval ladders — one per store, never both rungs, never skip local
 
@@ -1695,8 +1695,8 @@ tier: deep
     write updates that folder's `_index.md` in the same change (Index Law) and uses Obsidian
     conventions: frontmatter, `[[wikilinks]]` (the global `obsidian-markdown` skill when available).
   - `knowledge-base/` is git-TRACKED and may be published: `resources.md` holds credential POINTERS
-    only. `guard.mjs` denies a secret-shaped write; `npx perfect-harness-engineering kb-check` gates
-    it again at `/validate` and at `/evolve`'s apply step.
+    only. `npx perfect-harness-engineering kb-check` gates it at `/validate` and again at `/evolve`'s
+    apply step, because the KB commit happens at `/evolve`.
   - Shared-store writes (`wiki/`, `agent-kb/`) and any rule change: ask-first, via `/evolve` only.
   - `knowledge-base/` is committed as ONE `docs(kb):` commit at `/evolve`, on the feature branch —
     a work artifact like `plans/` and `reports/`, not a tracking-root file.
@@ -1793,9 +1793,22 @@ tier: deep
   - RETRIEVE `knowledge-base/architecture.md` + `decisions.md` first; the product under work is itself an AI agent/LLM feature → also the shared `agent-kb/` (patterns/, models/, tooling/) per `.claude/references/knowledge-protocol.md`. Record both in the plan's `Knowledge to load first:` — a store with nothing relevant gets `none — <reason>`.
   ```
 
-- [ ] **Step 9: `template/.claude/skills/validate/SKILL.md` — add the gate row and repoint `:56`.** In the gate table at `:25-28`, after the `| Conditional (step 2) | build, integration/e2e — only when the diff warrants |` row, insert:
+- [ ] **Step 9: `template/.claude/skills/validate/SKILL.md` — add the gate rows, the ratcheted-greps mechanism, and repoint `:56`.** In the gate table at `:25-28`, after the `| Conditional (step 2) | build, integration/e2e — only when the diff warrants |` row, insert:
   ```
   | Always, when `knowledge-base/` exists | `npx perfect-harness-engineering kb-check` — index law, unfilled placeholders, secret shapes. Exit 1 is a FAIL row like any other |
+  ```
+  Then add the ratcheted-greps row as the LAST row of the same table:
+  ```
+  | Ratcheted greps (below) | doctrine / dangling-reference checks — always, when the repo defines one |
+  ```
+  And immediately after the `If the Commands table still has \`<cmd>\` placeholders…` line, insert
+  the mechanism itself — adopter-general, because `template/` is installed verbatim into repos that
+  have none of THIS repo's greps:
+  ```
+  **Ratcheted greps (repo-specific).** Every grep this repo has ratcheted into its gate runs here, required output `clean`. Each traces to a real incident — a doctrine that drifted, a reference that dangled — and is added by `/evolve`, never invented at validate time. None recorded yet → skip this row and say so.
+
+  <!-- One fenced bash block per ratcheted grep, each ending `|| echo clean`. Shape:
+       grep -rniE "phrase one|phrase two" path/to/scope/ || echo clean -->
   ```
   In `:56`, replace
   ```
@@ -1969,8 +1982,8 @@ tier: deep
   3. Decision with rationale given → append an ADR to `knowledge-base/decisions.md`.
   4. Index Law: a folder whose contents you changed gets its `_index.md` updated in the SAME change
      (bump `updated:`).
-  5. Never write a credential VALUE — `resources.md` holds pointers only; `guard.mjs` denies the
-     write and `kb-check` fails the gate.
+  5. Never write a credential VALUE — `resources.md` holds pointers only; `kb-check` fails the gate
+     on one.
   6. Reply with a one-line confirmation per file written.
   ```
 
@@ -2329,17 +2342,49 @@ tier: deep
   ```
   Expected output: `106 passed, 0 failed` (exit 0).
 
-- [ ] **Step 7: Prove the hook still fails open on garbage (the non-negotiable property).**
+- [ ] **Step 7: Restore the five `guard.mjs` claims this commit has now earned.** Every one of these
+  was removed, or written without its guard clause, under the branch rule that a claim ships only
+  when its mechanism exists. The matchers landed in Steps 3–5, so the clauses come back HERE, in the
+  same commit — not earlier, not later.
+
+  1. `template/.claude/references/knowledge-protocol.md`, boundary rule — replace the paragraph
+     ending `` Never write project knowledge into `<shared>/projects/` — it belongs in that repo's
+     own `knowledge-base/`. `` with `` Never write project knowledge into `<shared>/projects/`:
+     `.claude/hooks/guard.mjs` denies it. ``
+  2. `template/.claude/references/knowledge-protocol.md`, write policy — in the bullet beginning
+     `` `knowledge-base/` is git-TRACKED and may be published ``, restore the guard sentence so it
+     reads `` `guard.mjs` denies a secret-shaped write; `npx perfect-harness-engineering kb-check`
+     gates it again at `/validate` and at `/evolve`'s apply step. ``
+  3. `template/.claude/agents/architect-agent.md`, RECORD item 5 — replace `` `kb-check` fails the
+     gate on one. `` with `` `guard.mjs` denies the write and `kb-check` fails the gate. ``
+  4. `template/.claude/references/knowledge-base-scaffold/resources.md` — in the `[!danger]`
+     callout, restore the two-line form:
+     `` > Record **where** a credential lives, never the value itself. `.claude/hooks/guard.mjs` ``
+     `` > denies a secret-shaped write here, and `kb-check` fails the gate on one. ``
+     The two `<!-- kb-check:allow -->` hatch lines below it stay exactly as they are.
+  5. `template/.claude/references/vault-scaffold/CLAUDE.md` — restore the tail of the sentence
+     ending `the repo's agents read `wiki/` and `agent-kb/` from that path.` so it reads
+     `` …from that path, and its `guard.mjs` denies any write into `projects/`. ``
+
+  Then prove every restored claim is now true of the shipped hook:
+  ```bash
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -n "KB_SECRET\|sharedStorePath\|projects/" template/.claude/hooks/guard.mjs | head -20
+  ```
+  Expected: the `KB_SECRET` constant, the `sharedStorePath` helper, and the `projects/` prefix test
+  from Step 5 all present. A restored claim with no matching line in `guard.mjs` is the exact defect
+  this step exists to prevent — remove the claim rather than ship it.
+
+- [ ] **Step 8: Prove the hook still fails open on garbage (the non-negotiable property).**
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | grep "survives malformed input (fail-open)" | head -1
   ```
   Expected output: `  PASS  survives malformed input (fail-open)`
 
-- [ ] **Step 8: Commit.**
+- [ ] **Step 9: Commit.**
   ```bash
-  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add template/.claude/hooks/guard.mjs template/.claude/hooks/smoke-test.mjs && git commit -m "feat(hooks): guard denies shared-store project writes and KB secret writes"
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add template/.claude/hooks/guard.mjs template/.claude/hooks/smoke-test.mjs template/.claude/references/knowledge-protocol.md template/.claude/agents/architect-agent.md template/.claude/references/knowledge-base-scaffold/resources.md template/.claude/references/vault-scaffold/CLAUDE.md && git commit -m "feat(hooks): guard denies shared-store project writes and KB secret writes"
   ```
-  Expected output contains: `2 files changed`
+  Expected output contains: `6 files changed`
 
 ---
 
