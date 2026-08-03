@@ -17,9 +17,8 @@ var NEEDS_RESTORE = [
   'sprints',
   'plans',
   'reports',
-  // Project-scoped knowledge. The payload ships only a SCAFFOLD (under
-  // .claude/references/); the live folder is the project's own writing and an update
-  // that reset it would delete the architecture map the architect agent maintains.
+  // Project-scoped knowledge. Registry entry only — nothing reads NEEDS_RESTORE today;
+  // update never writes outside .claude/ and examples/, so knowledge-base/ is safe by construction.
   'knowledge-base',
 ];
 

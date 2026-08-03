@@ -426,6 +426,20 @@ test('init.js records harness targets immediately after the .claude/ copy, befor
   );
   const callCount = src.split('writeHarnessTargets(targetDir, targets)').length - 1;
   assert.strictEqual(callCount, 1, 'writeHarnessTargets(targetDir, targets) must be called exactly once, found ' + callCount);
+
+  // Same crash window, same shape: writeKnowledgeConfig persists the shared-store answer
+  // the user was just asked for interactively. If it ran after the instruction-file copy
+  // and that copy threw (EACCES, ...), the answer would be lost with no way to recover it
+  // except re-running init and re-asking. Position was correct but pinned by nothing.
+  const kIdx = src.indexOf('writeKnowledgeConfig(targetDir, knowledge)');
+  assert.ok(kIdx !== -1, 'writeKnowledgeConfig(targetDir, knowledge) call not found');
+  assert.ok(
+    writeIdx < kIdx && kIdx < instructionFilesIdx,
+    'writeKnowledgeConfig must run between writeHarnessTargets and the instruction-file copy — found writeHarnessTargets@' +
+      writeIdx + ', writeKnowledgeConfig@' + kIdx + ', instructionFiles@' + instructionFilesIdx
+  );
+  const kCallCount = src.split('writeKnowledgeConfig(targetDir, knowledge)').length - 1;
+  assert.strictEqual(kCallCount, 1, 'writeKnowledgeConfig(targetDir, knowledge) must be called exactly once, found ' + kCallCount);
 });
 
 // Dynamic companion: exercise the ACTUAL update sequence — backupAndCopy (skips

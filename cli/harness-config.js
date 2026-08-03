@@ -7,8 +7,9 @@
 //
 // Why this is inverted from every other file in the payload: `update` used to copy the
 // template's harness.json over the user's and then restore a HARDCODED list of keys it
-// remembered (harness, knowledge, models — each added reactively after someone noticed it
-// breaking). That architecture fails OPEN. Every key nobody remembered was silently reset
+// remembered (harness, vault, models — each added reactively after someone noticed it
+// breaking; that `vault` key is now `knowledge` — see cli/knowledge-config.js). That
+// architecture fails OPEN. Every key nobody remembered was silently reset
 // to the shipped default:
 //
 //   stopGate    — .claude/hooks/stop-gate.mjs runs these commands. Reset to [], the gate is

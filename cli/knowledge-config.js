@@ -61,7 +61,9 @@ function readKnowledgeConfig(projectRoot) {
     return null; // reads must never crash init/update
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
-  if (!parsed.knowledge || typeof parsed.knowledge !== 'object') return null;
+  // Arrays are objects. Returning one breaks the declared return type and a caller's
+  // `k.shared.mode` TypeErrors on it — the top level is array-guarded, so this must be too.
+  if (!parsed.knowledge || typeof parsed.knowledge !== 'object' || Array.isArray(parsed.knowledge)) return null;
   return parsed.knowledge;
 }
 
@@ -69,6 +71,12 @@ function readKnowledgeConfig(projectRoot) {
 // through a harness.json we cannot parse — silently discarding the stop gate is never
 // acceptable (parity with harness-targets.writeHarnessTargets).
 function writeKnowledgeConfig(projectRoot, config) {
+  // Validate the INPUT, not just the file. Passing the whole knowledge object (rather than
+  // the {mode, sharedPath} the parser returns) used to write `shared: { path: null }` with
+  // no `mode` key at all, and no error — a config no reader can interpret.
+  if (!config || (config.mode !== 'existing' && config.mode !== 'none')) {
+    throw new Error('writeKnowledgeConfig requires { mode: "existing" | "none", sharedPath }.');
+  }
   var p = harnessJsonPath(projectRoot);
   var current = {};
   if (fs.existsSync(p)) {
@@ -88,7 +96,9 @@ function writeKnowledgeConfig(projectRoot, config) {
   current.knowledge = {
     local: LOCAL_DIR,
     shared: { mode: config.mode, path: config.sharedPath || null },
-    migratedAt: previous.migratedAt || null,
+    // Preserve-if-PRESENT, not preserve-if-truthy: the contract is "always preserves", and
+    // a falsy-but-present stamp is still a stamp that must not be rewritten here.
+    migratedAt: Object.prototype.hasOwnProperty.call(previous, 'migratedAt') ? previous.migratedAt : null,
   };
   writeJsonAtomic(p, current);
 }
@@ -97,11 +107,21 @@ function writeKnowledgeConfig(projectRoot, config) {
 // that function must never let a re-run of `init` un-say a completed migration,
 // so it always re-reads migratedAt from disk. This is the ONE writer of the field.
 function stampMigratedAt(projectRoot, iso) {
+  // The stamp IS the one-way record. An empty or non-string value would silently un-say a
+  // completed migration, which is the one thing this field exists to make impossible.
+  if (typeof iso !== 'string' || iso === '') {
+    throw new Error('stampMigratedAt requires a non-empty ISO timestamp string.');
+  }
   var p = harnessJsonPath(projectRoot);
   if (!fs.existsSync(p)) throw new Error(p + ' does not exist — nothing to stamp.');
   var current;
   try { current = JSON.parse(fs.readFileSync(p, 'utf-8')); }
   catch (e) { throw new Error(p + ' is not valid JSON. Fix it by hand and re-run — refusing to overwrite it.'); }
+  // Same guard writeKnowledgeConfig has: a `null` or array harness.json must produce the
+  // actionable message, not a raw TypeError on `.knowledge`.
+  if (current === null || typeof current !== 'object' || Array.isArray(current)) {
+    throw new Error(p + ' is not a JSON object. Fix it by hand and re-run — refusing to overwrite it.');
+  }
   if (!current.knowledge || typeof current.knowledge !== 'object') {
     throw new Error(p + ' has no `knowledge` key — run `init` before stamping a migration.');
   }

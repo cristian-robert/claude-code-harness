@@ -46,6 +46,10 @@ fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), JSON.stringify({ st
 assert('harness.json without knowledge key -> null', readKnowledgeConfig(PROJ) === null);
 fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), '{ not json');
 assert('malformed harness.json -> null (no throw)', readKnowledgeConfig(PROJ) === null);
+// An array IS an object to typeof. Returning one breaks the declared return type and the
+// first caller to touch `.shared.mode` gets a TypeError instead of the "not configured" path.
+fs.writeFileSync(path.join(PROJ, '.claude', 'harness.json'), JSON.stringify({ knowledge: [1, 2] }));
+assert('array-valued knowledge -> null, not the array', readKnowledgeConfig(PROJ) === null);
 
 console.log('writeKnowledgeConfig preserves other keys:');
 fs.writeFileSync(
@@ -89,6 +93,41 @@ stampMigratedAt(FRESH, '2026-08-03T00:00:00Z');
 assert('stampMigratedAt sets migratedAt', readKnowledgeConfig(FRESH).migratedAt === '2026-08-03T00:00:00Z');
 assert('a later writeKnowledgeConfig preserves the stamp',
   (writeKnowledgeConfig(FRESH, { mode: 'none', sharedPath: null }), readKnowledgeConfig(FRESH).migratedAt) === '2026-08-03T00:00:00Z');
+
+console.log('input validation:');
+// Passing the whole knowledge object instead of {mode, sharedPath} used to write
+// `shared: { path: null }` with NO mode key and no error — a config no reader can act on.
+var badCfg = false;
+try { writeKnowledgeConfig(FRESH, { local: 'knowledge-base', shared: { mode: 'none', path: null } }); }
+catch (e) { badCfg = true; }
+assert('writeKnowledgeConfig rejects a config with no valid mode', badCfg);
+var nullCfg = false;
+try { writeKnowledgeConfig(FRESH, null); } catch (e) { nullCfg = true; }
+assert('writeKnowledgeConfig rejects a null config', nullCfg);
+assert('the rejected write left the previous config intact', readKnowledgeConfig(FRESH).shared.mode === 'none');
+
+// stampMigratedAt('') would silently UN-SAY a completed one-way migration.
+var emptyIso = false;
+try { stampMigratedAt(FRESH, ''); } catch (e) { emptyIso = true; }
+assert('stampMigratedAt refuses an empty iso', emptyIso);
+assert('the migration record survived the refused stamp', readKnowledgeConfig(FRESH).migratedAt === '2026-08-03T00:00:00Z');
+
+// A falsy-but-PRESENT stamp is still a stamp: preserve-if-truthy silently rewrote it.
+fs.writeFileSync(
+  path.join(FRESH, '.claude', 'harness.json'),
+  JSON.stringify({ knowledge: { local: 'knowledge-base', shared: { mode: 'none', path: null }, migratedAt: '' } }, null, 2)
+);
+writeKnowledgeConfig(FRESH, { mode: 'none', sharedPath: null });
+assert('migratedAt is preserved if PRESENT, not if truthy', readKnowledgeConfig(FRESH).migratedAt === '');
+
+// A `null` harness.json must give the actionable message, not a raw TypeError on .knowledge.
+var NULLJ = path.join(TEST_DIR, 'nulljson');
+fs.mkdirSync(path.join(NULLJ, '.claude'), { recursive: true });
+fs.writeFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'null');
+var stampErr = null;
+try { stampMigratedAt(NULLJ, '2026-08-03T00:00:00Z'); } catch (e) { stampErr = e; }
+assert('stampMigratedAt on a null harness.json throws the actionable message, not a TypeError',
+  stampErr !== null && !(stampErr instanceof TypeError) && stampErr.message.indexOf('not a JSON object') !== -1);
 
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
