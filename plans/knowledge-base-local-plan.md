@@ -1285,11 +1285,13 @@ tier: deep
   -->
   ```
 
-- [ ] **Step 12: Run the dangling-reference check and see it pass (GREEN).**
+- [ ] **Step 12: Run the doctrine check and see it pass (GREEN).**
+  Greps the DOCTRINE PHRASES, not two filenames — a filename grep returns `clean` for an
+  implementation that deleted the six files and made zero doctrine edits.
   ```bash
-  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -rn "pointer-block\|project-template" template/.claude/references/vault-scaffold/ || echo "clean"
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -rniE "pointer-block|project-template|projects/<name>|project wiki|one wiki per|working knowledge|vault-centric" template/.claude/references/vault-scaffold/ || echo clean
   ```
-  Expected output: `clean`
+  Expected output: `clean`. Ratcheted: this is a `/validate` gate row.
 
 - [ ] **Step 13: Prove the payload is still fully committed and emits cleanly.**
   ```bash

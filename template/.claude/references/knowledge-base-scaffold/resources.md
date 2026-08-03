@@ -1,5 +1,5 @@
 ---
-type: reference
+type: note
 project: <Project Name>
 updated: YYYY-MM-DD
 tags:

@@ -1,14 +1,14 @@
 ---
 type: index
 folder: wiki
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
 
 # wiki
 
-**Stage 3 — evergreen.** Cross-project knowledge that outlives any single product: patterns, stack references, how-tos, and decisions that generalize. This is the post-graduation home for lessons harvested out of `inbox/` and `projects/`.
+**Evergreen.** Cross-project knowledge that outlives any single product: patterns, stack references, how-tos, and decisions that generalize. This is the post-graduation home for lessons harvested out of `inbox/` and out of a repo's own `knowledge-base/`.
 
 > [!note] Scope
 > General engineering + product knowledge goes here. Knowledge specifically about **building AI agents** goes in [[agent-kb/_index|agent-kb]] instead.
@@ -23,5 +23,5 @@ _Empty. Organize by topic subfolders — each subfolder gets its own `_index.md`
 
 1. Before reinventing something, search here first.
 2. New evergreen topic → create a subfolder `<topic>/` **with an `_index.md`**, or a single `<topic>.md` if small.
-3. Keep entries distilled and durable — link back to the `projects/` or `inbox/research/` note that spawned them.
+3. Keep entries distilled and durable — link back to the `inbox/research/` note, or name the repo `knowledge-base/` page, that spawned them.
 4. Update this index (and any parent subfolder index) whenever you add or reorganize content.

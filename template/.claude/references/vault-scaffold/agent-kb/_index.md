@@ -1,17 +1,17 @@
 ---
 type: index
 folder: agent-kb
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
 
 # agent-kb
 
-**Evergreen knowledge domain for building AI agents.** Reusable across every agent project — this is what your individual agents (which live in `projects/`) draw from. Agent-building expertise compounds here.
+**Evergreen knowledge domain for building AI agents.** Reusable across every agent project — this is what your individual agent products draw from, wherever their repos live. Agent-building expertise compounds here.
 
-> [!note] agent-kb vs projects
-> A specific agent *product* → `projects/<name>/` (its own wiki). Reusable, cross-project agent know-how → here.
+> [!note] agent-kb vs a product's own knowledge-base/
+> A specific agent *product* → its own repo's git-tracked `knowledge-base/`. Reusable, cross-project agent know-how → here.
 
 ## Contents
 

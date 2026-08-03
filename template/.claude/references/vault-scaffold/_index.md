@@ -1,7 +1,7 @@
 ---
 type: index
 folder: /
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
@@ -18,7 +18,7 @@ Unified knowledge base for building **applications and AI agents**. This is the 
 | Folder | Purpose | Index |
 |---|---|---|
 | 📥 **inbox** | Paste raw info + research. Staging. | [[inbox/_index\|inbox]] |
-| 🏗️ **projects** | One wiki per product. Working knowledge. | [[projects/_index\|projects]] |
+| 🏗️ **projects** | Registry only: which repo holds each product's `knowledge-base/`. | [[projects/_index\|projects]] |
 | 📚 **wiki** | Evergreen cross-project knowledge. | [[wiki/_index\|wiki]] |
 | 🤖 **agent-kb** | Reusable AI-agent-building knowledge. | [[agent-kb/_index\|agent-kb]] |
 | ⚙️ **system** | Plumbing: index template, frontmatter schema. | [[system/_index\|system]] |
@@ -26,8 +26,10 @@ Unified knowledge base for building **applications and AI agents**. This is the 
 ## Flow
 
 ```
-inbox/  →  projects/<name>/  →  wiki/  +  agent-kb/
-capture     working knowledge     evergreen distillation
+<repo>/knowledge-base/  ──MOVE on generalization──>  wiki/  +  agent-kb/
+project-scoped, git-tracked                          evergreen distillation
+                      inbox/  →  wiki/ + agent-kb/
+                      staging     evergreen
 ```
 
 ## Quick actions

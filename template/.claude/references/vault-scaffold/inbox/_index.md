@@ -1,17 +1,17 @@
 ---
 type: index
 folder: inbox
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
 
 # inbox
 
-**Stage 1 — staging.** Everything unprocessed lands here: pasted material, research, loose code. Nothing here is trustworthy-final; it's raw until triaged out to `projects/`, `wiki/`, or `agent-kb/`.
+**Staging.** Everything unprocessed lands here: pasted material, research, loose code. Nothing here is trustworthy-final; it's raw until triaged out to the owning repo's `knowledge-base/`, `wiki/`, or `agent-kb/`.
 
 > [!tip] Triage rule
-> When an inbox note is about a specific product → move it into `projects/<name>/`. When it generalizes → harvest into `wiki/` (or `agent-kb/` if it's about building agents). When it goes cold → `inbox/archive/`.
+> When an inbox note is about a specific product → move it into that product's repo, under its git-tracked `knowledge-base/`; never into `projects/`, which is a registry, not a wiki. When it generalizes → harvest into `wiki/` (or `agent-kb/` if it's about building agents). When it goes cold → `inbox/archive/`.
 
 ## Contents
 

@@ -1,7 +1,7 @@
 ---
 type: index
 folder: projects
-updated: 2026-07-08
+updated: 2026-08-03
 tags:
   - index
   - registry
@@ -10,8 +10,6 @@ tags:
 # projects
 
 **The registry — pointers, not knowledge.** Each row records where a product's repo (and its git-tracked `knowledge-base/`) lives. Project knowledge is NOT stored in this vault; see [[CLAUDE#Project Knowledge Doctrine — it is NOT here]].
-
-This file is the **registry** — the status of every project at a glance.
 
 ## Registry
 
@@ -34,6 +32,6 @@ This file is the **registry** — the status of every project at a glance.
 
 1. Looking for a product's architecture or decisions? They are in that product's repo, under
    `knowledge-base/` — not here. This file only tells you which repo.
-2. A leftover `projects/<name>/` subfolder is un-migrated knowledge, not the shape. Report it;
-   never write new knowledge into one.
+2. A leftover per-product subfolder under `projects/` is un-migrated knowledge, not the shape.
+   Report it; never write new knowledge into one.
 3. Shipped or dead project → update `status:` in the row and bump `updated:`.

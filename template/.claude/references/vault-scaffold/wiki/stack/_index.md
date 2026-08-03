@@ -1,14 +1,14 @@
 ---
 type: index
 folder: wiki/stack
-updated: 2026-01-01
+updated: 2026-08-03
 tags:
   - index
 ---
 
 # wiki / stack
 
-**Stage 3 — evergreen, tool-keyed.** One subfolder per external tool/library/service
+**Evergreen, tool-keyed.** One subfolder per external tool/library/service
 (`<tool>/`), holding the durable cross-project answer to "how do we use `<tool>`?". This is the
 cache the `/research` loop checks first and distils into — populated by using `/research <tool>`,
 not by hand.

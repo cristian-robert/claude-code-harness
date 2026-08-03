@@ -4,7 +4,7 @@ Root operating manual for this Obsidian vault. **Read this file first, every ses
 
 ## Vault Conventions
 
-_Last reviewed: 2026-07-06_
+_Last reviewed: 2026-08-03_
 
 > [!danger] DO NOT TOUCH
 > Plumbing and cold storage — never write notes into these:
@@ -15,7 +15,7 @@ _Last reviewed: 2026-07-06_
 
 ## What this vault is
 
-A single, unified knowledge base for **building applications and AI agents**. Three things happen here:
+A single, unified knowledge base for **building applications and AI agents**. What belongs where:
 
 - **Paste raw information** → `inbox/`
 - **Keep project knowledge in its repo** → that repo's own git-tracked `knowledge-base/`, never here
@@ -36,9 +36,9 @@ Raw material lands in `inbox/`. Project-scoped facts never land here at all — 
 
 Top-level folders — **each has its own `_index.md`; read that before working inside it**:
 
-- **`inbox/`** — Stage 1 staging. Untriaged capture + research. Subfolders: `raw/` (paste zone), `research/` (deep-dive briefs), `snippets/` (reusable code). Has `archive/`.
+- **`inbox/`** — Staging. Untriaged capture + research. Subfolders: `raw/` (paste zone), `research/` (deep-dive briefs), `snippets/` (reusable code). Has `archive/`.
 - **`projects/`** — the **registry only**. `projects/_index.md` records, per product, where its repo and its `knowledge-base/` live. No project knowledge is stored here; a project subfolder is a migration leftover, not the shape.
-- **`wiki/`** — Stage 3 evergreen. Cross-project knowledge: patterns, stack references, how-tos, decisions that generalize.
+- **`wiki/`** — Evergreen. Cross-project knowledge: patterns, stack references, how-tos, decisions that generalize.
 - **`agent-kb/`** — Evergreen knowledge domain for **building AI agents**: `prompts/`, `evals/`, `models/`, `patterns/`, `tooling/`. Reusable across every agent project.
 - **`system/`** — Plumbing. `templates/` (the `_index.md` template), `schemas/` (frontmatter contract). DO NOT TOUCH as a note dump.
 
@@ -106,7 +106,7 @@ External-tool/library docs live tool-keyed under `wiki/stack/<tool>/`, cached an
 - `patterns/` — architectures (tool loops, RAG, multi-agent, memory).
 - `tooling/` — MCP servers, frameworks, SDK references.
 
-Individual agent *products* still live in `projects/` as their own wikis; `agent-kb/` is the cross-project reference they draw from.
+Individual agent *products* keep their knowledge in their own repo's git-tracked `knowledge-base/`; `agent-kb/` is the cross-project reference they draw from.
 
 ## How a repo reaches this vault
 
@@ -120,8 +120,7 @@ nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from tha
 
 The frontmatter contract for every note type lives in `[[system/schemas/frontmatter|system/schemas/frontmatter.md]]`. Core fields:
 
-- `type:` — `index` | `project-index` | `note` | `research` | `snippet` | `reference` | `adr`.
-- Project index adds: `status:` (`active` | `paused` | `shipped` | `archived`), `kind:` (`app` | `agent` | `library` | `service`), `repo:`.
+- `type:` — `index` | `note` | `research` | `snippet` | `reference` | `adr`.
 - `updated:` — `YYYY-MM-DD`, bumped on every meaningful edit.
 - `doc-sources:` — documentation provenance (URL+version) for `research`/`reference` notes; distinct from `sources:` (repo file paths).
 

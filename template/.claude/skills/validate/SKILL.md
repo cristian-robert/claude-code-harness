@@ -26,8 +26,15 @@ The invocation argument (the text typed after the command) if given, else the pl
 |---|---|
 | AGENTS.md "Commands" table | lint, typecheck, unit tests — always |
 | Conditional (step 2) | build, integration/e2e — only when the diff warrants |
+| Ratcheted greps (below) | doctrine / dangling-reference checks — always, when the repo defines one |
 
 If the Commands table still has `<cmd>` placeholders, stop: blocker line, ask the user to fill it.
+
+**Ratcheted greps (repo-specific).** Every grep the repo has ratcheted into its gate runs here, required output `clean`. This repo's shipped vault scaffold must teach ONE doctrine — product knowledge lives in that product's own git-tracked `knowledge-base/`, `projects/` is a registry, not a wiki:
+
+```bash
+grep -rniE "pointer-block|project-template|projects/<name>|project wiki|one wiki per|working knowledge|vault-centric" template/.claude/references/vault-scaffold/ || echo clean
+```
 
 ## 2 · Detect what changed
 
