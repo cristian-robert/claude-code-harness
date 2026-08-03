@@ -10,7 +10,7 @@ _Last reviewed: 2026-07-06_
 > Plumbing and cold storage — never write notes into these:
 > - `.obsidian/` — Obsidian app config.
 > - `.claude/` — agent plumbing (if present).
-> - `system/` — machine-readable plumbing (templates, schemas, pointer block). Edit its files *deliberately* when changing conventions; never dump notes here.
+> - `system/` — machine-readable plumbing (index template, frontmatter schema). Edit its files *deliberately* when changing conventions; never dump notes here.
 > - `**/archive/` — cold storage. Wikilinks keep resolving from archive, so links never break. Don't curate it; just let stale notes land there.
 
 ## What this vault is
@@ -18,27 +18,29 @@ _Last reviewed: 2026-07-06_
 A single, unified knowledge base for **building applications and AI agents**. Three things happen here:
 
 - **Paste raw information** → `inbox/`
-- **Build a wiki per project** → `projects/<name>/`
+- **Keep project knowledge in its repo** → that repo's own git-tracked `knowledge-base/`, never here
 - **Distill evergreen knowledge** → `wiki/` (general) and `agent-kb/` (agent-building know-how)
 
-Mental model — **staging → working → evergreen**:
+Mental model — **staging → evergreen**, with project knowledge living OUTSIDE this vault:
 
 ```
-inbox/  →  projects/<name>/  →  wiki/  +  agent-kb/
-capture     working knowledge     evergreen distillation
+<repo>/knowledge-base/  ──MOVE on generalization──>  wiki/  +  agent-kb/
+project-scoped, git-tracked                          evergreen distillation
+                      inbox/  →  wiki/ + agent-kb/
+                      staging     evergreen
 ```
 
-Raw material lands in `inbox/`. When it's about a specific product, it graduates into that product's wiki under `projects/`. When a lesson generalizes past one project, it's harvested into `wiki/` (or `agent-kb/` if it's about building agents).
+Raw material lands in `inbox/`. Project-scoped facts never land here at all — they live in that repo's `knowledge-base/`. When a lesson generalizes past one project, `/evolve` **MOVES** it here (and deletes the local copy, leaving a pointer line): exactly one copy of any fact exists.
 
 ## Vault Structure
 
 Top-level folders — **each has its own `_index.md`; read that before working inside it**:
 
 - **`inbox/`** — Stage 1 staging. Untriaged capture + research. Subfolders: `raw/` (paste zone), `research/` (deep-dive briefs), `snippets/` (reusable code). Has `archive/`.
-- **`projects/`** — Stage 2 working knowledge. One subfolder per product = its wiki. `projects/_index.md` is the **project registry** (status of every project). Vault-centric: this is the single source of truth for project knowledge; repos point *here* (see [Pointing a repo at this vault](#pointing-a-project-repo-at-this-vault)).
+- **`projects/`** — the **registry only**. `projects/_index.md` records, per product, where its repo and its `knowledge-base/` live. No project knowledge is stored here; a project subfolder is a migration leftover, not the shape.
 - **`wiki/`** — Stage 3 evergreen. Cross-project knowledge: patterns, stack references, how-tos, decisions that generalize.
 - **`agent-kb/`** — Evergreen knowledge domain for **building AI agents**: `prompts/`, `evals/`, `models/`, `patterns/`, `tooling/`. Reusable across every agent project.
-- **`system/`** — Plumbing. `templates/` (project-wiki + index templates), `schemas/` (frontmatter contract), `pointer-block.md`. DO NOT TOUCH as a note dump.
+- **`system/`** — Plumbing. `templates/` (the `_index.md` template), `schemas/` (frontmatter contract). DO NOT TOUCH as a note dump.
 
 ## THE INDEX LAW
 
@@ -74,18 +76,19 @@ Each navigable folder's `_index.md` maps its contents and serves as the agent SO
 3. Read the **target folder's `_index.md`** (and any nested subfolder's `_index.md` if going deeper).
 4. Read the **specific file**.
 
-## Project Wiki Doctrine
+## Project Knowledge Doctrine — it is NOT here
 
-Each product you build gets a folder under `projects/<name>/` scaffolded from `[[system/templates/project-template/_index|the project template]]`. A project wiki holds:
+Each product keeps its own knowledge in its own repo, at `<repo>/knowledge-base/`: `_index.md`,
+`architecture.md`, `decisions.md`, `resources.md`, `runbook.md`, `inbox/`, `research/`. It is
+git-tracked, reviewed in the PR, and travels with the code branch — so it survives a clone,
+and every `sources:` path in it is relative and verifiable.
 
-- `_index.md` — **START HERE**: overview, status, quick links, agent SOP for the project.
-- `architecture.md` — stack, key modules, how it's built.
-- `decisions.md` — ADRs: what was chosen and *why*.
-- `resources.md` — repo/deploy/dashboard links, infra, and a **credentials index** (pointers to where secrets live — **never the secrets themselves**).
-- `runbook.md` — how to run, deploy, and handle common ops.
-- `notes/` — working notes (create on demand; gets its own `_index.md`).
+This vault holds the EVERGREEN half only. When a lesson generalizes past one project, `/evolve`
+**MOVES** it here and deletes the local copy, leaving a one-line pointer in the repo's
+`knowledge-base/_index.md`. Never copy: a fact in two stores is a fork waiting to happen.
 
-Register every new project in `[[projects/_index|projects/_index.md]]`. When a project ships or dies, update its `status:` there; when it goes cold, move the folder to `projects/archive/`.
+Record every product as a row in [[projects/_index|projects/_index.md]] — repo path and status,
+not knowledge.
 
 ## Wiki Doctrine (evergreen)
 
@@ -105,9 +108,13 @@ External-tool/library docs live tool-keyed under `wiki/stack/<tool>/`, cached an
 
 Individual agent *products* still live in `projects/` as their own wikis; `agent-kb/` is the cross-project reference they draw from.
 
-## Pointing a project repo at this vault
+## How a repo reaches this vault
 
-Each code repo reaches this vault by pasting a standard block into **that repo's own `CLAUDE.md`**. The canonical, copy-paste block lives at `[[system/pointer-block|system/pointer-block.md]]` — copy it verbatim and fill in the project name. It tells that repo's agent to read `projects/<name>/_index.md` before design work, and `wiki/` + `agent-kb/` for reusable knowledge.
+A harnessed repo records the absolute path to this vault in its own
+`.claude/harness.json` → `knowledge.shared` (`{ "mode": "existing", "path": "<ABSOLUTE_VAULT_PATH>" }`),
+written once by `npx perfect-harness-engineering init`. There is no pointer block to paste and
+nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from that path, and its
+`guard.mjs` denies any write into `projects/`.
 
 ## Taxonomy (frontmatter)
 
