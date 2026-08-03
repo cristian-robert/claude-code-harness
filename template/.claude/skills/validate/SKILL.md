@@ -26,6 +26,7 @@ The invocation argument (the text typed after the command) if given, else the pl
 |---|---|
 | AGENTS.md "Commands" table | lint, typecheck, unit tests — always |
 | Conditional (step 2) | build, integration/e2e — only when the diff warrants |
+| Always, when `knowledge-base/` exists | `npx perfect-harness-engineering kb-check` — index law, unfilled placeholders, secret shapes. Exit 1 is a FAIL row like any other |
 | Ratcheted greps (below) | doctrine / dangling-reference checks — always, when the repo defines one |
 
 If the Commands table still has `<cmd>` placeholders, stop: blocker line, ask the user to fill it.
@@ -59,7 +60,7 @@ End verdict is exactly one of — no hedging, no "mostly passing", no "should be
 
 ## 3b · Runtime evaluation (optional lens — fold in BEFORE declaring the verdict)
 
-Plan discovery: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`; neither exists → skip this lens and say so. When the diff includes user-facing behavior AND a runtime target exists (dev-server command in AGENTS.md's Commands table, or an app already running): dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`). Spec source: plan has `item:` → resolve the item (tracking root) and PASTE its `## Acceptance criteria` block into the brief (an item-linked plan only references AC, never contains them — mirror `/accept`); else pass the plan path. Plus the target URL/entrypoint. Vault configured (vault-protocol resolution) → also pass `projects/<name>/runbook.md` as the how-to-drive reference. It drives the running app and grades those criteria for depth vs stubs.
+Plan discovery: the invocation argument if given; else the plan referenced by the newest `reports/*-implementation-report.md`; neither exists → skip this lens and say so. When the diff includes user-facing behavior AND a runtime target exists (dev-server command in AGENTS.md's Commands table, or an app already running): dispatch `qa-evaluator` (`.claude/agents/qa-evaluator.md`, `tier: deep`). Spec source: plan has `item:` → resolve the item (tracking root) and PASTE its `## Acceptance criteria` block into the brief (an item-linked plan only references AC, never contains them — mirror `/accept`); else pass the plan path. Plus the target URL/entrypoint. Also pass `knowledge-base/runbook.md` as the how-to-drive reference when it exists (`.claude/references/knowledge-protocol.md`). It drives the running app and grades those criteria for depth vs stubs.
 
 - `EVAL GAPS (N)` → each gapped criterion becomes a FAIL row in step 3's table. Runtime stubs are gate failures.
 - `EVAL-BLOCKED: <reason>` → a report line under the table, NOT a failure — record it verbatim, never infer a pass or fail from it.

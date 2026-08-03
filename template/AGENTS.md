@@ -2,8 +2,6 @@
 
 <One sentence: what this product is and who uses it. Fresh copy? Run `/harness-init` — it interviews the repo, fills every <placeholder>, arms the gate, and configures work tracking. A placeholder in a live AGENTS.md is a bug.>
 
-<!-- Vault users: paste your vault's pointer block here (its system/pointer-block.md; /harness-init can scaffold one), then delete this comment. -->
-
 ## Commands
 
 | Task | Command |
@@ -12,6 +10,7 @@
 | Unit tests | `<cmd>` |
 | Lint | `<cmd>` |
 | Typecheck | `<cmd>` |
+| Knowledge gate | `npx perfect-harness-engineering kb-check` — knowledge-base/ index law, placeholders, secrets |
 | Full gate | `/validate` runs all of the above and reports GATE GREEN/RED |
 
 ## Pipeline (PIV+E)
@@ -24,7 +23,7 @@
 | Validate | `/validate` | verdict (GATE GREEN/RED) |
 | Review | `/review-branch` | `reports/<slug>-review.md` |
 | Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence → item `accepted` |
-| Evolve | `/evolve` | rule/vault updates (ask-first); scrum: this is the retro |
+| Evolve | `/evolve` | `knowledge-base/` (one `docs(kb):` commit) + rule updates (ask-first); scrum: this is the retro |
 | Sprint (scrum mode) | `/sprint` plan·close | `sprints/<n>.md` |
 
 **Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); BA/PM draft, refine, and PROPOSE backlog order (the PO decides priority and order), the Architect hat designs in `/plan-work`, Dev owns `/implement`, QA owns `/validate` + runtime checks, the reviewer agent brings fresh eyes (with a security lens on sensitive diffs — `/review-branch` invokes the global `security-audit` skill when available, else the reviewer's security checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.
@@ -44,10 +43,10 @@ Plan and Implement run in **separate sessions** (`/clear` between): a fresh cont
 ## Context tiers (don't preload — lazy context loads itself)
 
 - Path-scoped rules and subdirectory `AGENTS.md` auto-load on matching file reads (native on Claude Code; injected by a hook on Codex).
-- Knowledge skills: consult **architecture-map** BEFORE placing new code; **debugging-this-repo** BEFORE diagnosing any bug or test failure.
+- Knowledge lives in `knowledge-base/`: `architecture.md` BEFORE placing code, `runbook.md` BEFORE diagnosing a bug. **architecture-map** / **debugging-this-repo** are thin pointers to it.
 - Touching the harness itself (hooks/rules/skills)? Read `.claude/references/harness-maintenance.md` FIRST.
 - **Navigate by symbol, not grep**: the `codebase-search` MCP (`where_is`/`find_references`/`outline`, Python — if wired) + LSP diagnostics (`.lsp.json`) come before text search — `.claude/references/symbol-navigation.md`.
-- **Doc-grounded work**: building against an external tool/library? Consult its docs for your pinned version — `wiki/stack/<tool>/` first, else `/research` (context7 + official docs). Never code an API from memory. Vault protocol (retrieve/capture, all stages): `.claude/references/vault-protocol.md`.
+- **Doc-grounded work**: building against an external tool/library? Consult its docs for your pinned version — `wiki/stack/<tool>/` first, else `/research` (context7 + official docs). Never code an API from memory. Knowledge protocol (two stores, retrieve/capture/promote): `.claude/references/knowledge-protocol.md`.
 
 ## Compact instructions
 

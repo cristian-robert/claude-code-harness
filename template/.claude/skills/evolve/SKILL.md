@@ -1,6 +1,6 @@
 ---
 name: evolve
-description: "Capture what this work taught the harness: new rules, pruned rules, vault entries. Ask-first."
+description: "Capture what this work taught the harness: new rules, pruned rules, knowledge-base entries. Ask-first."
 disable-model-invocation: true
 ---
 
@@ -28,8 +28,8 @@ In scrum mode this IS the retrospective (dispatched by `/sprint close`).
 | File-type-specific | `paths:`-scoped rule in `.claude/rules/` (key is `paths:`, NEVER `globs:`) |
 | Place-specific | That directory's `AGENTS.md` |
 | Repeated manual prompt (3+ times) | New skill |
-| Structural change to record | Dispatch `architect-agent` **RECORD** → updates `projects/<name>/architecture.md` + `decisions.md` in the vault (no vault → skip, say so) |
-| Generalizes beyond this project | Vault: inbox/raw or project wiki (agents auto-append there mid-work); promotion to wiki//agent-kb/ happens HERE and only here, ask-first — `.claude/references/vault-protocol.md` |
+| Structural change to record | Dispatch `architect-agent` **RECORD** → updates `knowledge-base/architecture.md` + `decisions.md` (creates them from `.claude/references/knowledge-base-scaffold/` if absent) |
+| Generalizes beyond this project | MOVE it to the shared store's `wiki/`/`agent-kb/`, ask-first — delete the local file and leave a pointer line in `knowledge-base/_index.md`. Promotion happens HERE and only here — `.claude/references/knowledge-protocol.md` |
 | Everything else | Drop — a rule that doesn't earn its tokens taxes every future session |
 
 ## 3. Ratchet rule
@@ -59,7 +59,7 @@ Present ALL candidates in ONE numbered message, destination-tagged:
 1. [hook] Deny `curl | sh` — traces to: ran unreviewed installer in session
 2. [prune: AGENTS.md] Drop "use pnpm" — followed unprompted 3 sessions running
 3. [rules/tests.md] Fixtures live in tests/fixtures/ — traces to: duplicated fixture dir
-4. [vault: architecture] Record the new `orders` table + tenant_id FK — traces to: this session's migration
+4. [knowledge-base: architecture] Record the new `orders` table + tenant_id FK — traces to: this session's migration
 Apply which? ("1,3" / "all" / "none")
 ```
 
@@ -71,7 +71,9 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 - Smallest diff; adapt existing files in place — never rewrite rules/AGENTS.md from scratch.
 - Selections touched AGENTS.md/rules → reconcile auto-memory: remove any MEMORY.md lines now covered by team rules (memory holds machine-local facts only).
 - Always — even on "none": write `.claude/state/.evolve-ran` (timestamp) — the opt-in push gate (`harness.json` `requireEvolveBeforePush`) reads it. `.claude/state/` is gitignored by adopters.
-- Vault writes follow the vault's Index Law: update that folder's `_index.md` in the same change.
+- `knowledge-base/` touched this session → run `npx perfect-harness-engineering kb-check` and show its real output. Exit 1 is a blocker exactly like a red smoke test: fix the findings, re-run. `/validate` ran the same gate at pipeline step 4, but the KB commit happens HERE at step 7 — the gate has to be where the commit is (`.claude/references/knowledge-protocol.md`).
+- Then stage `knowledge-base/` and commit it as exactly ONE `docs(kb): <what this session taught the KB>` commit, on the FEATURE branch — it is a work artifact like `plans/` and `reports/`, never a tracking-root file, so it merges with the PR.
+- Knowledge writes follow the Index Law: update that folder's `_index.md` in the same change — `knowledge-base/` locally, and the shared store when a promotion MOVED something there.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.
   A hook change without a green smoke test is not applied.
 
