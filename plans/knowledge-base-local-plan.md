@@ -2115,8 +2115,12 @@ tier: deep
 - Modify `docs/05-knowledge-layer.md` (rewrite; keep ≤130 lines)
 - Modify `docs/99-sources.md` (`:58`)
 - Modify `README.md` (`:29`)
+- Create `~/.phe-backups/vault-<ts>.tgz` (Step 3b — the mandatory, verified undo for the two vault edits below; the shared store has no git)
 - Modify `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md` (add ADR-014, ADR-015, ADR-016; ADR-010 cross-reference; bump frontmatter `updated:`)
 - Modify `~/Dev/The Vault/projects/perfectHarnessEngineering/_index.md` (bump `updated:` — Index Law)
+
+**These two vault edits are the ONLY writes in increment 1 that land outside the repo.** They are
+gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–10.
@@ -2270,6 +2274,24 @@ tier: deep
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -rn "vault-protocol\|pointer-block\|project-template" template/ cli/ tools/ README.md docs/*.md || echo "clean"
   ```
   Expected output: `clean`. `docs/design/` is deliberately outside the path list: four historical design docs — the spec being implemented included — hold 13 matching lines, and rewriting history is not a goal. `plans/` is out for the same reason.
+
+- [ ] **Step 3b: Back the shared store up BEFORE any vault edit.** Steps 4–6 are the only writes in
+  this entire increment that land outside the repo, and the shared store has no git, no remote and no
+  history — this tarball is the only undo that exists. Run it, verify it, and do not proceed on a
+  mismatch.
+  ```bash
+  mkdir -p "$HOME/.phe-backups" && \
+  TS=$(date +%Y-%m-%dT%H%M%S) && \
+  tar -czf "$HOME/.phe-backups/vault-$TS.tgz" -C "$HOME/Dev" "The Vault" && \
+  SRC=$(find "$HOME/Dev/The Vault" -type f | wc -l | tr -d ' ') && \
+  ARC=$(tar -tzf "$HOME/.phe-backups/vault-$TS.tgz" | grep -vc '/$') && \
+  echo "source=$SRC archived=$ARC bytes=$(wc -c < "$HOME/.phe-backups/vault-$TS.tgz")" && \
+  [ "$SRC" = "$ARC" ] && echo "BACKUP VERIFIED $HOME/.phe-backups/vault-$TS.tgz" || echo "BACKUP MISMATCH — STOP"
+  ```
+  Expected: a `source=N archived=N` line where both counts are equal, then
+  `BACKUP VERIFIED /Users/<you>/.phe-backups/vault-<ts>.tgz`. If it prints `BACKUP MISMATCH — STOP`,
+  or the counts differ, or the archive is 0 bytes: **stop and report BLOCKED**. Do not edit the vault.
+  Record the archive path in the task report — Step 7 cites it.
 
 - [ ] **Step 4: Record ADR-014 in the vault.** In `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md`, insert directly after the `# Decisions — Perfect Harness Engineering` intro paragraph (before `## ADR-013`):
   ```markdown
