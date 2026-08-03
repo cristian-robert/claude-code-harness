@@ -1,7 +1,7 @@
 ---
 type: index
 folder: agent-kb/tooling
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
@@ -17,5 +17,5 @@ _Empty. Suggested filename: `<tool-or-framework>.md` (e.g. `mcp-servers.md`, `cl
 ## Agent SOP
 
 1. New tool/framework/MCP server you've adopted → `<tool>.md`; capture setup gotchas and the version you used.
-2. Link the project that depends on it.
+2. Name the repo it came from — its knowledge lives in that repo's `knowledge-base/`, not in this vault.
 3. Update this index when you add/revise a tooling note (Index Law).

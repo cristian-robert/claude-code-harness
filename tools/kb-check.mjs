@@ -10,7 +10,7 @@
 //   (c) no secret-shaped string appears anywhere in the KB
 // "The _index.md is ACCURATE" is semantic and is deliberately NOT claimed.
 // Exit 0 = green, 1 = red. Findings print one per line.
-import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
 
 // This literal is the source of truth today. `.claude/hooks/guard.mjs` does NOT yet carry
@@ -77,7 +77,20 @@ function allFiles(dir) {
     if (PLUMBING.has(e.name)) continue;
     const p = join(dir, e.name);
     if (e.isDirectory()) out.push(...allFiles(p));
-    else if (e.isFile() || e.isSymbolicLink()) out.push(p);
+    else if (e.isFile()) out.push(p);
+    // A symlink is followed only once it is CONFIRMED to resolve to a regular file. Handing
+    // one straight to readFileSync crashes the whole run — ENOENT on a dangling link, EISDIR
+    // on a link to a directory — and `findings` is not flushed until the end, so a KB holding
+    // a real credential printed a stack trace and reported nothing. Fail-closed on the exit
+    // code but fail-OPEN on the information is strictly worse than never following links.
+    // A link that does not resolve to a file is REPORTED, not skipped: same rule as (b) NOT
+    // RUN — an unscannable path is an unscanned subtree, not a clean one.
+    else if (e.isSymbolicLink()) {
+      let readable = false;
+      try { readable = statSync(p).isFile(); } catch { readable = false; }
+      if (readable) out.push(p);
+      else findings.push(`(c) UNREADABLE symlink: ${relative(kbDir, p)}`);
+    }
   }
   return out;
 }

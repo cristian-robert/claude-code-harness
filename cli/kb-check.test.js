@@ -202,6 +202,51 @@ var e3 = run([E, '--scaffold', SCAFFOLD]);
 assert('the hatch is line-scoped — a real key elsewhere in the file is still RED',
   e3.code === 1 && countOf(e3.out, '(c) secret-shaped string:') === 1);
 
+console.log('symlinks are followed for content, never crashed on:');
+// Widening the walker to `e.isFile() || e.isSymbolicLink()` fed symlinks straight into
+// readFileSync: ENOENT on a dangling link, EISDIR on a link to a directory. Because findings
+// are only flushed at the end, ONE bad link turned a KB holding a real credential into a Node
+// stack trace and zero reported findings — fail-closed on the exit code, fail-OPEN on the
+// information. Every fixture below therefore carries a real AWS key in a normal file, and
+// asserts that BOTH findings survive: the exit code alone cannot tell a crash from a catch.
+var S = path.join(TEST_DIR, 'symlink');
+fs.mkdirSync(path.join(S, 'sub'), { recursive: true });
+fs.writeFileSync(path.join(S, '_index.md'), '# kb\n');
+fs.writeFileSync(path.join(S, 'sub', '_index.md'), '# sub\n');
+
+// A symlinked note is as published as a copied one, so a resolvable link is still SCANNED.
+fs.writeFileSync(path.join(S, 'sub', 'real.md'), 'aws_key: AKIAIOSFODNN7EXAMPLE\n');
+fs.symlinkSync(path.join(S, 'sub', 'real.md'), path.join(S, 'link-to-file.md'));
+var sFile = run([S, '--scaffold', SCAFFOLD]);
+assert('a symlink to a real file is still scanned for secrets',
+  sFile.code === 1 && sFile.out.indexOf('(c) secret-shaped string: link-to-file.md:1') !== -1);
+fs.rmSync(path.join(S, 'link-to-file.md'));
+fs.rmSync(path.join(S, 'sub', 'real.md'));
+
+// Case 1: DANGLING link (ENOENT). The co-located key is the assert that would have caught
+// the regression — a crash reports neither, a catch reports both.
+fs.writeFileSync(path.join(S, 'leak.md'), 'aws_key: AKIAIOSFODNN7EXAMPLE\n');
+fs.symlinkSync(path.join(S, 'no-such-target.md'), path.join(S, 'broken.md'));
+var sDangling = run([S, '--scaffold', SCAFFOLD]);
+assert('a DANGLING symlink is reported, not crashed on',
+  sDangling.code === 1 && sDangling.out.indexOf('(c) UNREADABLE symlink: broken.md') !== -1);
+assert('the dangling symlink does not suppress a real key elsewhere in the KB',
+  sDangling.out.indexOf('(c) secret-shaped string: leak.md:1') !== -1);
+fs.rmSync(path.join(S, 'broken.md'));
+
+// Case 2: link to a DIRECTORY (EISDIR). Reported rather than skipped for the same reason
+// (b) NOT RUN is reported: an unscannable path is an unscanned subtree, not a clean one.
+fs.symlinkSync(path.join(S, 'sub'), path.join(S, 'dirlink'));
+var sDir = run([S, '--scaffold', SCAFFOLD]);
+assert('a symlink to a DIRECTORY is reported, not crashed on',
+  sDir.code === 1 && sDir.out.indexOf('(c) UNREADABLE symlink: dirlink') !== -1);
+assert('the directory symlink does not suppress a real key elsewhere in the KB',
+  sDir.out.indexOf('(c) secret-shaped string: leak.md:1') !== -1);
+fs.rmSync(path.join(S, 'dirlink'));
+fs.rmSync(path.join(S, 'leak.md'));
+assert('the KB is GREEN again once the bad links and the key are gone',
+  run([S, '--scaffold', SCAFFOLD]).code === 0);
+
 console.log('missing knowledge base:');
 assert('a missing knowledge-base/ is RED, not a silent pass',
   run([path.join(TEST_DIR, 'nope'), '--scaffold', SCAFFOLD]).code === 1);

@@ -1,7 +1,7 @@
 ---
 type: index
 folder: agent-kb/prompts
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
@@ -17,5 +17,5 @@ _Empty. Suggested filename: `<pattern-or-role>.md` (e.g. `router-system-prompt.m
 ## Agent SOP
 
 1. New reusable prompt/pattern → `<pattern-or-role>.md`; include the prompt in a fenced block plus a note on when it works.
-2. Link the project or eval that proved it out.
+2. Name the repo it came from — its knowledge lives in that repo's `knowledge-base/`, not in this vault — or link the eval that proved it out.
 3. Add it to Contents and bump `updated:` (Index Law).

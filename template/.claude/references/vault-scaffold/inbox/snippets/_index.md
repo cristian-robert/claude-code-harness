@@ -1,7 +1,7 @@
 ---
 type: index
 folder: inbox/snippets
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
@@ -17,6 +17,6 @@ _Empty. Suggested filename: `<lang>-<what>.md` with a fenced code block inside._
 ## Agent SOP
 
 1. New snippet → `<lang>-<what>.md`; put the code in a fenced block with the language tag.
-2. Tag with the language and, if project-specific, link the project.
+2. Tag with the language and, if project-specific, name the repo it came from — its knowledge lives in that repo's `knowledge-base/`, not in this vault.
 3. Add it to **Contents** above and bump `updated:` (Index Law).
 4. If a snippet becomes a documented, reusable pattern, promote it to `wiki/` or `agent-kb/`.

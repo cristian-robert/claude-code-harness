@@ -129,6 +129,26 @@ try { stampMigratedAt(NULLJ, '2026-08-03T00:00:00Z'); } catch (e) { stampErr = e
 assert('stampMigratedAt on a null harness.json throws the actionable message, not a TypeError',
   stampErr !== null && !(stampErr instanceof TypeError) && stampErr.message.indexOf('not a JSON object') !== -1);
 
+// The SAME guard on the other writer, which had none of its own coverage: deleting
+// writeKnowledgeConfig's null/array check left this suite at 34 passed, 0 failed while a
+// `null` harness.json threw a raw TypeError at the caller. Both halves of the guard are
+// pinned separately — dropping only `Array.isArray` sets `.knowledge` on an array, which
+// serialises back to a plain array and silently discards the key it was asked to write.
+var writeErr = null;
+try { writeKnowledgeConfig(NULLJ, { mode: 'none', sharedPath: null }); } catch (e) { writeErr = e; }
+assert('writeKnowledgeConfig on a null harness.json throws the actionable message, not a TypeError',
+  writeErr !== null && !(writeErr instanceof TypeError) && writeErr.message.indexOf('not a JSON object') !== -1);
+assert('the refused null write left the file untouched',
+  fs.readFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'utf-8') === 'null');
+
+fs.writeFileSync(path.join(NULLJ, '.claude', 'harness.json'), '[1,2]');
+var arrayErr = null;
+try { writeKnowledgeConfig(NULLJ, { mode: 'none', sharedPath: null }); } catch (e) { arrayErr = e; }
+assert('writeKnowledgeConfig on an ARRAY harness.json refuses instead of writing a key that cannot survive',
+  arrayErr !== null && arrayErr.message.indexOf('not a JSON object') !== -1);
+assert('the refused array write left the file untouched',
+  fs.readFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'utf-8') === '[1,2]');
+
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

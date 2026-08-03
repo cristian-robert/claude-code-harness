@@ -1,7 +1,7 @@
 ---
 type: index
 folder: agent-kb/patterns
-updated: 2026-07-06
+updated: 2026-08-03
 tags:
   - index
 ---
@@ -17,5 +17,5 @@ _Empty. Suggested filename: `<pattern>.md` (e.g. `tool-loop.md`, `multi-agent-ha
 ## Agent SOP
 
 1. New reusable architecture → `<pattern>.md`; describe the shape, when it fits, and its failure modes.
-2. Link the project where you used it and any eval that validated it.
+2. Name the repo it came from — its knowledge lives in that repo's `knowledge-base/`, not in this vault — and link any eval that validated it.
 3. Update this index when you add/revise a pattern (Index Law).
