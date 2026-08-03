@@ -33,7 +33,7 @@ Read MEMORY.md before reviewing; update it after the verdict. Record (≤2 lines
 3. **Tests** — every behavior change carries a test; missing test = blocker.
 4. **Security** — secrets in code, injection, missing authz, unsafe input handling.
 5. **Conventions** — AGENTS.md (imported by CLAUDE.md on Claude Code) and `.claude/rules/` rules; pattern consistency with surrounding code.
-6. **Boundaries & recorded decisions** — read the BASE-branch KB (`git show <base>:knowledge-base/architecture.md` and `git show <base>:knowledge-base/decisions.md` — the KB commit lands at `/evolve`, AFTER this review). A forbidden import/dependency direction against `## Boundaries` is a blocker; so is a diff that contradicts a recorded ADR without superseding it. Neither file on base → say so and review from the code.
+6. **Boundaries & recorded decisions** — read the BASE-branch KB (`git show <base>:knowledge-base/architecture.md` and `git show <base>:knowledge-base/decisions.md` — the KB commit lands at `/evolve`, AFTER this review). A forbidden import/dependency direction against `## Boundaries` is a blocker; so is a diff that contradicts a recorded ADR without superseding it. No `<base>` in the dispatch (inline-patch path) → resolve one yourself per `.claude/skills/review-branch/SKILL.md`'s "Base branch" rule; unresolvable, or neither file on base → say so and review from the code, never `missing context`.
 
 ## Verify wiring structurally
 

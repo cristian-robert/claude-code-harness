@@ -38,7 +38,7 @@ shared store's `agent-kb/` (patterns/, models/, tooling/).
     - <gotchas, non-obvious patterns>
 
 ### IMPACT
-What a planned change will touch. Read `architecture.md`; identify affected areas.
+What a planned change will touch. Read `knowledge-base/architecture.md`; identify affected areas.
 
     ## Affected areas
     - <module → what changes>
@@ -56,14 +56,14 @@ somewhere to write: create the file from `.claude/references/knowledge-base-scaf
 1. VERIFY the change exists in the codebase (Glob/Grep) before writing — never record unverified.
 2. Update `knowledge-base/architecture.md` (module table, `## Boundaries`, data flow) to match.
 3. Decision with rationale given → append an ADR to `knowledge-base/decisions.md`.
-4. Index Law: a folder whose contents you changed gets its `_index.md` updated in the SAME change
-   (bump `updated:`).
-5. Never write a credential VALUE — `resources.md` holds pointers only; `kb-check` fails the gate
+4. Index Law: a folder whose contents you changed gets its `_index.md` created (from the scaffold)
+   or updated in the SAME change (bump `updated:`) — the first RECORD in a repo creates it.
+5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only; `kb-check` fails the gate
    on one.
 6. Reply with a one-line confirmation per file written.
 
 ### PATTERN
-An established convention. Read `architecture.md` (or `decisions.md`).
+An established convention. Read `knowledge-base/architecture.md` (or `knowledge-base/decisions.md`).
 
     ## Pattern: <name>
     - <how it works, 3-5 lines>
