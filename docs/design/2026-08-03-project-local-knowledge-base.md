@@ -169,7 +169,7 @@ The three scenarios are the same pipeline with different inputs, not three code 
 
 | # | Step | Who |
 |---|---|---|
-| 0 | **LEAK GATE (read-only)** — run `plans/vault-bootstrap-plan.md:16`'s regex over the import set and classify every hit: absolute home paths are marked *auto-genericizable*; other-project names (`bzroo`, `SentrOS`, `Monitoro`) are marked *needs-decision*. **Refuse to proceed while any needs-decision hit is unresolved.** Nothing is rewritten here — rewriting happens at step 5, on the copy, after the backup | CLI + human |
+| 0 | **LEAK GATE (read-only)** — run `plans/vault-bootstrap-plan.md:16`'s regex over the import set and classify every hit: absolute home paths are marked *auto-genericizable*; other-project names (`bzroo`, `SentrOS`, `Monitoro`) are marked *needs-decision*. **Refuse to proceed while any needs-decision hit is unresolved.** The gate evaluates the **planned copy** — the import set as it will be written, with genericization and any decisions already recorded in the ledger applied — **not the source**. So a recorded decision clears the gate, and the shared store is never rewritten to satisfy it. Nothing is rewritten here either; rewriting happens at step 5, on the copy, after the backup | CLI + human |
 | 1 | **DETECT** — shared project folder + repo-root inventory: curated candidates (`docs/ wiki/ knowledge/ notes/ ai_docs/ context/ PRPs/ specs/ .ai/ memory-bank/ adr/ decisions/`) plus every other root dir containing markdown, each with a content verdict | CLI (read-only) |
 | 2 | **CONFIRM** — present the set; the human picks. Nothing is auto-moved | Skill → human |
 | 2b | **DISPOSITION** — ask move / copy / archive+move **before** anything destructive | Skill → human |
