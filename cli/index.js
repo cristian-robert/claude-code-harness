@@ -43,6 +43,18 @@ switch (command) {
     process.exit(result.status === null ? 1 : result.status);
     break;
   }
+  case 'kb-check': {
+    // The three mechanical checks on the project's knowledge-base/ (index law, unfilled
+    // placeholders, secret shapes). Routed to tools/kb-check.mjs exactly like
+    // file-size-check routes to the ledger; the default scaffold path resolves against
+    // the CONSUMER's .claude/references/, which is where init installed it.
+    const kbPath = require('path');
+    const kbSpawn = require('child_process').spawnSync;
+    const kbTool = kbPath.join(__dirname, '..', 'tools', 'kb-check.mjs');
+    const kbResult = kbSpawn(process.execPath, [kbTool, ...process.argv.slice(3)], { stdio: 'inherit' });
+    process.exit(kbResult.status === null ? 1 : kbResult.status);
+    break;
+  }
   case '--version':
   case '-v':
     console.log(require('../package.json').version);
@@ -59,6 +71,7 @@ Usage:
   npx perfect-harness-engineering emit             Re-derive .agents//.codex/ from the current .claude/ tree (codex targets only; no download/backup/prompt)
   npx perfect-harness-engineering merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
   npx perfect-harness-engineering file-size-check  Lint always-loaded context (AGENTS.md/CLAUDE.md, rules, skills) against budgets
+  npx perfect-harness-engineering kb-check         Check knowledge-base/ — index law, unfilled placeholders, secret shapes
   npx perfect-harness-engineering --version        Show version
   npx perfect-harness-engineering --help           Show this help
 
