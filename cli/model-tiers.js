@@ -7,7 +7,7 @@
 // two days before the design that needed it). A role survives the churn; an ID does not.
 //
 // Merge discipline mirrors harness-targets.js: harness.json is SHARED (stop gate,
-// vault, work tracking), so a write preserves every other key and REFUSES (throws)
+// knowledge, work tracking), so a write preserves every other key and REFUSES (throws)
 // rather than write through a harness.json it cannot parse.
 
 const fs = require('fs');

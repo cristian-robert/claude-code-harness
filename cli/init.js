@@ -8,7 +8,7 @@ const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { reconcileSettingsJson } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
-const { VAULT_PROMPT, parseVaultAnswer, writeVaultConfig } = require('./vault-config');
+const { KNOWLEDGE_PROMPT, parseKnowledgeAnswer, writeKnowledgeConfig } = require('./knowledge-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 const { migrateRenamedSkills } = require('./migrations');
 const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
@@ -23,7 +23,7 @@ const TARBALL_URL = 'https://github.com/' + REPO + '/archive/refs/heads/' + BRAN
 // - TTY (a human typing): today's readline behaviour, unchanged. Lazy-init
 //   so requiring this module for tests doesn't open stdin.
 // - Piped/redirected (not a TTY): readline is unsafe here. main() asks
-//   MULTIPLE questions in sequence (harness, then vault, then maybe git-init).
+//   MULTIPLE questions in sequence (harness, then knowledge, then maybe git-init).
 //   If a script pipes every answer in one chunk
 //   (`printf '1\n/path\n' | node cli/init.js`), readline delivers line 1 to
 //   the first ask(), then the pipe hits EOF before the second ask()'s
@@ -368,17 +368,20 @@ async function main() {
   console.log('  Harness: ' + targets.join(' + '));
   console.log('');
 
-  // Which Obsidian vault (if any) backs architecture & knowledge? Asked once,
-  // recorded in harness.json; /harness-init does the scaffolding + wiring.
-  var vault = null;
-  while (vault === null) {
-    var vaultAnswer = await ask(VAULT_PROMPT);
-    vault = parseVaultAnswer(vaultAnswer);
-    if (vault === null) {
-      console.log('  Enter an absolute path, or "s" to scaffold, or "skip".');
+  // Project-scoped knowledge ALWAYS lands in ./knowledge-base/ — that is not a question.
+  // The only question is whether a SHARED store (an Obsidian vault holding evergreen
+  // wiki/ + agent-kb/) also exists. Asked once, recorded in harness.json; /harness-init
+  // scaffolds knowledge-base/ and wires the architect agent at it.
+  var knowledge = null;
+  while (knowledge === null) {
+    var knowledgeAnswer = await ask(KNOWLEDGE_PROMPT);
+    knowledge = parseKnowledgeAnswer(knowledgeAnswer);
+    if (knowledge === null) {
+      console.log('  Enter an absolute path to your shared vault, or "skip".');
     }
   }
-  console.log('  Vault: ' + (vault.mode === 'existing' ? vault.path : vault.mode));
+  console.log('  Knowledge: ./knowledge-base/ (local)' +
+    (knowledge.mode === 'existing' ? ' + shared store at ' + knowledge.sharedPath : ' — no shared store'));
   console.log('');
 
   // Get previous version before overwriting
@@ -468,7 +471,7 @@ async function main() {
   for (var mgI = 0; mgI < initMigration.messages.length; mgI++) {
     console.log(initMigration.messages[mgI]);
   }
-  writeVaultConfig(targetDir, vault);
+  writeKnowledgeConfig(targetDir, knowledge);
 
   // Instructions: AGENTS.md is canonical and installed for EVERY target (Codex
   // reads it directly). CLAUDE.md is a thin `@AGENTS.md` import shim and is only
@@ -598,14 +601,14 @@ async function main() {
   console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer');
   console.log('  .claude/rules/       always-on core + paths-scoped domain rules');
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
-  console.log('  .claude/references/  on-demand references + vault-scaffold');
+  console.log('  .claude/references/  on-demand references + knowledge-base-scaffold + vault-scaffold');
   console.log('  .mcp.json/.lsp.json  symbol navigation (codebase-search + language servers)');
   console.log('');
 
   console.log('Next steps:');
   if (targets.indexOf('claude') !== -1) {
     console.log('  1. Open Claude Code in this project');
-    console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and (optionally) scaffolds a vault');
+    console.log('  2. Run /harness-init — it fits the payload to your stack, arms the gate, and scaffolds ./knowledge-base/');
   }
   if (targets.indexOf('codex') !== -1) {
     console.log('  Codex: instructions are in AGENTS.md. Run $harness-init in Codex — it fits the payload to your stack and arms the gate.');
@@ -616,10 +619,11 @@ async function main() {
   if (stats.backedUp > 0) {
     console.log('  (existing files were backed up as .backup — reconcile any you had customized)');
   }
-  if (vault.mode === 'scaffold' || vault.mode === 'existing') {
-    console.log('  Vault: /harness-init will ' + (vault.mode === 'scaffold' ? 'scaffold it and ' : '') +
-      'wire the pointer block and point the architect agent at projects/<name>/.');
-  }
+  console.log('  Knowledge: /harness-init scaffolds ./knowledge-base/ from ' +
+    '.claude/references/knowledge-base-scaffold/ and points the architect agent at it.' +
+    (knowledge.mode === 'existing'
+      ? ' Shared store ' + knowledge.sharedPath + ' keeps evergreen wiki/ + agent-kb/ only.'
+      : ''));
   console.log('');
 
   if (fs.existsSync(path.join(targetDir, '.idea'))) {

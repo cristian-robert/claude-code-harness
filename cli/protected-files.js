@@ -17,6 +17,10 @@ var NEEDS_RESTORE = [
   'sprints',
   'plans',
   'reports',
+  // Project-scoped knowledge. The payload ships only a SCAFFOLD (under
+  // .claude/references/); the live folder is the project's own writing and an update
+  // that reset it would delete the architecture map the architect agent maintains.
+  'knowledge-base',
 ];
 
 // CLI tools to copy into the target project. perfect-harness-engineering ships none —

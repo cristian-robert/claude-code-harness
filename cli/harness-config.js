@@ -7,7 +7,7 @@
 //
 // Why this is inverted from every other file in the payload: `update` used to copy the
 // template's harness.json over the user's and then restore a HARDCODED list of keys it
-// remembered (harness, vault, models — each added reactively after someone noticed it
+// remembered (harness, knowledge, models — each added reactively after someone noticed it
 // breaking). That architecture fails OPEN. Every key nobody remembered was silently reset
 // to the shipped default:
 //
@@ -98,7 +98,7 @@ function writeJsonAtomic(p, obj) {
 
 // Parse a harness.json that must be a JSON object, THROWING on anything else. Writes to this
 // file have always refused rather than clobber an unparseable one (harness-targets.js,
-// vault-config.js, model-tiers.js); reading it as the base of the merge inherits that
+// knowledge-config.js, model-tiers.js); reading it as the base of the merge inherits that
 // discipline. Silently replacing a file that may hold the user's stop gate would disarm the
 // gate without a word.
 function parseHarnessObject(p) {
