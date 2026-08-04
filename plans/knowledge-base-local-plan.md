@@ -409,7 +409,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/knowledge-config.test.js
   ```
-  Expected final line: `38 passed, 0 failed` (exit 0).
+  Expected final line: `38 passed, 0 failed` (exit 0) — the count as this task ran. Task 8's fix
+  round 1 later added the two reader/writer-seam asserts, so re-running this today gives `40`.
 
 - [ ] **Step 6: Commit.**
   ```bash
@@ -577,7 +578,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/update-harness-config.test.js && node cli/init-input.test.js && node cli/knowledge-config.test.js
   ```
-  Expected: `20 passed, 0 failed`, then `12 passed, 0 failed`, then `38 passed, 0 failed`.
+  Expected: `20 passed, 0 failed`, then `12 passed, 0 failed`, then `38 passed, 0 failed` — the
+  third count as this task ran; `40` today, per Task 8 fix round 1.
 
 - [ ] **Step 13: Prove nothing still references the deleted module.**
   ```bash
@@ -2208,12 +2210,34 @@ tier: deep
     let loCtx = ""; try { loCtx = JSON.parse(localOnly.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: loCtx stays "" */ }
     check("shared mode none -> local line only, no shared line", localOnly.code === 0 && loCtx.includes("Knowledge (local):") && !loCtx.includes("Knowledge (shared):"));
 
+    // The ONLY fixture that exercises the `: "knowledge-base"` fallback at the hook's
+    // `k.local` read. Without it the fallback constant could be changed to "" — emitting
+    // `Knowledge (local): /` — with every other check here still green.
+    writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ knowledge: {} }));
+    const bare = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+    let bareCtx = ""; try { bareCtx = JSON.parse(bare.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: bareCtx stays "" */ }
+    check("empty knowledge object -> local line with the default path, no shared line",
+      bare.code === 0 && bareCtx.includes("Knowledge (local): knowledge-base/") && !bareCtx.includes("Knowledge (shared):"));
+
+    // An array IS an object to typeof, and cli/knowledge-config.js's reader returns null
+    // for one. The hook must agree with the reader that owns the key: no line, not a line
+    // claiming a store that is not configured.
+    writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ knowledge: [1, 2] }));
+    const arr = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+    let arrCtx = ""; try { arrCtx = JSON.parse(arr.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: arrCtx stays "" */ }
+    check("array-valued knowledge -> no knowledge line (agrees with readKnowledgeConfig)",
+      arr.code === 0 && arrCtx.includes("Stop gate:") && !arrCtx.includes("Knowledge ("));
+
+    // The "Stop gate:" clause anchors this positively: session-start exits 0 on EVERY path,
+    // so a bare `!includes` would also pass for a hook that emitted nothing at all.
     writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({}));
     const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
     let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
-    check("no knowledge key -> no knowledge line", off.code === 0 && !offCtx.includes("Knowledge ("));
+    check("no knowledge key -> no knowledge line", off.code === 0 && offCtx.includes("Stop gate:") && !offCtx.includes("Knowledge ("));
   }
   ```
+  (The last three fixtures and the `!Array.isArray` guard in Step 3 were added by fix round 1; the
+  RED in Step 2 below is the count as originally run, with the four-fixture block.)
 
 - [ ] **Step 2: Run the smoke test and see it fail.**
   ```bash
@@ -2236,8 +2260,11 @@ tier: deep
         // (knowledge-base/, git-tracked), evergreen knowledge is in the shared vault, and
         // promotion MOVES. One line each so every fresh session knows both exist; the
         // protocol reference carries the how (ladders, write policy, promotion rule).
+        // `!Array.isArray` is not pedantry: an array IS an object to typeof, and
+        // cli/knowledge-config.js's reader returns null for one. Without it the hook
+        // announces a configured store that the reader owning the key says is absent.
         const k = cfg.knowledge;
-        if (k && typeof k === "object") {
+        if (k && typeof k === "object" && !Array.isArray(k)) {
           const local = typeof k.local === "string" && k.local ? k.local : "knowledge-base";
           lines.push(`Knowledge (local): ${local}/ — RETRIEVE before structural work, CAPTURE after; protocol: .claude/references/knowledge-protocol.md`);
           const s = k.shared;
@@ -2251,7 +2278,9 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `99 passed, 0 failed` (exit 0).
+  Expected output: `99 passed, 0 failed` (exit 0) as originally run; **101 passed, 0 failed** after
+  fix round 1 added the `knowledge: {}` fallback and `knowledge: [1,2]` array fixtures. 101 is the
+  baseline every later task counts from.
 
 - [ ] **Step 5: Prove the hook is still lint-clean and no dangling reference remains in it.**
   ```bash
@@ -2331,7 +2360,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `104 passed, 2 failed` (exit 1). The two failures are `denies Write into <shared>/projects/` and `denies a secret-shaped string written into knowledge-base/`.
+  Expected output: `106 passed, 2 failed` (exit 1). The two failures are `denies Write into <shared>/projects/` and `denies a secret-shaped string written into knowledge-base/`.
 
 - [ ] **Step 3: Add the constant to `template/.claude/hooks/guard.mjs`.** Immediately after `const PROTECTED = new Set(["main", "master"]);` (`:26`), insert:
   ```js
@@ -2386,7 +2415,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `106 passed, 0 failed` (exit 0).
+  Expected output: `108 passed, 0 failed` (exit 0).
 
 - [ ] **Step 7: Restore the five `guard.mjs` claims this commit has now earned.** Every one of these
   was removed, or written without its guard clause, under the branch rule that a claim ships only
@@ -2579,7 +2608,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -4
   ```
-  Expected: the last suite's summary `106 passed, 0 failed` and exit 0.
+  Expected: the last suite's summary `108 passed, 0 failed` and exit 0.
 
 - [ ] **Step 11: Commit.**
   ```bash
@@ -2848,7 +2877,7 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -3 && node tools/context-ledger.mjs template && node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold; echo "kb-check exit=$?"
   ```
   Expected, in order:
-  1. `106 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
+  1. `108 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
   2. The ledger table with `AGENTS.md 58`, `.claude/rules/00-core.md 45`, no `!! WARN`, no `!! HARD`, `Status: WARN — <n> / 2000 est. tokens` with `<n>` ≤ 1654.
   3. `kb-check: (b) skipped — the checked dir IS the shipped scaffold.` / `kb-check: GREEN — 7 file(s) in …` / `kb-check exit=0`.
 
@@ -2869,9 +2898,9 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
 
 ## End-to-end verification
 
-1. `npm test` → exits 0; final suite line `106 passed, 0 failed`.
-2. `node template/.claude/hooks/smoke-test.mjs` → `106 passed, 0 failed`, including the 4 session-start knowledge fixtures and the 7 guard boundary fixtures.
-3. `node cli/knowledge-config.test.js` → `38 passed, 0 failed`.
+1. `npm test` → exits 0; final suite line `108 passed, 0 failed`.
+2. `node template/.claude/hooks/smoke-test.mjs` → `108 passed, 0 failed`, including the 6 session-start knowledge fixtures and the 7 guard boundary fixtures.
+3. `node cli/knowledge-config.test.js` → `40 passed, 0 failed`.
 4. `node cli/kb-check.test.js` → `49 passed, 0 failed`.
 5. `node tools/context-ledger.mjs template` → total ≤ 1654 est. tokens, `Status: WARN`, no `!! WARN`, no `!! HARD`, `AGENTS.md` 58 lines, `00-core.md` 45 lines.
 6. `node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold` → GREEN, exit 0.

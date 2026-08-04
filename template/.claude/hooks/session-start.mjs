@@ -75,8 +75,11 @@ async function main() {
       // (knowledge-base/, git-tracked), evergreen knowledge is in the shared vault, and
       // promotion MOVES. One line each so every fresh session knows both exist; the
       // protocol reference carries the how (ladders, write policy, promotion rule).
+      // `!Array.isArray` is not pedantry: an array IS an object to typeof, and
+      // cli/knowledge-config.js's reader returns null for one. Without it the hook
+      // announces a configured store that the reader owning the key says is absent.
       const k = cfg.knowledge;
-      if (k && typeof k === "object") {
+      if (k && typeof k === "object" && !Array.isArray(k)) {
         const local = typeof k.local === "string" && k.local ? k.local : "knowledge-base";
         lines.push(`Knowledge (local): ${local}/ — RETRIEVE before structural work, CAPTURE after; protocol: .claude/references/knowledge-protocol.md`);
         const s = k.shared;

@@ -404,10 +404,30 @@ console.log("session-start.mjs");
   let loCtx = ""; try { loCtx = JSON.parse(localOnly.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: loCtx stays "" */ }
   check("shared mode none -> local line only, no shared line", localOnly.code === 0 && loCtx.includes("Knowledge (local):") && !loCtx.includes("Knowledge (shared):"));
 
+  // The ONLY fixture that exercises the `: "knowledge-base"` fallback at the hook's
+  // `k.local` read. Without it the fallback constant could be changed to "" — emitting
+  // `Knowledge (local): /` — with every other check here still green.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ knowledge: {} }));
+  const bare = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let bareCtx = ""; try { bareCtx = JSON.parse(bare.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: bareCtx stays "" */ }
+  check("empty knowledge object -> local line with the default path, no shared line",
+    bare.code === 0 && bareCtx.includes("Knowledge (local): knowledge-base/") && !bareCtx.includes("Knowledge (shared):"));
+
+  // An array IS an object to typeof, and cli/knowledge-config.js's reader returns null
+  // for one. The hook must agree with the reader that owns the key: no line, not a line
+  // claiming a store that is not configured.
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ knowledge: [1, 2] }));
+  const arr = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let arrCtx = ""; try { arrCtx = JSON.parse(arr.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: arrCtx stays "" */ }
+  check("array-valued knowledge -> no knowledge line (agrees with readKnowledgeConfig)",
+    arr.code === 0 && arrCtx.includes("Stop gate:") && !arrCtx.includes("Knowledge ("));
+
+  // The "Stop gate:" clause anchors this positively: session-start exits 0 on EVERY path,
+  // so a bare `!includes` would also pass for a hook that emitted nothing at all.
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({}));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
-  check("no knowledge key -> no knowledge line", off.code === 0 && !offCtx.includes("Knowledge ("));
+  check("no knowledge key -> no knowledge line", off.code === 0 && offCtx.includes("Stop gate:") && !offCtx.includes("Knowledge ("));
 }
 {
   // Uninitialized template: session-start nudges toward /harness-init.

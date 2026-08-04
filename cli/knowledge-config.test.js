@@ -1,7 +1,9 @@
 // cli/knowledge-config.test.js
 //
 // Tests knowledge-config parsing and persistence of the `knowledge` key in
-// .claude/harness.json, and its coexistence with the `harness` key.
+// .claude/harness.json, and its coexistence with the `harness` key. The last block
+// also pins the reader/writer seam: that session-start.mjs still reads the key this
+// module writes (see the comment there for why it is a source-string check).
 //
 // The LOCAL store is not a question: every project gets `knowledge-base/`. Only the
 // SHARED store (an Obsidian vault holding evergreen wiki/ + agent-kb/) is asked about,
@@ -156,8 +158,20 @@ assert('the refused array write left the file untouched',
 // hand-built a `{vault:…}` config init could no longer produce. A source-string check is
 // crude on purpose: it costs the hook nothing and goes red the moment the two disagree.
 console.log('the reader/writer seam:');
-var hookSrc = fs.readFileSync(path.join(__dirname, '..', 'template', '.claude', 'hooks', 'session-start.mjs'), 'utf-8');
-assert('session-start reads the knowledge key init writes', hookSrc.indexOf('cfg.knowledge') !== -1);
+var HOOK = path.join(__dirname, '..', 'template', '.claude', 'hooks', 'session-start.mjs');
+// Read defensively: an unguarded readFileSync on a moved hook throws before this suite
+// prints its summary line and before the TEST_DIR cleanup below, which reads as a crash
+// rather than a red assert. A missing file must fail BY NAME, on its own line.
+var hookSrc = '';
+try { hookSrc = fs.readFileSync(HOOK, 'utf-8'); } catch (e) { /* missing/renamed: the next assert names it */ }
+assert('session-start.mjs is still where the seam expects it', hookSrc !== '');
+// Whole-token match, not indexOf: `cfg.knowledgeBase` contains `cfg.knowledge` as a prefix,
+// and that is a plausible rename direction which would satisfy a substring check while the
+// seam is broken. Comments are stripped first so a future "we used to read cfg.knowledge"
+// note cannot neuter the pin — stripping can only cause a LOUD false failure, never a
+// silent pass, which is the safe direction for a guard.
+var hookCode = hookSrc.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+assert('session-start reads the knowledge key init writes', /\bcfg\.knowledge\b/.test(hookCode));
 
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
