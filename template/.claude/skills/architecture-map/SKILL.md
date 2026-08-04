@@ -5,38 +5,27 @@ user-invocable: false
 allowed-tools: Bash(find *)
 ---
 
-# Architecture map
+# Architecture map — a pointer, not the map
 
-Golden rule: placement is a decision, not a guess — new code lands where this map says, or the map gets updated first (via `/evolve`).
+Golden rule: placement is a decision, not a guess — new code lands where the map says, or the map gets updated first (via `/evolve`).
 
 ## Live tree (re-rendered at every invocation — never stale)
 
 !`find . -maxdepth 2 -type d -not -path '*/node_modules*' -not -path '*/.git*' 2>/dev/null | head -40 || echo "(dir scan failed)"`
 
-<!-- filled by /harness-init: replace every <placeholder> below from detection + interview.
-     Keep the file ≤70 lines; update via /evolve when the structure moves. -->
+## The map itself lives in the KB
 
-## Module table
+`knowledge-base/architecture.md` holds the module table, the where-new-code-goes rules, and the
+`## Boundaries` section. `architect-agent` writes it (RECORD); `code-reviewer` reads it. Read
+`knowledge-base/_index.md`, then that file. Never duplicate its content here — a second copy
+forks the first time either moves.
 
-| Dir | Owns | Entry point |
-|---|---|---|
-| `<backend-dir>/routes/` | HTTP layer only — parse → service → envelope | `<file>` |
-| `<backend-dir>/services/` | Business logic: rules, calculations, workflows | `<file>` |
-| `<frontend-dir>/components/` | Product UI composed from primitives | `<file>` |
-| `<shared-dir>/` | Cross-cutting types/utils used by ≥2 areas | `<file>` |
+Missing (`knowledge-base/architecture.md` does not exist)? Say `no knowledge-base/architecture.md
+— deriving placement from the tree above`, place code beside its closest existing analogue, and
+dispatch `architect-agent` **RECORD** at `/evolve` so the next agent does not re-derive it.
 
-## Where new code goes
+## Placement checklist (the mechanics — the facts are in the KB)
 
-- New endpoint → `<backend-dir>/routes/` (thin) with logic in `services/`. Canonical pattern: `<file:line>`.
-- New UI → `<frontend-dir>/components/`; shared component only at the third consumer — copy twice first.
-- Needed by ≥2 areas → `<shared-dir>/` — types and utils only, never app logic.
-
-## Boundaries (what never imports what — violations are review blockers)
-
-- `<frontend-dir>` never imports from `<backend-dir>`; shared types live in `<shared-dir>`. (traces to: `<incident>`)
-- Only `<data-layer-dir>` touches the DB. (traces to: `<incident, e.g. raw query in a service bypassed row-level checks>`)
-
-## How to validate placement
-
-- Read the closest existing analogue BEFORE creating a file — name it in the plan.
-- `<boundary-check-cmd, e.g. import-lint rule>` after adding any cross-module import.
+- Read the closest existing analogue BEFORE creating a file, and name it in the plan: `<file:line>`.
+- Needed by ≥2 areas → `<shared-dir>` — types and utils only, never app logic.
+- Cross-module import added → run the boundary check named in `knowledge-base/architecture.md`; a violation is a review blocker (traces to: `<incident>`).
