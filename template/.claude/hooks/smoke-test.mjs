@@ -383,17 +383,31 @@ console.log("session-start.mjs");
   check("WIP breach flagged in standup", res.code === 0 && ctx.includes("WIP 2/2"));
 }
 {
-  // Vault = second brain: a configured vault surfaces ONE orientation line; no key, no line.
-  const tmp = mkdtempSync(join(tmpdir(), "phe-vault-"));
+  // Two stores, one boundary rule. The local KB line lands whenever `knowledge` is
+  // configured (knowledge-base/ is never optional); the shared line only when a shared
+  // store actually exists. No key at all -> neither line, so a pre-knowledge install is
+  // quiet rather than wrong.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-knowledge-"));
   mkdirSync(join(tmp, ".claude"), { recursive: true });
-  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ vault: { mode: "existing", path: "/tmp/x-vault" } }));
-  const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
-  let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
-  check("vault configured -> vault line present", res.code === 0 && ctx.includes("Vault: /tmp/x-vault"));
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "existing", path: "/tmp/x-vault" }, migratedAt: null },
+  }));
+  const both = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let bothCtx = ""; try { bothCtx = JSON.parse(both.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: bothCtx stays "" and the checks fail */ }
+  check("knowledge configured -> local KB line present", both.code === 0 && bothCtx.includes("Knowledge (local): knowledge-base/"));
+  check("shared store configured -> shared line present", both.code === 0 && bothCtx.includes("Knowledge (shared): /tmp/x-vault"));
+
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "none", path: null }, migratedAt: null },
+  }));
+  const localOnly = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
+  let loCtx = ""; try { loCtx = JSON.parse(localOnly.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: loCtx stays "" */ }
+  check("shared mode none -> local line only, no shared line", localOnly.code === 0 && loCtx.includes("Knowledge (local):") && !loCtx.includes("Knowledge (shared):"));
+
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({}));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
-  check("no vault key -> no vault line", off.code === 0 && !offCtx.includes("Vault:"));
+  check("no knowledge key -> no knowledge line", off.code === 0 && !offCtx.includes("Knowledge ("));
 }
 {
   // Uninitialized template: session-start nudges toward /harness-init.

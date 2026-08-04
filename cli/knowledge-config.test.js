@@ -149,6 +149,16 @@ assert('writeKnowledgeConfig on an ARRAY harness.json refuses instead of writing
 assert('the refused array write left the file untouched',
   fs.readFileSync(path.join(NULLJ, '.claude', 'harness.json'), 'utf-8') === '[1,2]');
 
+// Nothing else ties the key this writer produces to the key session-start.mjs consumes:
+// the hook is copied standalone into adopter repos where cli/ does not exist, so it can
+// never import from here. That gap already shipped once — init wrote `knowledge` while the
+// hook still read `cfg.vault`, and the smoke suite stayed green because its fixture
+// hand-built a `{vault:…}` config init could no longer produce. A source-string check is
+// crude on purpose: it costs the hook nothing and goes red the moment the two disagree.
+console.log('the reader/writer seam:');
+var hookSrc = fs.readFileSync(path.join(__dirname, '..', 'template', '.claude', 'hooks', 'session-start.mjs'), 'utf-8');
+assert('session-start reads the knowledge key init writes', hookSrc.indexOf('cfg.knowledge') !== -1);
+
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
