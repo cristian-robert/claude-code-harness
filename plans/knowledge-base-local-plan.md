@@ -1893,7 +1893,7 @@ tier: deep
 ### Task 6: Repoint the KB's writer and its reviewer
 
 **Files:**
-- Modify `template/.claude/agents/architect-agent.md` (`:3` description, `:9-11` intro, `:13-23` resolution, `:28-29` RETRIEVE, `:50-58` RECORD, `:71` rule)
+- Modify `template/.claude/agents/architect-agent.md` (`:3` description, `:9-11` intro, `:13-23` resolution, `:28-29` RETRIEVE, `:39` IMPACT, `:50-58` RECORD, `:61` PATTERN, `:71` rule)
 - Modify `template/.claude/agents/code-reviewer.md` (`:36`)
 
 **Interfaces:**
@@ -1958,6 +1958,36 @@ tier: deep
   `knowledge-base/decisions.md` for rationale). Query about an AI-agent/LLM design → also check the
   shared store's `agent-kb/` (patterns/, models/, tooling/).
   ```
+
+- [ ] **Step 3b: Prefix the two remaining section bodies — IMPACT and PATTERN.** Same edit as Step 3,
+  applied to the last two query-type sections that name the KB. Both are one-line replacements and
+  both anchors are unique in the file, so neither depends on the other or on step order. Replace
+  ```
+  What a planned change will touch. Read `architecture.md`; identify affected areas.
+  ```
+  with
+  ```
+  What a planned change will touch. Read `knowledge-base/architecture.md`; identify affected areas.
+  ```
+  and replace
+  ```
+  An established convention. Read `architecture.md` (or `decisions.md`).
+  ```
+  with
+  ```
+  An established convention. Read `knowledge-base/architecture.md` (or `knowledge-base/decisions.md`).
+  ```
+  Both replacements sit in ONE step because IMPACT and PATTERN are the two remaining resolution
+  modes, and prefixing only some of them is the exact defect this repairs. The failure is silent: the
+  degraded-mode check Step 2 installs — resolution step 2 — tests `knowledge-base/architecture.md`,
+  which EXISTS, so an unprefixed read never reports a missing KB. It falls through to a codebase scan
+  instead and the answer looks normal, which is why this survived a fix round. Without this step
+  RETRIEVE, RECORD and the writes rule get prefixed while IMPACT and PATTERN keep pointing at a bare
+  `architecture.md` that no longer resolves — the agent's two read paths would disagree with its two
+  write paths. Grouped here rather than split around Step 4 because these are the same edit as
+  Step 3, and file order buys nothing: every step in this task matches on TEXT, and Step 2's
+  replacement is one line longer than what it replaces, so every line number below it has already
+  shifted by the time Step 3 runs.
 
 - [ ] **Step 4: Replace `architect-agent.md:50-58` (the RECORD block).** Replace
   ```
@@ -2411,14 +2441,14 @@ tier: deep
 **Files:**
 - Modify `template/.claude/references/plan-template.md` (`:22`)
 - Modify `template/.claude/skills/implement/SKILL.md` (report table, after `:78`)
-- Modify `template/.claude/skills/harness-init/SKILL.md` (`:50`, `:63` delete, `:67`, `:68`, `:81`)
+- Modify `template/.claude/skills/harness-init/SKILL.md` (`:50`, `:57` sentence delete, `:63` line delete, `:67`, `:68`, `:81`)
 - Modify `cli/cli-hardening.test.js` (`:313-316`, the pinned `GATE_CMD` literal)
 
 **Interfaces:**
 - Consumes: the scaffold path `.claude/references/knowledge-base-scaffold/` (Task 3) and `.claude/references/knowledge-protocol.md` (Task 5).
 - Produces: nothing consumed downstream — this is the last wiring task before docs.
 
-**Budget note:** `harness-init/SKILL.md` body is at 98/100 and `implement/SKILL.md` at 94/100. `:50`, `:67`, `:68` and `:81` are one-line replacements (net 0 — the body stays at 98); the implement change is +1 (→95). Both stay under cap.
+**Budget note:** `harness-init/SKILL.md` body is at 98/100 and `implement/SKILL.md` at 94/100 — both measured the way `tools/context-ledger.mjs` measures a body (everything after the frontmatter's closing `---`, including the blank line that follows it, trailing newline stripped). Counting from the first non-blank line instead gives 97 and is the wrong number; the ledger is what enforces the cap. `:50`, `:67`, `:68` and `:81` are one-line replacements (net 0) and Step 6c's `:57` is a sentence deletion inside a surviving line (net 0), so the only line-count change is Step 6c deleting `:63`: **98 → 97**. The implement change is +1 (→95). Both stay under cap.
 
 - [ ] **Step 1: Extend the pinned `GATE_CMD` literal in `cli/cli-hardening.test.js:313-316` first (RED).** Replace
   ```js
@@ -2479,22 +2509,37 @@ tier: deep
   - `.gitignore`: add `.claude/state/` + `.worktrees/` + `knowledge-base/.obsidian/` — runtime state, /implement's in-repo worktrees, and the operator's Obsidian workspace never commit (spec decision 24: no `.obsidian/` ships; the operator opens the folder).
   ```
 
-- [ ] **Step 6c: Delete `harness-init/SKILL.md:63` (the knowledge-skills fill line).** Delete this line outright — the whole line, leaving no blank behind:
+- [ ] **Step 6c: Retire the two stranded knowledge-skill fill instructions (`:57` and `:63`).** Task 7
+  replaced both skill bodies with thin KB pointers, so the TEMPLATE sections — and the
+  `filled by /harness-init` comment markers at `architecture-map/SKILL.md:16` and
+  `debugging-this-repo/SKILL.md:11` — stop existing. Two lines still tell `/harness-init` to fill
+  them. **The two have different shapes; do not treat them alike.**
+
+  **`:57` — delete the SECOND SENTENCE ONLY.** The bullet's first sentence is still correct and must
+  survive. Replace
+  ```
+  - `AGENTS.md`: fill EVERY `<placeholder>`; delete rows/sections that don't apply — a placeholder in a live AGENTS.md is a bug. Knowledge skills: fill their template sections from detection and DELETE the `filled by /harness-init` comment markers.
+  ```
+  with
+  ```
+  - `AGENTS.md`: fill EVERY `<placeholder>`; delete rows/sections that don't apply — a placeholder in a live AGENTS.md is a bug.
+  ```
+  The line survives, shorter: this is a sentence deletion, net **0** lines.
+
+  **`:63` — delete the WHOLE LINE**, leaving no blank behind:
   ```
   - Knowledge skills: fill the TEMPLATE sections of `.claude/skills/architecture-map/SKILL.md` (module table, where new code goes, boundaries) and `.claude/skills/debugging-this-repo/SKILL.md` (logs, repro recipes, failure classes from question 4) from detection.
   ```
-  Task 7 replaced both skill bodies with thin KB pointers, so the TEMPLATE sections this line tells
-  `/harness-init` to fill no longer exist. Deleting rather than repointing is what the redundancy
-  earns: every clause is already covered by Step 6's rewritten `:68`, which fills the same facts into
-  the KB instead — module table, where-new-code-goes and `## Boundaries` into
-  `knowledge-base/architecture.md`; logs, repro recipes and failure classes from question 4 into
-  `knowledge-base/runbook.md`; both "from detection".
+  Deleting rather than repointing is what the redundancy earns: every clause is already covered by
+  Step 6's rewritten `:68`, which fills the same facts into the KB instead — module table,
+  where-new-code-goes and `## Boundaries` into `knowledge-base/architecture.md`; logs, repro recipes
+  and failure classes from question 4 into `knowledge-base/runbook.md`; both "from detection".
+  Net **-1** line.
 
   This step runs AFTER Steps 3, 5, 6 and 6b on purpose: they cite `:81`, `:50`, `:68` and `:67`, and
-  deleting `:63` first would shift every one of those. The deletion also buys back a line in a body
-  sitting at 98/100 — the task's budget note calls `:50`/`:67`/`:68`/`:81` net 0 at 98, and this step
-  takes the body to 97. Task 10's commit step is unaffected: `harness-init/SKILL.md` is already in
-  Step 11's `git add template`, so the expected `4 files changed` still holds.
+  removing `:63` first would shift every one of those. Task 10's commit step is unaffected:
+  `harness-init/SKILL.md` is already in Step 11's `git add template`, so the expected
+  `4 files changed` still holds.
 
 - [ ] **Step 7: Extend the plan template's existing knowledge field at `plan-template.md:22`.** Replace
   ```
