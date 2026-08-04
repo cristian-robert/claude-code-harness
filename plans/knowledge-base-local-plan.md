@@ -1980,9 +1980,9 @@ tier: deep
   1. VERIFY the change exists in the codebase (Glob/Grep) before writing — never record unverified.
   2. Update `knowledge-base/architecture.md` (module table, `## Boundaries`, data flow) to match.
   3. Decision with rationale given → append an ADR to `knowledge-base/decisions.md`.
-  4. Index Law: a folder whose contents you changed gets its `_index.md` updated in the SAME change
-     (bump `updated:`).
-  5. Never write a credential VALUE — `resources.md` holds pointers only; `kb-check` fails the gate
+  4. Index Law: a folder whose contents you changed gets its `_index.md` created (from the scaffold)
+     or updated in the SAME change (bump `updated:`) — the first RECORD in a repo creates it.
+  5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only; `kb-check` fails the gate
      on one.
   6. Reply with a one-line confirmation per file written.
   ```
@@ -2359,8 +2359,22 @@ tier: deep
      `` `knowledge-base/` is git-TRACKED and may be published ``, restore the guard sentence so it
      reads `` `guard.mjs` denies a secret-shaped write; `npx perfect-harness-engineering kb-check`
      gates it again at `/validate` and at `/evolve`'s apply step. ``
-  3. `template/.claude/agents/architect-agent.md`, RECORD item 5 — replace `` `kb-check` fails the
-     gate on one. `` with `` `guard.mjs` denies the write and `kb-check` fails the gate. ``
+  3. `template/.claude/agents/architect-agent.md`, RECORD item 5 — the anchor WRAPS across two
+     lines. Match both lines, the newline between them, AND the three-space continuation indent;
+     the prefix `` `kb-check` fails the gate `` matches the wrapped and the contiguous form alike,
+     so it cannot tell you whether you have the real text. Replace
+     ```
+     5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only; `kb-check` fails the gate
+        on one.
+     ```
+     with
+     ```
+     5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only;
+        `guard.mjs` denies the write and `kb-check` fails the gate.
+     ```
+     The new wrap point also retires the 114-character `:61`: the `knowledge-base/` prefix was added
+     without re-wrapping because the only safe wrap point sat inside this anchor. This is the first
+     step that may move it.
   4. `template/.claude/references/knowledge-base-scaffold/resources.md` — in the `[!danger]`
      callout, restore the two-line form:
      `` > Record **where** a credential lives, never the value itself. `.claude/hooks/guard.mjs` ``
@@ -2397,7 +2411,7 @@ tier: deep
 **Files:**
 - Modify `template/.claude/references/plan-template.md` (`:22`)
 - Modify `template/.claude/skills/implement/SKILL.md` (report table, after `:78`)
-- Modify `template/.claude/skills/harness-init/SKILL.md` (`:50`, `:67`, `:68`, `:81`)
+- Modify `template/.claude/skills/harness-init/SKILL.md` (`:50`, `:63` delete, `:67`, `:68`, `:81`)
 - Modify `cli/cli-hardening.test.js` (`:313-316`, the pinned `GATE_CMD` literal)
 
 **Interfaces:**
@@ -2465,6 +2479,23 @@ tier: deep
   - `.gitignore`: add `.claude/state/` + `.worktrees/` + `knowledge-base/.obsidian/` — runtime state, /implement's in-repo worktrees, and the operator's Obsidian workspace never commit (spec decision 24: no `.obsidian/` ships; the operator opens the folder).
   ```
 
+- [ ] **Step 6c: Delete `harness-init/SKILL.md:63` (the knowledge-skills fill line).** Delete this line outright — the whole line, leaving no blank behind:
+  ```
+  - Knowledge skills: fill the TEMPLATE sections of `.claude/skills/architecture-map/SKILL.md` (module table, where new code goes, boundaries) and `.claude/skills/debugging-this-repo/SKILL.md` (logs, repro recipes, failure classes from question 4) from detection.
+  ```
+  Task 7 replaced both skill bodies with thin KB pointers, so the TEMPLATE sections this line tells
+  `/harness-init` to fill no longer exist. Deleting rather than repointing is what the redundancy
+  earns: every clause is already covered by Step 6's rewritten `:68`, which fills the same facts into
+  the KB instead — module table, where-new-code-goes and `## Boundaries` into
+  `knowledge-base/architecture.md`; logs, repro recipes and failure classes from question 4 into
+  `knowledge-base/runbook.md`; both "from detection".
+
+  This step runs AFTER Steps 3, 5, 6 and 6b on purpose: they cite `:81`, `:50`, `:68` and `:67`, and
+  deleting `:63` first would shift every one of those. The deletion also buys back a line in a body
+  sitting at 98/100 — the task's budget note calls `:50`/`:67`/`:68`/`:81` net 0 at 98, and this step
+  takes the body to 97. Task 10's commit step is unaffected: `harness-init/SKILL.md` is already in
+  Step 11's `git add template`, so the expected `4 files changed` still holds.
+
 - [ ] **Step 7: Extend the plan template's existing knowledge field at `plan-template.md:22`.** Replace
   ```
   - Knowledge to load first: <.claude/skills/architecture-map, docs/x.md, ...> # /implement reads these BEFORE Task 1 — they were in the planner's context and died at /clear
@@ -2505,6 +2536,8 @@ tier: deep
 - Modify `docs/05-knowledge-layer.md` (rewrite; keep ≤130 lines)
 - Modify `docs/99-sources.md` (`:58`)
 - Modify `README.md` (`:29`)
+- Modify `template/.claude/references/research-and-docs.md` (Step 2b — terminology only, 5 lines)
+- Modify `template/.claude/skills/research/SKILL.md` (Step 2b — terminology only, 4 lines)
 - Create `~/.phe-backups/vault-<ts>.tgz` (Step 3b — the mandatory, verified undo for the two vault edits below; the shared store has no git)
 - Modify `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md` (add ADR-014, ADR-015, ADR-016; ADR-010 cross-reference; bump frontmatter `updated:`)
 - Modify `~/Dev/The Vault/projects/perfectHarnessEngineering/_index.md` (bump `updated:` — Index Law)
@@ -2659,6 +2692,37 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   ```
   In `README.md:29` replace `pointer-block wiring to an Obsidian vault;` with `a git-tracked project-local \`knowledge-base/\` plus an optional shared Obsidian vault for evergreen knowledge;`.
 
+- [ ] **Step 2b: Retire the vault-era terminology in the two research files.** Step 3's grep matches
+  `vault-protocol|pointer-block|project-template`; the bare word "vault" is invisible to it, so
+  neither file below is caught by any gate, and no other task owns them. Move both to the two-store
+  vocabulary already used by `template/.claude/references/knowledge-protocol.md`: "the shared store"
+  for "the vault", "no shared store" for "no vault" (that file's own wording is
+  `no shared store — skipping <step>`), and rename the `## No vault (degraded)` heading to
+  `## No shared store (degraded)`. Neither file names the technology today and neither needs to, so
+  every occurrence goes: "an Obsidian vault" is the doctrine's phrasing and stays where the doctrine
+  lives, in `knowledge-protocol.md:10`. That is why the proof below expects zero, not one.
+
+  | File | Vault-era lines to sweep |
+  |---|---|
+  | `template/.claude/references/research-and-docs.md` | 5 — `:8`, `:51` (the `## No vault (degraded)` heading), `:53`, `:55`, `:60` |
+  | `template/.claude/skills/research/SKILL.md` | 4 — `:3` (frontmatter `description:`), `:11` (three occurrences on one line), `:25`, `:55` |
+
+  **Scope: TERMINOLOGY ONLY — do not re-route anything.** The routing is already correct under the
+  new doctrine and every destination must survive verbatim. `knowledge-base-scaffold/research/_index.md`
+  restricts the local `research/` to briefs this repo CITES and sends uncited exploration to the
+  shared `inbox/research/`, and Step 1's own docs text says `/research` output "writes straight to
+  the shared `wiki/stack/<tool>/` and never lands locally". So `wiki/stack/<tool>/` stays the cache,
+  `inbox/research/<tool>.md` stays the pointer stub, and `reports/research-<tool>.md` stays the
+  no-shared-store fallback — it is NOT redirected to `knowledge-base/research/`. Renaming the store
+  is in scope; changing where anything is written is not.
+
+  Both counts are stated so a partial sweep is visible. Prove it:
+  ```bash
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -nic "vault" template/.claude/references/research-and-docs.md template/.claude/skills/research/SKILL.md
+  ```
+  Expected: `…research-and-docs.md:0` and `…research/SKILL.md:0`. A non-zero count is an unswept
+  line; a count that rose is a re-route dressed as a rename.
+
 - [ ] **Step 3: Verify no dangling reference survives anywhere.**
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && grep -rn "vault-protocol\|pointer-block\|project-template" template/ cli/ tools/ README.md docs/*.md || echo "clean"
@@ -2737,9 +2801,10 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
 
 - [ ] **Step 9: Commit.**
   ```bash
-  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add docs README.md && git commit -m "docs: knowledge layer is two stores with a MOVE-on-promotion boundary rule"
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add docs README.md template/.claude/references/research-and-docs.md template/.claude/skills/research/SKILL.md && git commit -m "docs: knowledge layer is two stores with a MOVE-on-promotion boundary rule"
   ```
-  Expected output contains: `3 files changed`
+  Expected output contains: `5 files changed` — the three docs plus Step 2b's two template files,
+  which `git add docs README.md` alone would have left uncommitted.
 
 ---
 
