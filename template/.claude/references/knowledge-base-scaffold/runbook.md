@@ -21,6 +21,18 @@ how-to-drive reference.
 | Test | `<cmd>` | <prereq> |
 | Deploy | `<cmd>` | <prereq> |
 
+## Logs & observability
+
+Where to look BEFORE reproducing — a log line is cheaper than a repro.
+
+| Source | Where | Read with |
+|---|---|---|
+| Local run | `<path or stdout>` | `<cmd>` |
+| Test output | `<path>` | `<cmd>` |
+| Deployed | `<dashboard or URL>` | `<cmd or link>` |
+
+Raise verbosity: `<flag or env-var>`.
+
 ## Repro recipes
 
 - One failing test in isolation: `<cmd>`

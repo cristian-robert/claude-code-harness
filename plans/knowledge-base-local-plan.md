@@ -811,6 +811,18 @@ tier: deep
   | Test | `<cmd>` | <prereq> |
   | Deploy | `<cmd>` | <prereq> |
 
+  ## Logs & observability
+
+  Where to look BEFORE reproducing — a log line is cheaper than a repro.
+
+  | Source | Where | Read with |
+  |---|---|---|
+  | Local run | `<path or stdout>` | `<cmd>` |
+  | Test output | `<path>` | `<cmd>` |
+  | Deployed | `<dashboard or URL>` | `<cmd or link>` |
+
+  Raise verbosity: `<flag or env-var>`.
+
   ## Repro recipes
 
   - One failing test in isolation: `<cmd>`
@@ -2460,10 +2472,12 @@ tier: deep
   with
   ```js
   const GATE_CMD =
-    "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ knowledge-base/ .claude/skills/architecture-map/ " +
-    '.claude/skills/debugging-this-repo/ \\| grep -vE ' +
+    "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ knowledge-base/ \\| grep -vE " +
     "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
   ```
+  The two skill directories leave the literal because Step 3 drops them from the shipped gate, and
+  this literal must equal that gate byte-for-byte. The `pristine` array at `:327-343` is a separate
+  hardcoded list — it keeps `AGENTS.md` plus both skills and is NOT edited here.
 
 - [ ] **Step 2: Run the test and see it fail.**
   ```bash
@@ -2474,7 +2488,7 @@ tier: deep
     FAIL  harness-init step 4 ships exactly the pinned placeholder gate
   ```
 
-- [ ] **Step 3: Update `template/.claude/skills/harness-init/SKILL.md:81` in lockstep.** In the VERIFY table row, replace `AGENTS.md .claude/rules/ .claude/skills/architecture-map/` with `AGENTS.md .claude/rules/ knowledge-base/ .claude/skills/architecture-map/`, and replace the row's description tail `path notation (\`backlog/<id>-<slug>.md\`, \`sprints/<n>.md\`, \`wiki/stack/<tool>/\`) and the real HTML tags in \`rules/frontend.md\`.` with `path notation (\`backlog/<id>-<slug>.md\`, \`sprints/<n>.md\`, \`wiki/stack/<tool>/\`) and the real HTML tags in \`rules/frontend.md\`. \`knowledge-base/\` is in scope because the KB now holds the content the two knowledge skills used to.`
+- [ ] **Step 3: Update `template/.claude/skills/harness-init/SKILL.md:81` in lockstep.** In the VERIFY table row, replace `AGENTS.md .claude/rules/ .claude/skills/architecture-map/ .claude/skills/debugging-this-repo/` with `AGENTS.md .claude/rules/ knowledge-base/` — the KB comes IN because it now holds the content the two knowledge skills used to, and both skill dirs go OUT because Task 7 turned them into thin pointers whose `<…>` tokens are notation inside generic prose, not fill slots, so grepping them can only ever produce a gate that cannot pass. Then replace the row's description tail `path notation (\`backlog/<id>-<slug>.md\`, \`sprints/<n>.md\`, \`wiki/stack/<tool>/\`) and the real HTML tags in \`rules/frontend.md\`.` with `path notation (\`backlog/<id>-<slug>.md\`, \`sprints/<n>.md\`, \`wiki/stack/<tool>/\`) and the real HTML tags in \`rules/frontend.md\`. \`knowledge-base/\` is in scope because the KB now holds the content the two knowledge skills used to; the skills themselves are out because their remaining \`<…>\` tokens are notation, not fill slots.`
 
 - [ ] **Step 4: Run the test and see it pass.**
   ```bash
