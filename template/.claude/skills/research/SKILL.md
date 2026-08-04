@@ -1,6 +1,6 @@
 ---
 name: research
-description: "Research an external tool/library for the version a project pins, cache it in the vault (wiki/stack/<tool>/) for cross-project reuse, and ground work in current docs. Writes wiki/stack/<tool>/ + inbox/research/<tool>.md."
+description: "Research an external tool/library for the version a project pins, cache it in the shared store (wiki/stack/<tool>/) for cross-project reuse, and ground work in current docs. Writes wiki/stack/<tool>/ + inbox/research/<tool>.md."
 disable-model-invocation: true
 argument-hint: "<tool>[@version] [focus]"
 ---
@@ -8,8 +8,9 @@ argument-hint: "<tool>[@version] [focus]"
 # /research <tool>[@version] [focus]
 
 Ground work in current documentation and make it reusable. Cache-first at `wiki/stack/<tool>/`; fetch
-from context7 + official docs on a miss; distil back to the vault. Vault-gated — no vault → degrade to
-repo `reports/`. Mechanics, source order, staleness rule, frontmatter: `.claude/references/research-and-docs.md`.
+from context7 + official docs on a miss; distil back to the shared store. Shared-store-gated — no shared
+store → degrade to repo `reports/`. Mechanics, source order, staleness rule, frontmatter:
+`.claude/references/research-and-docs.md`.
 
 ## 1 · Parse the request
 
@@ -22,8 +23,8 @@ latest. `[focus]` → the aspect (auth, realtime, webhooks…); default general.
 Read `wiki/stack/<tool>/_index.md` (check `aliases:`). Short-circuit ONLY when it (a) `covers:` the
 focus, (b) `researched-version:` matches the requested/pinned major, and (c) `updated:` is within 90
 days → summarize it and STOP (report the path). Otherwise continue to extend/refresh. An
-`inbox/research/<tool>` hit is untriaged raw — surface it, never short-circuit on it. No vault → apply
-the same rule to `reports/research-<tool>.md`.
+`inbox/research/<tool>` hit is untriaged raw — surface it, never short-circuit on it. No shared store →
+apply the same rule to `reports/research-<tool>.md`.
 
 ## 3 · Gather (orchestrator directs, `build` tier gathers)
 
@@ -52,8 +53,8 @@ chain: `wiki/stack/<tool>/_index.md` (`covers:`, `versions:`, `researched-versio
 incompatible major → `wiki/stack/<tool>/v<major>/`. Leave a pointer stub in the inbox note.
 
 Autonomous mode (`.claude/references/autonomous-mode.md`; e.g. invoked from `/plan-work`): no interactive
-step — distil with the conservative default and log the write under `## Assumptions`. No vault → write
-findings to `reports/research-<tool>.md` instead (intra-repo reuse only).
+step — distil with the conservative default and log the write under `## Assumptions`. No shared store →
+write findings to `reports/research-<tool>.md` instead (intra-repo reuse only).
 
 ## Output contract
 

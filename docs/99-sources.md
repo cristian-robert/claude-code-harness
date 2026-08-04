@@ -55,7 +55,7 @@ The hard-won defects list PHE's tests and design explicitly guard against.
 ## 9 · The user's Obsidian vault — `../The Vault`
 Cross-project canonical KB; the working example of knowledge-as-harness-component.
 - Index Law: any folder you create or change → create/update its `_index.md` in the same change (cited verbatim in PHE's CLAUDE.md).
-- Pointer block (`system/pointer-block.md`): repo CLAUDE.md → vault, with a mandatory write-back clause → the template's paste-here comment.
+- Repo → shared-store linkage: `.claude/harness.json` → `knowledge.shared` (the pointer block it replaced is gone; see docs/05).
 - SentrOS dispatch lessons: explicit `model:` on every dispatch, self-contained prompts, re-run-don't-relay verification → `template/.claude/rules/00-core.md`.
 
 ## 10 · Community corpus

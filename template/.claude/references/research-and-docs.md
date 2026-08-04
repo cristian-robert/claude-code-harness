@@ -5,7 +5,7 @@ How `/research` and the doc-grounded rule work. Loaded only when they run.
 ## Principle
 
 Never code an external tool/library/API from training memory — it drifts. Consult the docs for the
-version THIS project pins. Check the vault cache (`wiki/stack/<tool>/`) first; on a miss/stale/
+version THIS project pins. Check the shared-store cache (`wiki/stack/<tool>/`) first; on a miss/stale/
 version-mismatch, fetch current docs, use them, and distil back so the next project inherits it.
 Freshness is a heuristic, not a guarantee of "current": a cache hit is trusted only when its
 `researched-version:` matches the target version AND `updated:` is within the window.
@@ -48,14 +48,14 @@ Evergreen `wiki/stack/<tool>/` — folder `_index.md`: `type: index`, `updated:`
 `doc-sources:` is documentation provenance (URLs + versions). It is DISTINCT from `sources:`, which stays
 repo file-path provenance (re-verifiable against code) and is usually empty for pure-doc research.
 
-## No vault (degraded)
+## No shared store (degraded)
 
-No vault wired → write findings to repo `reports/research-<tool>.md`, and check that same file (version +
-90-day window) on the next run. Intra-repo, cross-time reuse only; cross-PROJECT reuse genuinely needs a
-vault — say so, don't pretend otherwise.
+No shared store wired → write findings to repo `reports/research-<tool>.md`, and check that same file
+(version + 90-day window) on the next run. Intra-repo, cross-time reuse only; cross-PROJECT reuse
+genuinely needs a shared store — say so, don't pretend otherwise.
 
 ## Index Law on first distil
 
 Creating `wiki/stack/<tool>/` also creates `wiki/stack/_index.md` and updates `wiki/_index.md` to link to
-`stack/` — all in the same change. Leave a pointer stub in `inbox/research/<tool>.md` per the vault's
-research SOP.
+`stack/` — all in the same change. Leave a pointer stub in `inbox/research/<tool>.md` per the shared
+store's research SOP.
