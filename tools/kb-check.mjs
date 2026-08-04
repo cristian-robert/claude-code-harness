@@ -13,11 +13,12 @@
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { join, resolve, relative } from "node:path";
 
-// This literal is the source of truth today. `.claude/hooks/guard.mjs` does NOT yet carry
-// it — a later increment lands the same regex there as `KB_SECRET`, DUPLICATED rather than
-// imported (hooks are copied standalone into adopter repos and must stay dependency-free
-// and copy-safe). Once it lands: guard.mjs blocks the WRITE, this blocks the COMMIT, and a
-// smoke-test assert must pin the two regex source strings byte-identical.
+// This literal also lives in `template/.claude/hooks/guard.mjs` as `KB_SECRET`, DUPLICATED
+// rather than imported (hooks are copied standalone into adopter repos and must stay
+// dependency-free and copy-safe). guard.mjs blocks the WRITE, this blocks the COMMIT, and
+// both honour the same `<!-- kb-check:allow -->` line hatch. `cli/kb-check.test.js` pins the
+// two source strings byte-identical; that assert cannot live in the hooks' own smoke test,
+// which ships into adopter repos where this file does not exist.
 //
 // Shape detection, not entropy. Every alternative below was probed against a real
 // credential of that vendor's current format; the narrower predecessor caught only AKIA,

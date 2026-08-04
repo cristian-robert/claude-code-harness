@@ -113,8 +113,8 @@ Individual agent *products* keep their knowledge in their own repo's git-tracked
 A harnessed repo records the absolute path to this vault in its own
 `.claude/harness.json` → `knowledge.shared` (`{ "mode": "existing", "path": "<ABSOLUTE_VAULT_PATH>" }`),
 written once by `npx perfect-harness-engineering init`. There is no pointer block to paste and
-nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from that path, and its
-`guard.mjs` denies any write into `projects/`.
+nothing to keep in sync: the repo's agents read `wiki/` and `agent-kb/` from that path, and once
+that repo has migrated out, its `guard.mjs` denies writes into `projects/` beyond the registry.
 
 ## Taxonomy (frontmatter)
 

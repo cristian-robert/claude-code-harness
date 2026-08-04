@@ -281,6 +281,22 @@ var twoPos = run([A, U]);
 assert('a second positional is rejected, not silently preferred',
   twoPos.code === 1 && twoPos.out.indexOf('unexpected second positional argument') !== -1);
 
+console.log('the guard.mjs twin stays byte-identical:');
+// This tool blocks the COMMIT; template/.claude/hooks/guard.mjs blocks the WRITE using a
+// DUPLICATE of the same literal — duplicated because hooks are copied standalone into adopter
+// repos and must stay dependency-free. Nothing else detects the two drifting apart, and a drift
+// means one gate accepts exactly what the other rejects. This assert cannot live in the hooks'
+// smoke test: that file ships into adopter repos, where tools/kb-check.mjs does not exist.
+const GUARD = path.join(__dirname, '..', 'template', '.claude', 'hooks', 'guard.mjs');
+function regexLiteral(file, name) {
+  var m = fs.readFileSync(file, 'utf-8').match(new RegExp('^const ' + name + ' = (/.*/[a-z]*);$', 'm'));
+  return m === null ? null : m[1];
+}
+var toolLiteral = regexLiteral(KB_CHECK, 'SECRET_SHAPE');
+var hookLiteral = regexLiteral(GUARD, 'KB_SECRET');
+assert('SECRET_SHAPE (tools/kb-check.mjs) and KB_SECRET (template/.claude/hooks/guard.mjs) are byte-identical',
+  toolLiteral !== null && hookLiteral !== null && toolLiteral === hookLiteral);
+
 fs.rmSync(TEST_DIR, { recursive: true, force: true });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

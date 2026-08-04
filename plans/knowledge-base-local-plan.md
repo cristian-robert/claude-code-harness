@@ -73,8 +73,8 @@ tier: deep
 | `template/AGENTS.md` (modify) | Pointer-block slot removed; knowledge routing + kb-check command row |
 | `template/.claude/rules/00-core.md` (modify) | Two routing rows rewritten IN PLACE (file is at cap) |
 | `template/.claude/hooks/session-start.mjs` (modify) | Emit the two-store orientation lines |
-| `template/.claude/hooks/guard.mjs` (modify) | Deny `Write(<shared>/projects/**)` and secret-shaped `Write(knowledge-base/**)` |
-| `template/.claude/hooks/smoke-test.mjs` (modify) | 4 session-start fixtures + 7 guard fixtures |
+| `template/.claude/hooks/guard.mjs` (modify) | Deny `Write(<shared>/projects/**)` except the `_index.md` registry row, and secret-shaped `Write(knowledge-base/**)` |
+| `template/.claude/hooks/smoke-test.mjs` (modify) | 6 session-start fixtures + 13 guard fixtures |
 | `docs/05-knowledge-layer.md` (modify) | Rewritten around the two-store boundary rule |
 | `docs/99-sources.md`, `README.md` (modify) | One dangling pointer-block reference each |
 | `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md` (modify) | ADR-014, ADR-015, ADR-016; ADR-010 cross-reference |
@@ -1358,7 +1358,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/kb-check.test.js
   ```
-  Expected final line: `49 passed, 0 failed` (exit 0).
+  Expected final line: `49 passed, 0 failed` (exit 0). Stays 49 here on purpose: Task 9 Step 10 adds
+  a 50th assert, but `KB_SECRET` does not exist yet at this point in the sequence.
 
 - [ ] **Step 12: Run the tool against the scaffold directly (the acceptance command).**
   ```bash
@@ -2305,12 +2306,14 @@ tier: deep
 - Modify `template/.claude/agents/architect-agent.md` (Step 7 restores the claim in RECORD item 5)
 - Modify `template/.claude/references/knowledge-base-scaffold/resources.md` (Step 7 restores the claim in the `[!danger]` callout)
 - Modify `template/.claude/references/vault-scaffold/CLAUDE.md` (Step 7 restores the claim on the "How a repo reaches this vault" tail)
+- Modify `tools/kb-check.mjs` (Step 10 corrects the `SECRET_SHAPE` comment, which says guard.mjs does not yet carry the twin)
+- Test: modify `cli/kb-check.test.js` (Step 10 adds the byte-identity assert on the two regex literals)
 
 **Interfaces:**
 - Consumes: `harness.json` → `knowledge.shared` (Task 2 writes it).
-- Produces: two PreToolUse denies. The secret-shape regex is the guard's own copy of `tools/kb-check.mjs`'s `SECRET_SHAPE` (Task 3) — duplicated on purpose, because hooks are copied standalone into adopter repos and must stay dependency-free.
+- Produces: two PreToolUse denies. The shared-store deny exempts `projects/_index.md` — that folder is the REGISTRY (`vault-scaffold/CLAUDE.md:90` mandates a row per product there), and denying it would forbid the one write the folder still exists for. The KB deny scans LINE-WISE and honours the `<!-- kb-check:allow -->` hatch, the same waiver `tools/kb-check.mjs` honours, because a credential POINTER is shaped exactly like the thing being hunted. The secret-shape regex is the guard's own copy of `tools/kb-check.mjs`'s `SECRET_SHAPE` (Task 3) — duplicated on purpose, because hooks are copied standalone into adopter repos and must stay dependency-free; Step 10 adds the assert that detects the two drifting apart.
 
-- [ ] **Step 1: Append the seven fixtures first (RED).** In `template/.claude/hooks/smoke-test.mjs`, immediately after the block that ends with `check("configured baseBranch (develop) is protected", denies(res));` and its closing `}` (line 245), and BEFORE the blank line 246 that precedes `console.log("stop-gate.mjs");` (line 247), insert:
+- [ ] **Step 1: Append the thirteen fixtures first (RED).** In `template/.claude/hooks/smoke-test.mjs`, immediately after the block that ends with `check("configured baseBranch (develop) is protected", denies(res));` and its closing `}` (line 245), and BEFORE the blank line 246 that precedes `console.log("stop-gate.mjs");` (line 247), insert:
   ```js
   {
     // The knowledge boundary. Project-scoped knowledge belongs in THIS repo's knowledge-base/;
@@ -2328,6 +2331,15 @@ tier: deep
     const intoWiki = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
       tool_input: { file_path: join(shared, "wiki", "patterns.md"), content: "# Patterns\n" } });
     check("allows Write into <shared>/wiki/ (evergreen still lives there)", !denies(intoWiki));
+    // projects/ is the REGISTRY: vault-scaffold/CLAUDE.md:90 mandates a row per product there.
+    // Denying its _index.md would forbid the one write the folder exists for.
+    const registry = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+      tool_input: { file_path: join(shared, "projects", "_index.md"), content: "| acme | ~/dev/acme | active |\n" } });
+    check("allows the registry row at <shared>/projects/_index.md", !denies(registry));
+    // Edit, not Write: architect-agent holds Edit and that is how it appends to an existing file.
+    const editIntoProjects = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Edit",
+      tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), old_string: "a", new_string: "b" } });
+    check("denies an Edit into <shared>/projects/ (the deny is not Write-only)", denies(editIntoProjects));
     const noConf = mkdtempSync(join(tmpdir(), "phe-kb-noconf-"));
     const unconfigured = runHook("guard.mjs", { ...base, cwd: noConf, tool_name: "Write",
       tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
@@ -2338,6 +2350,14 @@ tier: deep
     const preMigration = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
       tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
     check("migratedAt null -> no shared-store deny (/knowledge-migrate must be able to clean up)", !denies(preMigration));
+    // A path is present but the mode is not `existing` — only the mode tells this apart from a
+    // configured store, so dropping the mode test leaves this the only failing check.
+    writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
+      knowledge: { local: "knowledge-base", shared: { mode: "none", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
+    }));
+    const modeNone = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+      tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
+    check("shared mode none -> no shared-store deny even with migratedAt set", !denies(modeNone));
     writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
       knowledge: { local: "knowledge-base", shared: { mode: "existing", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
     }));
@@ -2353,6 +2373,19 @@ tier: deep
     const elsewhere = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
       tool_input: { file_path: join(proj, "src", "config.ts"), content: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
     check("the secret-shape scan is scoped to knowledge-base/ only", !denies(elsewhere));
+    // Edit carries its payload in new_string, not content — the field the Write fixtures never reach.
+    const editSecret = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Edit",
+      tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), old_string: "x", new_string: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
+    check("denies an Edit whose new_string carries a secret shape", denies(editSecret));
+    // The blessed escape hatch, byte-for-byte the one tools/kb-check.mjs honours. A real
+    // credential POINTER is shaped exactly like the thing being hunted, so without the hatch the
+    // scaffold's own documented workflow is unperformable.
+    const barePointer = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+      tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "password: 1Password/Shared-Engineering\n" } });
+    check("a credential pointer that trips the regex still denies without the hatch", denies(barePointer));
+    const hatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+      tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "password: 1Password/Shared-Engineering <!-- kb-check:allow -->\n" } });
+    check("the <!-- kb-check:allow --> hatch waives that line (kb-check parity)", !denies(hatched));
   }
   ```
 
@@ -2360,7 +2393,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `106 passed, 2 failed` (exit 1). The two failures are `denies Write into <shared>/projects/` and `denies a secret-shaped string written into knowledge-base/`.
+  Expected output: `109 passed, 5 failed` (exit 1). The five failures are `denies Write into <shared>/projects/`, `denies an Edit into <shared>/projects/ (the deny is not Write-only)`, `denies a secret-shaped string written into knowledge-base/`, `denies an Edit whose new_string carries a secret shape`, and `a credential pointer that trips the regex still denies without the hatch`. The other eight assert that the guard does NOT deny, so they pass before the matchers exist — Step 9's mutation kills are what prove them non-vacuous.
 
 - [ ] **Step 3: Add the constant to `template/.claude/hooks/guard.mjs`.** Immediately after `const PROTECTED = new Set(["main", "master"]);` (`:26`), insert:
   ```js
@@ -2399,13 +2432,25 @@ tier: deep
       const kbCwd = event.cwd || process.cwd();
       const target = resolve(kbCwd, input.file_path);
       const shared = sharedStorePath(kbCwd);
-      if (shared && (target + "/").startsWith(shared + "/projects/")) {
-        deny(`'${input.file_path}' is inside the shared store's projects/ — project-scoped knowledge lives in this repo's knowledge-base/ instead. Promotion MOVES a fact to the shared store; nothing is ever kept in both. See .claude/references/knowledge-protocol.md.`);
+      // projects/_index.md is the REGISTRY — one row per product, repo path and status, not
+      // knowledge — and the vault's own doctrine mandates that row. Denying it would forbid the
+      // one write the folder still exists for. Everything ELSE under projects/ is the fork.
+      if (shared && (target + "/").startsWith(shared + "/projects/")
+          && target !== resolve(shared, "projects", "_index.md")) {
+        deny(`'${input.file_path}' is inside the shared store's projects/ — project-scoped knowledge lives in this repo's knowledge-base/ instead. Promotion MOVES a fact to the shared store; nothing is ever kept in both. Only projects/_index.md (the registry row) stays writable. See .claude/references/knowledge-protocol.md.`);
       }
       if ((target + "/").startsWith(resolve(kbCwd, "knowledge-base") + "/")) {
+        // Line-wise, and a line carrying the <!-- kb-check:allow --> hatch is waived — the same
+        // escape hatch tools/kb-check.mjs honours, for the same reason: a credential POINTER
+        // ("password: 1Password/Shared-Engineering") is shaped exactly like the thing being
+        // hunted, and resources.md exists to hold pointers. A whole-body test made the
+        // scaffold's own documented waiver unreachable.
         const body = `${input.content || ""}\n${input.new_string || ""}`;
-        if (KB_SECRET.test(body)) {
-          deny("This write puts a secret-shaped string into knowledge-base/, which is git-tracked and may be published. Record a POINTER to where the credential lives (1Password, the platform's secret manager) — never the value. See .claude/references/knowledge-protocol.md.");
+        for (const line of body.split("\n")) {
+          if (line.indexOf("<!-- kb-check:allow -->") !== -1) continue;
+          if (KB_SECRET.test(line)) {
+            deny("This write puts a secret-shaped string into knowledge-base/, which is git-tracked and may be published. Record a POINTER to where the credential lives (1Password, the platform's secret manager) — never the value. A pointer that itself looks secret-shaped is waived one line at a time with a trailing <!-- kb-check:allow -->. See .claude/references/knowledge-protocol.md.");
+          }
         }
       }
     }
@@ -2415,7 +2460,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `108 passed, 0 failed` (exit 0).
+  Expected output: `114 passed, 0 failed` (exit 0).
 
 - [ ] **Step 7: Restore the five `guard.mjs` claims this commit has now earned.** Every one of these
   was removed, or written without its guard clause, under the branch rule that a claim ships only
@@ -2425,7 +2470,9 @@ tier: deep
   1. `template/.claude/references/knowledge-protocol.md`, boundary rule — replace the paragraph
      ending `` Never write project knowledge into `<shared>/projects/` — it belongs in that repo's
      own `knowledge-base/`. `` with `` Never write project knowledge into `<shared>/projects/`:
-     `.claude/hooks/guard.mjs` denies it. ``
+     `.claude/hooks/guard.mjs` denies it once the migration has run. `` The trailing qualifier is
+     load-bearing: `sharedStorePath()` returns null until `migratedAt` is stamped, so an
+     unqualified sentence claims more than Step 5 delivers.
   2. `template/.claude/references/knowledge-protocol.md`, write policy — in the bullet beginning
      `` `knowledge-base/` is git-TRACKED and may be published ``, restore the guard sentence so it
      reads `` `guard.mjs` denies a secret-shaped write; `npx perfect-harness-engineering kb-check`
@@ -2453,7 +2500,9 @@ tier: deep
      The two `<!-- kb-check:allow -->` hatch lines below it stay exactly as they are.
   5. `template/.claude/references/vault-scaffold/CLAUDE.md` — restore the tail of the sentence
      ending `the repo's agents read `wiki/` and `agent-kb/` from that path.` so it reads
-     `` …from that path, and its `guard.mjs` denies any write into `projects/`. ``
+     `` …from that path, and once that repo has migrated out, its `guard.mjs` denies writes into
+     `projects/` beyond the registry. `` Both qualifiers are load-bearing: `:90` of this same file
+     mandates a registry row in `projects/_index.md`, which Step 5 exempts.
 
   Then prove every restored claim is now true of the shipped hook:
   ```bash
@@ -2469,11 +2518,77 @@ tier: deep
   ```
   Expected output: `  PASS  survives malformed input (fail-open)`
 
-- [ ] **Step 9: Commit.**
+- [ ] **Step 9: Prove the three fixtures that pass before the hook exists are not vacuous.** Eight of
+  Step 1's thirteen checks assert the guard does NOT deny, so they were green in Step 2 as well. Three
+  of them pin behaviour nothing else pins; apply each mutation to `guard.mjs`, run the smoke test, see
+  the NAMED check red, then restore and see it green.
   ```bash
-  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add template/.claude/hooks/guard.mjs template/.claude/hooks/smoke-test.mjs template/.claude/references/knowledge-protocol.md template/.claude/agents/architect-agent.md template/.claude/references/knowledge-base-scaffold/resources.md template/.claude/references/vault-scaffold/CLAUDE.md && git commit -m "feat(hooks): guard denies shared-store project writes and KB secret writes"
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && cp template/.claude/hooks/guard.mjs /tmp/guard.bak
+  perl -0pi -e 's/if \(s && s\.mode === "existing" && typeof/if (s \&\& typeof/' template/.claude/hooks/guard.mjs
+  node template/.claude/hooks/smoke-test.mjs | grep -E "shared mode none -> no shared-store|passed,"
+  cp /tmp/guard.bak template/.claude/hooks/guard.mjs
+  perl -0pi -e 's/const body = `\$\{input\.content \|\| ""\}\\n\$\{input\.new_string \|\| ""\}`;/const body = `\${input.content || ""}`;/' template/.claude/hooks/guard.mjs
+  node template/.claude/hooks/smoke-test.mjs | grep -E "Edit whose new_string|passed,"
+  cp /tmp/guard.bak template/.claude/hooks/guard.mjs
+  perl -0pi -e 's/  if \(\["Edit", "Write", "NotebookEdit"\]\.includes\(tool\) && input\.file_path\) \{/  if (["Write"].includes(tool) \&\& input.file_path) {/' template/.claude/hooks/guard.mjs
+  node template/.claude/hooks/smoke-test.mjs | grep -E "denies an Edit|passed,"
+  cp /tmp/guard.bak template/.claude/hooks/guard.mjs && rm /tmp/guard.bak
+  node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output contains: `6 files changed`
+  Expected: `shared mode none -> no shared-store deny even with migratedAt set` FAILs at `113 passed,
+  1 failed`; `denies an Edit whose new_string carries a secret shape` FAILs at `113 passed, 1 failed`;
+  both `denies an Edit …` checks FAIL at `112 passed, 2 failed`; then `114 passed, 0 failed` after the
+  final restore. A mutation that leaves 114 green means the fixture does not pin what it names.
+
+- [ ] **Step 10: Make the duplicated regex detectable when it drifts.** `KB_SECRET` (Step 3) is a
+  hand-copy of `tools/kb-check.mjs`'s `SECRET_SHAPE`, and until now nothing noticed them diverging —
+  a drift means one gate accepts exactly what the other rejects. The assert canNOT live in
+  `smoke-test.mjs`: that file ships into adopter repos where `tools/kb-check.mjs` does not exist.
+
+  In `tools/kb-check.mjs`, replace the five comment lines above `const SECRET_SHAPE` (which still say
+  guard.mjs "does NOT yet carry it — a later increment lands the same regex there") with:
+  ```js
+  // This literal also lives in `template/.claude/hooks/guard.mjs` as `KB_SECRET`, DUPLICATED
+  // rather than imported (hooks are copied standalone into adopter repos and must stay
+  // dependency-free and copy-safe). guard.mjs blocks the WRITE, this blocks the COMMIT, and
+  // both honour the same `<!-- kb-check:allow -->` line hatch. `cli/kb-check.test.js` pins the
+  // two source strings byte-identical; that assert cannot live in the hooks' own smoke test,
+  // which ships into adopter repos where this file does not exist.
+  ```
+  Then in `cli/kb-check.test.js`, immediately before the closing `fs.rmSync(TEST_DIR, …)`, insert:
+  ```js
+  console.log('the guard.mjs twin stays byte-identical:');
+  // This tool blocks the COMMIT; template/.claude/hooks/guard.mjs blocks the WRITE using a
+  // DUPLICATE of the same literal — duplicated because hooks are copied standalone into adopter
+  // repos and must stay dependency-free. Nothing else detects the two drifting apart, and a drift
+  // means one gate accepts exactly what the other rejects. This assert cannot live in the hooks'
+  // smoke test: that file ships into adopter repos, where tools/kb-check.mjs does not exist.
+  const GUARD = path.join(__dirname, '..', 'template', '.claude', 'hooks', 'guard.mjs');
+  function regexLiteral(file, name) {
+    var m = fs.readFileSync(file, 'utf-8').match(new RegExp('^const ' + name + ' = (/.*/[a-z]*);$', 'm'));
+    return m === null ? null : m[1];
+  }
+  var toolLiteral = regexLiteral(KB_CHECK, 'SECRET_SHAPE');
+  var hookLiteral = regexLiteral(GUARD, 'KB_SECRET');
+  assert('SECRET_SHAPE (tools/kb-check.mjs) and KB_SECRET (template/.claude/hooks/guard.mjs) are byte-identical',
+    toolLiteral !== null && hookLiteral !== null && toolLiteral === hookLiteral);
+  ```
+  Then prove the assert is not vacuous — drift one character and watch it fire:
+  ```bash
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/kb-check.test.js | tail -1
+  cp template/.claude/hooks/guard.mjs /tmp/guard.bak
+  perl -0pi -e 's/\\bAKIA\[0-9A-Z\]\{16\}\\b/\\bAKIA[0-9A-Z]{17}\\b/' template/.claude/hooks/guard.mjs
+  node cli/kb-check.test.js | tail -1
+  cp /tmp/guard.bak template/.claude/hooks/guard.mjs && rm /tmp/guard.bak
+  node cli/kb-check.test.js | tail -1
+  ```
+  Expected: `50 passed, 0 failed`, then `49 passed, 1 failed`, then `50 passed, 0 failed`.
+
+- [ ] **Step 11: Commit.**
+  ```bash
+  cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && git add template/.claude/hooks/guard.mjs template/.claude/hooks/smoke-test.mjs template/.claude/references/knowledge-protocol.md template/.claude/agents/architect-agent.md template/.claude/references/knowledge-base-scaffold/resources.md template/.claude/references/vault-scaffold/CLAUDE.md tools/kb-check.mjs cli/kb-check.test.js && git commit -m "feat(hooks): guard denies shared-store project writes and KB secret writes"
+  ```
+  Expected output contains: `8 files changed`
 
 ---
 
@@ -2608,7 +2723,7 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -4
   ```
-  Expected: the last suite's summary `108 passed, 0 failed` and exit 0.
+  Expected: the last suite's summary `114 passed, 0 failed` and exit 0.
 
 - [ ] **Step 11: Commit.**
   ```bash
@@ -2709,7 +2824,7 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   |---|---|
   | Guidance | `AGENTS.md` knowledge bullet + `00-core.md`'s two routing rows; `.claude/references/knowledge-protocol.md` on cite |
   | Evidence | `plan-template.md`'s `Knowledge to load first:` requires BOTH stores or a literal `none — <reason>`; `/implement`'s report table carries a Knowledge row; `kb-check` gates the KB itself, never the plan field |
-  | Hook | `guard.mjs` denies `Write(<shared>/projects/**)` and any secret-shaped `Write(knowledge-base/**)` |
+  | Hook | `guard.mjs` denies `Write(<shared>/projects/**)` once `migratedAt` is stamped — except the `projects/_index.md` registry row — and any secret-shaped `Write(knowledge-base/**)`, line-wise, honouring the `<!-- kb-check:allow -->` hatch |
 
   `npx perfect-harness-engineering kb-check` (`tools/kb-check.mjs`) makes exactly three claims,
   because exactly three are decidable: **(a)** every KB folder has an `_index.md`, **(b)** no file is
@@ -2842,7 +2957,7 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   - **Date:** 2026-08-03
   - **Status:** accepted (**reverses ADR-001**; spec: `docs/design/2026-08-03-project-local-knowledge-base.md`, increment 1)
   - **Context:** ADR-001 made the vault the sole store for project knowledge and explicitly rejected mirrors. Lived cost: the knowledge does not survive a clone, never appears in a PR diff, and its `sources:` paths are absolute and unverifiable. PO directive 2026-08-01: "I need that this harness enforce a folder in the project `knowledge-base` where we should keep it from now on." Verified before adopting: `git grep knowledge-base` → zero hits (name unclaimed); the GitHub repo is PUBLIC, so a tracked KB is a published KB.
-  - **Decision:** Two stores. LOCAL `knowledge-base/` in the repo (`_index.md`, `architecture.md`, `decisions.md`, `resources.md`, `runbook.md`, `inbox/`, `research/`) holds project-scoped knowledge, git-tracked and reviewed. The SHARED Obsidian vault keeps evergreen `wiki/` + `agent-kb/` only. **Promotion MOVES**: `/evolve` deletes the local file and leaves a pointer line in `knowledge-base/_index.md`, so exactly one copy of any fact exists — which is why this is not the mirror ADR-001 forbade. Linkage is one config key, `.claude/harness.json` → `knowledge {local, shared{mode,path}, migratedAt}` (`cli/knowledge-config.js`); the pointer block and the vault project template are deleted. `architect-agent` is repointed at `knowledge-base/architecture.md` + `decisions.md` — without that repoint the two files this design exists to hold have no writer. Enforcement is layered: guidance (`00-core.md`, `AGENTS.md`), evidence (`plan-template.md`'s `Knowledge to load first:` requires both stores or a literal `none — <reason>`; `/implement`'s report Knowledge row; `tools/kb-check.mjs` in `/validate` and `/evolve`), and hooks (`guard.mjs` denies `Write(<shared>/projects/**)` and secret-shaped `Write(knowledge-base/**)`). `knowledge-base/` travels with the CODE branch, committed as one `docs(kb):` commit at `/evolve`.
+  - **Decision:** Two stores. LOCAL `knowledge-base/` in the repo (`_index.md`, `architecture.md`, `decisions.md`, `resources.md`, `runbook.md`, `inbox/`, `research/`) holds project-scoped knowledge, git-tracked and reviewed. The SHARED Obsidian vault keeps evergreen `wiki/` + `agent-kb/` only. **Promotion MOVES**: `/evolve` deletes the local file and leaves a pointer line in `knowledge-base/_index.md`, so exactly one copy of any fact exists — which is why this is not the mirror ADR-001 forbade. Linkage is one config key, `.claude/harness.json` → `knowledge {local, shared{mode,path}, migratedAt}` (`cli/knowledge-config.js`); the pointer block and the vault project template are deleted. `architect-agent` is repointed at `knowledge-base/architecture.md` + `decisions.md` — without that repoint the two files this design exists to hold have no writer. Enforcement is layered: guidance (`00-core.md`, `AGENTS.md`), evidence (`plan-template.md`'s `Knowledge to load first:` requires both stores or a literal `none — <reason>`; `/implement`'s report Knowledge row; `tools/kb-check.mjs` in `/validate` and `/evolve`), and hooks (`guard.mjs` denies `Write(<shared>/projects/**)` once `migratedAt` is stamped, exempting only the `projects/_index.md` registry row the vault doctrine mandates, and denies secret-shaped `Write(knowledge-base/**)` line-wise, honouring the same `<!-- kb-check:allow -->` hatch `kb-check` honours). `knowledge-base/` travels with the CODE branch, committed as one `docs(kb):` commit at `/evolve`.
   - **Consequences:** Knowledge survives a clone, lands in the PR diff, and its relative `sources:` paths are verifiable. `kb-check` makes exactly three decidable claims (index law, unfilled placeholders, secret shapes) and deliberately does not claim `_index.md` accuracy. Costs: a finding on an abandoned branch dies with it (same property `plans/` has); a tracked KB in a public repo means the secret guard is load-bearing, not decorative; the evidence rung is a nudge — `none — <reason>` passes by design. This does NOT fix harvest — `/evolve` stays ask-first. Increment 1 ships the local KB only; migration of existing vault knowledge is increment 2 and no migration machinery exists yet. Deliberate deviation from the spec's Enforcement table: `kb-check` does NOT gate on the plan's `Knowledge to load first:` field — it makes three decidable claims about the KB itself and nothing about `plans/`.
 
   ## ADR-015 — The reviewer reads `knowledge-base/`, from the base branch
@@ -2877,7 +2992,7 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -3 && node tools/context-ledger.mjs template && node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold; echo "kb-check exit=$?"
   ```
   Expected, in order:
-  1. `108 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
+  1. `114 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
   2. The ledger table with `AGENTS.md 58`, `.claude/rules/00-core.md 45`, no `!! WARN`, no `!! HARD`, `Status: WARN — <n> / 2000 est. tokens` with `<n>` ≤ 1654.
   3. `kb-check: (b) skipped — the checked dir IS the shipped scaffold.` / `kb-check: GREEN — 7 file(s) in …` / `kb-check exit=0`.
 
@@ -2898,10 +3013,10 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
 
 ## End-to-end verification
 
-1. `npm test` → exits 0; final suite line `108 passed, 0 failed`.
-2. `node template/.claude/hooks/smoke-test.mjs` → `108 passed, 0 failed`, including the 6 session-start knowledge fixtures and the 7 guard boundary fixtures.
+1. `npm test` → exits 0; final suite line `114 passed, 0 failed`.
+2. `node template/.claude/hooks/smoke-test.mjs` → `114 passed, 0 failed`, including the 6 session-start knowledge fixtures and the 13 guard boundary fixtures.
 3. `node cli/knowledge-config.test.js` → `40 passed, 0 failed`.
-4. `node cli/kb-check.test.js` → `49 passed, 0 failed`.
+4. `node cli/kb-check.test.js` → `50 passed, 0 failed` (49 at Task 3; Task 9 Step 10 adds the regex byte-identity assert).
 5. `node tools/context-ledger.mjs template` → total ≤ 1654 est. tokens, `Status: WARN`, no `!! WARN`, no `!! HARD`, `AGENTS.md` 58 lines, `00-core.md` 45 lines.
 6. `node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold` → GREEN, exit 0.
 7. Negative proof the gate has teeth:

@@ -259,6 +259,15 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const intoWiki = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
     tool_input: { file_path: join(shared, "wiki", "patterns.md"), content: "# Patterns\n" } });
   check("allows Write into <shared>/wiki/ (evergreen still lives there)", !denies(intoWiki));
+  // projects/ is the REGISTRY: vault-scaffold/CLAUDE.md:90 mandates a row per product there.
+  // Denying its _index.md would forbid the one write the folder exists for.
+  const registry = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(shared, "projects", "_index.md"), content: "| acme | ~/dev/acme | active |\n" } });
+  check("allows the registry row at <shared>/projects/_index.md", !denies(registry));
+  // Edit, not Write: architect-agent holds Edit and that is how it appends to an existing file.
+  const editIntoProjects = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Edit",
+    tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), old_string: "a", new_string: "b" } });
+  check("denies an Edit into <shared>/projects/ (the deny is not Write-only)", denies(editIntoProjects));
   const noConf = mkdtempSync(join(tmpdir(), "phe-kb-noconf-"));
   const unconfigured = runHook("guard.mjs", { ...base, cwd: noConf, tool_name: "Write",
     tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
@@ -269,6 +278,14 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const preMigration = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
     tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
   check("migratedAt null -> no shared-store deny (/knowledge-migrate must be able to clean up)", !denies(preMigration));
+  // A path is present but the mode is not `existing` — only the mode tells this apart from a
+  // configured store, so dropping the mode test leaves this the only failing check.
+  writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "none", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
+  }));
+  const modeNone = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
+  check("shared mode none -> no shared-store deny even with migratedAt set", !denies(modeNone));
   writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
     knowledge: { local: "knowledge-base", shared: { mode: "existing", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
   }));
@@ -284,6 +301,19 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const elsewhere = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
     tool_input: { file_path: join(proj, "src", "config.ts"), content: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
   check("the secret-shape scan is scoped to knowledge-base/ only", !denies(elsewhere));
+  // Edit carries its payload in new_string, not content — the field the Write fixtures never reach.
+  const editSecret = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Edit",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), old_string: "x", new_string: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
+  check("denies an Edit whose new_string carries a secret shape", denies(editSecret));
+  // The blessed escape hatch, byte-for-byte the one tools/kb-check.mjs honours. A real
+  // credential POINTER is shaped exactly like the thing being hunted, so without the hatch the
+  // scaffold's own documented workflow is unperformable.
+  const barePointer = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "password: 1Password/Shared-Engineering\n" } });
+  check("a credential pointer that trips the regex still denies without the hatch", denies(barePointer));
+  const hatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "password: 1Password/Shared-Engineering <!-- kb-check:allow -->\n" } });
+  check("the <!-- kb-check:allow --> hatch waives that line (kb-check parity)", !denies(hatched));
 }
 
 console.log("stop-gate.mjs");

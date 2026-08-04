@@ -172,13 +172,25 @@ async function main() {
     const kbCwd = event.cwd || process.cwd();
     const target = resolve(kbCwd, input.file_path);
     const shared = sharedStorePath(kbCwd);
-    if (shared && (target + "/").startsWith(shared + "/projects/")) {
-      deny(`'${input.file_path}' is inside the shared store's projects/ — project-scoped knowledge lives in this repo's knowledge-base/ instead. Promotion MOVES a fact to the shared store; nothing is ever kept in both. See .claude/references/knowledge-protocol.md.`);
+    // projects/_index.md is the REGISTRY — one row per product, repo path and status, not
+    // knowledge — and the vault's own doctrine mandates that row. Denying it would forbid the
+    // one write the folder still exists for. Everything ELSE under projects/ is the fork.
+    if (shared && (target + "/").startsWith(shared + "/projects/")
+        && target !== resolve(shared, "projects", "_index.md")) {
+      deny(`'${input.file_path}' is inside the shared store's projects/ — project-scoped knowledge lives in this repo's knowledge-base/ instead. Promotion MOVES a fact to the shared store; nothing is ever kept in both. Only projects/_index.md (the registry row) stays writable. See .claude/references/knowledge-protocol.md.`);
     }
     if ((target + "/").startsWith(resolve(kbCwd, "knowledge-base") + "/")) {
+      // Line-wise, and a line carrying the <!-- kb-check:allow --> hatch is waived — the same
+      // escape hatch tools/kb-check.mjs honours, for the same reason: a credential POINTER
+      // ("password: 1Password/Shared-Engineering") is shaped exactly like the thing being
+      // hunted, and resources.md exists to hold pointers. A whole-body test made the
+      // scaffold's own documented waiver unreachable.
       const body = `${input.content || ""}\n${input.new_string || ""}`;
-      if (KB_SECRET.test(body)) {
-        deny("This write puts a secret-shaped string into knowledge-base/, which is git-tracked and may be published. Record a POINTER to where the credential lives (1Password, the platform's secret manager) — never the value. See .claude/references/knowledge-protocol.md.");
+      for (const line of body.split("\n")) {
+        if (line.indexOf("<!-- kb-check:allow -->") !== -1) continue;
+        if (KB_SECRET.test(line)) {
+          deny("This write puts a secret-shaped string into knowledge-base/, which is git-tracked and may be published. Record a POINTER to where the credential lives (1Password, the platform's secret manager) — never the value. A pointer that itself looks secret-shaped is waived one line at a time with a trailing <!-- kb-check:allow -->. See .claude/references/knowledge-protocol.md.");
+        }
       }
     }
   }

@@ -12,7 +12,7 @@ How every knowledge-touching skill/agent RETRIEVEs before acting and CAPTUREs af
 **Promotion MOVES.** When a local fact generalizes, `/evolve` moves it to the shared store,
 DELETES the local file, and leaves a one-line pointer in `knowledge-base/_index.md`. Exactly one
 copy of any fact exists — this is not a mirror. Never write project knowledge into
-`<shared>/projects/`: `.claude/hooks/guard.mjs` denies it.
+`<shared>/projects/`: `.claude/hooks/guard.mjs` denies it once the migration has run.
 
 ## Retrieval ladders — one per store, never both rungs, never skip local
 
