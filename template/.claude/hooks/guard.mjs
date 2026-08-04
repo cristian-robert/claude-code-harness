@@ -24,6 +24,12 @@ const SECRET_DIR = /(^|[\\/])secrets[\\/]/i; // anything under a secrets/ dir
 const BASH_SECRET = /(^|[\s"'=/])\.env(\.(?!example|sample|template|dist|defaults)[\w.]+)?\b/;
 const RECURSIVE_RM = /\brm\s+(-[a-z]*[rR][a-z]*f?[a-z]*|--recursive)\b|\brm\s+-[a-z]*f[a-z]*[rR]\b|\bfind\b[^|;&]*(-delete|-exec\s+rm)\b|\bgit\s+clean\b[^|;&]*-[a-z]*d/;
 const PROTECTED = new Set(["main", "master"]);
+// knowledge-base/ is git-TRACKED, and a harnessed repo may be public: a credential written
+// there is PUBLISHED, not merely stored. Modelled on BASH_SECRET above — shape detection,
+// not entropy. Duplicated (not imported) in tools/kb-check.mjs on purpose: hooks are copied
+// standalone into adopter repos and must stay dependency-free. Keep the two in sync — this
+// blocks the WRITE, kb-check blocks the COMMIT.
+const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
 
 // main/master are always protected; a project on a different integration base
 // (develop/trunk) adds it via harness.json "baseBranch". Strictly additive.
@@ -33,6 +39,21 @@ function protectedBranches(cwd) {
     if (typeof cfg.baseBranch === "string" && cfg.baseBranch) return new Set([...PROTECTED, cfg.baseBranch]);
   } catch { /* no config: main/master only */ }
   return PROTECTED;
+}
+
+// The shared knowledge store (an Obsidian vault) if one is configured AND the
+// one-way migration out of it has already happened. Only `existing` + a non-null
+// `migratedAt` counts: before the migration, /knowledge-migrate itself has to
+// write into <shared>/projects/ to clean it up (spec: deny "after migration").
+function sharedStorePath(cwd) {
+  try {
+    const cfg = JSON.parse(readFileSync(join(cwd, ".claude", "harness.json"), "utf8"));
+    const k = cfg.knowledge;
+    if (!k || !k.migratedAt) return null;
+    const s = k.shared;
+    if (s && s.mode === "existing" && typeof s.path === "string" && s.path) return resolve(s.path);
+  } catch { /* no config / unreadable: no shared store to protect — fail open */ }
+  return null;
 }
 
 function deny(reason) {
@@ -141,6 +162,24 @@ async function main() {
   if (["Read", "Edit", "Write", "NotebookEdit"].includes(tool)) {
     if (isSecretPath(input.file_path)) {
       deny(`Access to secret file '${input.file_path}' is blocked. Use .env.example for structure; ask the user to handle real secret values themselves.`);
+    }
+  }
+
+  // The knowledge boundary (two stores, one rule). Project-scoped knowledge lives in THIS
+  // repo's knowledge-base/; the shared vault keeps evergreen wiki/ + agent-kb/ only.
+  // Reads are untouched — this blocks the two WRITES that would re-fork the truth.
+  if (["Edit", "Write", "NotebookEdit"].includes(tool) && input.file_path) {
+    const kbCwd = event.cwd || process.cwd();
+    const target = resolve(kbCwd, input.file_path);
+    const shared = sharedStorePath(kbCwd);
+    if (shared && (target + "/").startsWith(shared + "/projects/")) {
+      deny(`'${input.file_path}' is inside the shared store's projects/ — project-scoped knowledge lives in this repo's knowledge-base/ instead. Promotion MOVES a fact to the shared store; nothing is ever kept in both. See .claude/references/knowledge-protocol.md.`);
+    }
+    if ((target + "/").startsWith(resolve(kbCwd, "knowledge-base") + "/")) {
+      const body = `${input.content || ""}\n${input.new_string || ""}`;
+      if (KB_SECRET.test(body)) {
+        deny("This write puts a secret-shaped string into knowledge-base/, which is git-tracked and may be published. Record a POINTER to where the credential lives (1Password, the platform's secret manager) — never the value. See .claude/references/knowledge-protocol.md.");
+      }
     }
   }
 

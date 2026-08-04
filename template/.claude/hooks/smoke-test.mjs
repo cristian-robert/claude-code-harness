@@ -243,6 +243,48 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const res = runHook("guard.mjs", { ...base, cwd: tmp, tool_name: "Bash", tool_input: { command: "git commit -m x" } });
   check("configured baseBranch (develop) is protected", denies(res));
 }
+{
+  // The knowledge boundary. Project-scoped knowledge belongs in THIS repo's knowledge-base/;
+  // a write into the shared store's projects/ re-forks the truth the boundary rule exists to
+  // prevent. Traces to: docs/design/2026-08-03-project-local-knowledge-base.md, decision 10.
+  const proj = mkdtempSync(join(tmpdir(), "phe-kb-proj-"));
+  const shared = mkdtempSync(join(tmpdir(), "phe-kb-shared-"));
+  mkdirSync(join(proj, ".claude"), { recursive: true });
+  writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "existing", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
+  }));
+  const intoProjects = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
+  check("denies Write into <shared>/projects/", denies(intoProjects));
+  const intoWiki = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(shared, "wiki", "patterns.md"), content: "# Patterns\n" } });
+  check("allows Write into <shared>/wiki/ (evergreen still lives there)", !denies(intoWiki));
+  const noConf = mkdtempSync(join(tmpdir(), "phe-kb-noconf-"));
+  const unconfigured = runHook("guard.mjs", { ...base, cwd: noConf, tool_name: "Write",
+    tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
+  check("no knowledge config -> no shared-store deny (fail open)", !denies(unconfigured));
+  writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "existing", path: shared }, migratedAt: null },
+  }));
+  const preMigration = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(shared, "projects", "acme", "architecture.md"), content: "# Architecture\n" } });
+  check("migratedAt null -> no shared-store deny (/knowledge-migrate must be able to clean up)", !denies(preMigration));
+  writeFileSync(join(proj, ".claude", "harness.json"), JSON.stringify({
+    knowledge: { local: "knowledge-base", shared: { mode: "existing", path: shared }, migratedAt: "2026-08-03T00:00:00Z" },
+  }));
+
+  // knowledge-base/ is git-TRACKED and the repo may be public: a secret written here is
+  // PUBLISHED, not merely stored. Pointers pass; values do not.
+  const secret = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
+  check("denies a secret-shaped string written into knowledge-base/", denies(secret));
+  const pointer = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Deploy key lives in 1Password — pointer only.\n" } });
+  check("allows a credentials INDEX (pointers only) in knowledge-base/", !denies(pointer));
+  const elsewhere = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "src", "config.ts"), content: "aws_key: AKIAIOSFODNN7EXAMPLE\n" } });
+  check("the secret-shape scan is scoped to knowledge-base/ only", !denies(elsewhere));
+}
 
 console.log("stop-gate.mjs");
 check("exits 0 when stop_hook_active", runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: true }).code === 0);

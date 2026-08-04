@@ -58,8 +58,8 @@ somewhere to write: create the file from `.claude/references/knowledge-base-scaf
 3. Decision with rationale given → append an ADR to `knowledge-base/decisions.md`.
 4. Index Law: a folder whose contents you changed gets its `_index.md` created (from the scaffold)
    or updated in the SAME change (bump `updated:`) — the first RECORD in a repo creates it.
-5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only; `kb-check` fails the gate
-   on one.
+5. Never write a credential VALUE — `knowledge-base/resources.md` holds pointers only;
+   `guard.mjs` denies the write and `kb-check` fails the gate.
 6. Reply with a one-line confirmation per file written.
 
 ### PATTERN

@@ -12,7 +12,7 @@ How every knowledge-touching skill/agent RETRIEVEs before acting and CAPTUREs af
 **Promotion MOVES.** When a local fact generalizes, `/evolve` moves it to the shared store,
 DELETES the local file, and leaves a one-line pointer in `knowledge-base/_index.md`. Exactly one
 copy of any fact exists — this is not a mirror. Never write project knowledge into
-`<shared>/projects/` — it belongs in that repo's own `knowledge-base/`.
+`<shared>/projects/`: `.claude/hooks/guard.mjs` denies it.
 
 ## Retrieval ladders — one per store, never both rungs, never skip local
 
@@ -29,8 +29,8 @@ copy of any fact exists — this is not a mirror. Never write project knowledge 
   write updates that folder's `_index.md` in the same change (Index Law) and uses Obsidian
   conventions: frontmatter, `[[wikilinks]]` (the global `obsidian-markdown` skill when available).
 - `knowledge-base/` is git-TRACKED and may be published: `resources.md` holds credential POINTERS
-  only. `npx perfect-harness-engineering kb-check` gates it at `/validate` and again at `/evolve`'s
-  apply step, because the KB commit happens at `/evolve`.
+  only. `guard.mjs` denies a secret-shaped write; `npx perfect-harness-engineering kb-check` gates
+  it again at `/validate` and at `/evolve`'s apply step.
 - Shared-store writes (`wiki/`, `agent-kb/`) and any rule change: ask-first, via `/evolve` only.
 - `knowledge-base/` is committed as ONE `docs(kb):` commit at `/evolve`, on the feature branch —
   a work artifact like `plans/` and `reports/`, not a tracking-root file.
