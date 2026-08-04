@@ -76,6 +76,7 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Section | Content |
 |---|---|
 | Task status | Per task: done/failed + one-line validation output summary |
+| Knowledge | `knowledge-base/` files read before Task 1 (the plan's `Knowledge to load first:`) and every KB file this run changed. `none` is a valid value; an empty cell is not |
 | Deviations | Every departure from the plan, with why |
 | Files changed | Paths, grouped by task |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |

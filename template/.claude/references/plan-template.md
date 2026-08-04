@@ -19,7 +19,7 @@ tier: deep                # implementer hint: `deep` (hard logic/architecture) |
 
 ## Context
 <!-- The PRP "curated codebase intelligence" — everything /implement needs, nothing more. -->
-- Knowledge to load first: <.claude/skills/architecture-map, docs/x.md, ...> # /implement reads these BEFORE Task 1 — they were in the planner's context and died at /clear
+- Knowledge to load first: <LOCAL: knowledge-base/architecture.md#Boundaries, knowledge-base/decisions.md · SHARED: wiki/stack/<tool>/…> # BOTH stores, every time. A store with nothing relevant gets the literal `none — <reason>`; an empty field is a bug. /implement reads these BEFORE Task 1 — they were in the planner's context and died at /clear
 - Read first: <file:line> — <why>
 - Pattern to follow: <file> — <what it demonstrates>
 - Library versions: <name@version, pinned from lockfile>

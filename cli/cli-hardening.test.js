@@ -311,8 +311,7 @@ test('harness-init names an npx package + subcommand the CLI actually provides',
 const GATE_PATTERN = /<[A-Za-z][^<>]*>/;
 const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog'];
 const GATE_CMD =
-  "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ .claude/skills/architecture-map/ " +
-  '.claude/skills/debugging-this-repo/ \\| grep -vE ' +
+  "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ knowledge-base/ \\| grep -vE " +
   "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
 
 const isPlaceholder = (t) => GATE_PATTERN.test(t) && !GATE_ALLOW.includes(t.slice(1, -1));
