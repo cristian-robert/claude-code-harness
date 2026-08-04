@@ -314,6 +314,23 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const hatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
     tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "password: 1Password/Shared-Engineering <!-- kb-check:allow -->\n" } });
   check("the <!-- kb-check:allow --> hatch waives that line (kb-check parity)", !denies(hatched));
+  // The connection string is what a runbook actually records — the command that starts the
+  // stack, password inline. It is not obfuscation, and it passed BOTH gates until the
+  // `://user:pass@` alternative landed. knowledge-base/ is git-tracked and may be public.
+  const conn = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql postgres://app_user:Sup3rS3cretDbPass99@db.prod.internal:5432/appdb\n" } });
+  check("denies a connection string carrying inline credentials", denies(conn));
+  const connHatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql postgres://app_user:Sup3rS3cretDbPass99@db.prod.internal:5432/appdb <!-- kb-check:allow -->\n" } });
+  check("the hatch waives a connection string too", !denies(connHatched));
+  // A widened regex that denies ordinary documentation gets the gate switched off by whoever
+  // hits it. The `team@example.com` line is the one that PINS the password class stopping at
+  // `/`: the others are green under a `/`-swallowing regex too, because the userinfo class also
+  // stops at `/` and never reaches the `:`. Only a host:port URL whose PATH then holds an `@`,
+  // with no whitespace between, tells the two apart.
+  const docs = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Docs: https://example.com/docs/x\nGrafana https://metrics.internal:3000 — owner @platform-team\nAPI https://api.example.com:443/v2/users, mail ops@example.com\nTeam page: https://example.com:8080/docs/team@example.com\n" } });
+  check("documentation URLs with ports and @handles still ALLOW", !denies(docs));
 }
 
 console.log("stop-gate.mjs");

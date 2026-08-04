@@ -151,6 +151,45 @@ fs.writeFileSync(path.join(C, 'inbox', 'prose.md'),
   '# note\n\nThe API key rotation runbook lives in the runbook. We use a token bucket.\n');
 assert('prose about tokens and API keys is GREEN', run([C, '--scaffold', SCAFFOLD]).code === 0);
 
+// The connection string is the credential form THIS file family actually attracts: runbook.md's
+// setup/run/deploy table asks for the command that starts the stack, and that command carries
+// the password inline. It is not obfuscation — it is how a runbook records a database — and it
+// passed both gates GREEN until the `://user:pass@` alternative landed.
+var CONN = 'psql postgres://app_user:Sup3rS3cretDbPass99@db.prod.internal:5432/appdb';
+fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + CONN + '\n');
+var conn = run([C, '--scaffold', SCAFFOLD]);
+assert('a connection string with inline credentials is RED',
+  conn.code === 1 && conn.out.indexOf('(c) secret-shaped string: runbook.md:3') !== -1);
+fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + CONN + ' <!-- kb-check:allow -->\n');
+assert('the same connection string with the hatch is GREEN', run([C, '--scaffold', SCAFFOLD]).code === 0);
+fs.rmSync(path.join(C, 'runbook.md'));
+
+// A widened regex that fires on ordinary documentation is worse than the hole it closed: the
+// adopter who hits a spurious deny switches the gate off. These are the shapes a knowledge base
+// is MADE of — links, wikilinks, a host:port with an @handle or an email later on the line, and
+// the angle-bracket template form the scaffold itself ships.
+//
+// The last two lines are the ones that PIN the password class stopping at `/`. Every other line
+// here is green under a `/`-swallowing regex too, because the userinfo class also stops at `/`
+// and never reaches the `:`. Only a `host:port` URL whose PATH then contains an `@`, with no
+// whitespace between, separates the two — drop these and the fixture stops pinning what it names.
+fs.writeFileSync(path.join(C, 'links.md'), [
+  '# Links',
+  '',
+  'Docs: https://example.com/docs/getting-started',
+  'Runbook: [deploy steps](https://internal.example.com/runbook#deploy)',
+  'See [[architecture]] and [[decisions]].',
+  'Grafana https://metrics.internal:3000 — owner @platform-team',
+  'API https://api.example.com:443/v2/users, questions to ops@example.com',
+  'Clone with ssh://git@github.com:org/repo.git',
+  'Template: postgres://<user>:<password>@localhost:5432/db',
+  'Team page: https://example.com:8080/docs/team@example.com',
+  'Chart: https://grafana.internal:3000/d/abc/svc?var=team@platform',
+  '',
+].join('\n'));
+assert('documentation URLs, wikilinks and markdown links are GREEN',
+  run([C, '--scaffold', SCAFFOLD]).code === 0);
+
 console.log('dotfiles are content; only named plumbing is skipped:');
 var D = path.join(TEST_DIR, 'd');
 fs.mkdirSync(path.join(D, '.obsidian'), { recursive: true });

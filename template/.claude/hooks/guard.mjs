@@ -28,8 +28,10 @@ const PROTECTED = new Set(["main", "master"]);
 // there is PUBLISHED, not merely stored. Modelled on BASH_SECRET above — shape detection,
 // not entropy. Duplicated (not imported) in tools/kb-check.mjs on purpose: hooks are copied
 // standalone into adopter repos and must stay dependency-free. Keep the two in sync — this
-// blocks the WRITE, kb-check blocks the COMMIT.
-const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
+// blocks the WRITE, kb-check blocks the COMMIT. The `://user:pass@` alternative is the
+// connection-string form; its password class stops at `/` so a docs URL with a port and a
+// later `@` in the path is not a false positive.
+const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[A-Za-z0-9_.\-]*:[^@\s\/]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
 
 // main/master are always protected; a project on a different integration base
 // (develop/trunk) adds it via harness.json "baseBranch". Strictly additive.
