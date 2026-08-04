@@ -29,9 +29,13 @@ const PROTECTED = new Set(["main", "master"]);
 // not entropy. Duplicated (not imported) in tools/kb-check.mjs on purpose: hooks are copied
 // standalone into adopter repos and must stay dependency-free. Keep the two in sync — this
 // blocks the WRITE, kb-check blocks the COMMIT. The `://user:pass@` alternative is the
-// connection-string form; its password class stops at `/` so a docs URL with a port and a
-// later `@` in the path is not a false positive.
-const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[A-Za-z0-9_.\-]*:[^@\s\/]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
+// connection-string form. Both halves are DELIMITER-scoped, never allowlists: an allowlisted
+// username class missed `user%40server`, the percent-encoded `@` Azure Database REQUIRES, and
+// one out-of-class byte defeated the whole alternative. The password stops at the URL
+// delimiters `/ ? # \` and whitespace, so a later `@` in a path or query string is not a false
+// positive; the cost is a password CONTAINING one of those, and placeholder templates that
+// now deny — waive a line with `<!-- kb-check:allow -->`.
+const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[^\s:\/?#@]*:[^@\s\/?#\\]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
 
 // main/master are always protected; a project on a different integration base
 // (develop/trunk) adds it via harness.json "baseBranch". Strictly additive.

@@ -1075,6 +1075,18 @@ tier: deep
     conn.code === 1 && conn.out.indexOf('(c) secret-shaped string: runbook.md:3') !== -1);
   fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + CONN + ' <!-- kb-check:allow -->\n');
   assert('the same connection string with the hatch is GREEN', run([C, '--scaffold', SCAFFOLD]).code === 0);
+
+  // Fixing an INSTANCE is not fixing the BUG. The first pass allowlisted the username
+  // (`[A-Za-z0-9_.\-]*`), so ONE out-of-class byte walked the whole alternative — and `%40` is
+  // not an exotic byte, it is the mandatory percent-encoding of `@` in userinfo that Azure
+  // Database for PostgreSQL/MySQL REQUIRES (`user%40servername`). Email usernames (Atlas,
+  // Confluent, RDS IAM) and `+`/`~`/`!` slipped through the same gap. Both classes are now
+  // delimiter-scoped.
+  var AZURE = 'psql "postgresql://acmeadmin%40acme-prod:Hq7nR2wLtV9x@acme-prod.postgres.database.azure.com:5432/appdb?sslmode=require"';
+  fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + AZURE + '\n');
+  var azure = run([C, '--scaffold', SCAFFOLD]);
+  assert('an Azure connection string (percent-encoded @ in the username) is RED',
+    azure.code === 1 && azure.out.indexOf('(c) secret-shaped string: runbook.md:3') !== -1);
   fs.rmSync(path.join(C, 'runbook.md'));
 
   // A widened regex that fires on ordinary documentation is worse than the hole it closed: the
@@ -1095,13 +1107,30 @@ tier: deep
     'Grafana https://metrics.internal:3000 — owner @platform-team',
     'API https://api.example.com:443/v2/users, questions to ops@example.com',
     'Clone with ssh://git@github.com:org/repo.git',
-    'Template: postgres://<user>:<password>@localhost:5432/db',
     'Team page: https://example.com:8080/docs/team@example.com',
     'Chart: https://grafana.internal:3000/d/abc/svc?var=team@platform',
+    'Status page https://api.acme.io:8443?to=ops@acme.io',
     '',
   ].join('\n'));
   assert('documentation URLs, wikilinks and markdown links are GREEN',
     run([C, '--scaffold', SCAFFOLD]).code === 0);
+  fs.rmSync(path.join(C, 'links.md'));
+
+  // The PRICE of delimiter-scoped classes, pinned rather than left to be rediscovered. A
+  // placeholder template is shaped exactly like the credential it stands in for, so widening the
+  // username class to accept `%40` necessarily accepts `<`, `{`, `$` and `[` too. This line is a
+  // deliberate accepted cost, not a bug: an author writing a template in a knowledge base takes
+  // one `<!-- kb-check:allow -->`. If this assert ever flips to GREEN, the username class was
+  // narrowed back to an allowlist and the Azure form is leaking again.
+  fs.writeFileSync(path.join(C, 'template.md'),
+    '# Connecting\n\nTemplate: postgres://<user>:<password>@localhost:5432/db\n');
+  var tpl = run([C, '--scaffold', SCAFFOLD]);
+  assert('a placeholder connection template is RED — the accepted cost of delimiter-scoped classes',
+    tpl.code === 1 && tpl.out.indexOf('(c) secret-shaped string: template.md:3') !== -1);
+  fs.writeFileSync(path.join(C, 'template.md'),
+    '# Connecting\n\nTemplate: postgres://<user>:<password>@localhost:5432/db <!-- kb-check:allow -->\n');
+  assert('and the hatch is the documented remedy for it', run([C, '--scaffold', SCAFFOLD]).code === 0);
+  fs.rmSync(path.join(C, 'template.md'));
 
   console.log('dotfiles are content; only named plumbing is skipped:');
   var D = path.join(TEST_DIR, 'd');
@@ -1243,9 +1272,9 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/kb-check.test.js
   ```
-  Expected final line: `3 passed, 46 failed` (exit 1) as originally run; **3 passed, 49 failed** after the
-  B2 fix added three connection-string asserts, each of which pins a specific exit code the
-  missing-script harness never returns. The three passes are vacuous while the script prints nothing: two assert the ABSENCE of a substring in empty output, and one is a pure `fs` fact about the fixture that never calls the tool.
+  Expected final line: `3 passed, 46 failed` (exit 1) as originally run; **3 passed, 52 failed** after the
+  B2 fix and its round-2 widening added six connection-string asserts, each of which pins a specific
+  exit code the missing-script harness never returns. The three passes are vacuous while the script prints nothing: two assert the ABSENCE of a substring in empty output, and one is a pure `fs` fact about the fixture that never calls the tool.
 
 - [ ] **Step 10: Write `tools/kb-check.mjs`:**
   ```js
@@ -1275,9 +1304,14 @@ tier: deep
   // PEM headers and bare `key: value`, and was blind to Anthropic, OpenAI, GitHub, Stripe,
   // Slack, Google and JWT shapes. The `://user:pass@` alternative is the connection-string
   // form — how a runbook records a database, and what the scaffold's setup/run/deploy table
-  // solicits. Its password class stops at `/`, `@` and whitespace and floors at 8 chars;
-  // allowing `/` there made a docs URL with a port and a later `@` in the path a false positive.
-  const SECRET_SHAPE = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[A-Za-z0-9_.\-]*:[^@\s\/]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
+  // solicits. Both halves are DELIMITER-scoped, never allowlists: an allowlisted username class
+  // missed `user%40server`, the percent-encoded `@` that Azure Database for PostgreSQL/MySQL
+  // REQUIRES, and one out-of-class byte defeated the entire alternative. The password floors at
+  // 8 and stops at the URL delimiters `/ ? # \` and whitespace, so a later `@` in a path or
+  // query string is not a false positive. The cost is accepted, not overlooked: a password
+  // CONTAINING one of those delimiters is missed, and placeholder templates (`<password>`,
+  // `$DB_PASSWORD`, `{{password}}`) now deny — waive those with `<!-- kb-check:allow -->`.
+  const SECRET_SHAPE = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[^\s:\/?#@]*:[^@\s\/?#\\]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
 
   // Argv is parsed strictly. A gate that mis-parses its own invocation checks the wrong
   // directory and says GREEN: a valueless `--scaffold` used to fall through to the default,
@@ -1403,8 +1437,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node cli/kb-check.test.js
   ```
-  Expected final line: `49 passed, 0 failed` (exit 0) as originally run; **52 passed, 0 failed** after the
-  B2 fix added three connection-string asserts. Stays below the full count here on purpose: Task 9
+  Expected final line: `49 passed, 0 failed` (exit 0) as originally run; **55 passed, 0 failed** after the
+  B2 fix added three connection-string asserts and its round-2 widening added three more. Stays below the full count here on purpose: Task 9
   Step 10 adds the byte-identity assert, but `KB_SECRET` does not exist yet at this point in the
   sequence.
 
@@ -2360,7 +2394,7 @@ tier: deep
 - Consumes: `harness.json` → `knowledge.shared` (Task 2 writes it).
 - Produces: two PreToolUse denies. The shared-store deny exempts `projects/_index.md` — that folder is the REGISTRY (`vault-scaffold/CLAUDE.md:90` mandates a row per product there), and denying it would forbid the one write the folder still exists for. The KB deny scans LINE-WISE and honours the `<!-- kb-check:allow -->` hatch, the same waiver `tools/kb-check.mjs` honours, because a credential POINTER is shaped exactly like the thing being hunted. The secret-shape regex is the guard's own copy of `tools/kb-check.mjs`'s `SECRET_SHAPE` (Task 3) — duplicated on purpose, because hooks are copied standalone into adopter repos and must stay dependency-free; Step 10 adds the assert that detects the two drifting apart.
 
-- [ ] **Step 1: Append the sixteen fixtures first (RED).** (Thirteen as this task ran; the B2 connection-string fix added three.) In `template/.claude/hooks/smoke-test.mjs`, immediately after the block that ends with `check("configured baseBranch (develop) is protected", denies(res));` and its closing `}` (line 245), and BEFORE the blank line 246 that precedes `console.log("stop-gate.mjs");` (line 247), insert:
+- [ ] **Step 1: Append the seventeen fixtures first (RED).** (Thirteen as this task ran; the B2 connection-string fix added three, and its round-2 delimiter widening one more.) In `template/.claude/hooks/smoke-test.mjs`, immediately after the block that ends with `check("configured baseBranch (develop) is protected", denies(res));` and its closing `}` (line 245), and BEFORE the blank line 246 that precedes `console.log("stop-gate.mjs");` (line 247), insert:
   ```js
   {
     // The knowledge boundary. Project-scoped knowledge belongs in THIS repo's knowledge-base/;
@@ -2442,13 +2476,19 @@ tier: deep
     const connHatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
       tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql postgres://app_user:Sup3rS3cretDbPass99@db.prod.internal:5432/appdb <!-- kb-check:allow -->\n" } });
     check("the hatch waives a connection string too", !denies(connHatched));
+    // Fixing an INSTANCE is not fixing the BUG. An allowlisted username class let ONE
+    // out-of-class byte walk the whole alternative, and `%40` is the mandatory percent-encoding
+    // of `@` in userinfo that Azure Database for PostgreSQL/MySQL REQUIRES (`user%40servername`).
+    const azure = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+      tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql \"postgresql://acmeadmin%40acme-prod:Hq7nR2wLtV9x@acme-prod.postgres.database.azure.com:5432/appdb?sslmode=require\"\n" } });
+    check("denies an Azure connection string (percent-encoded @ in the username)", denies(azure));
     // A widened regex that denies ordinary documentation gets the gate switched off by whoever
-    // hits it. The `team@example.com` line is the one that PINS the password class stopping at
-    // `/`: the others are green under a `/`-swallowing regex too, because the userinfo class also
-    // stops at `/` and never reaches the `:`. Only a host:port URL whose PATH then holds an `@`,
-    // with no whitespace between, tells the two apart.
+    // hits it. Two of these lines do the pinning. `team@example.com` pins the password stopping
+    // at `/`; `?to=ops@acme.io` pins it stopping at `?`, and that one DENIED before the classes
+    // became delimiter-scoped. The rest are green under a wider regex too — the userinfo class
+    // also stops at `/` and never reaches the `:` — so they pin nothing on their own.
     const docs = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
-      tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Docs: https://example.com/docs/x\nGrafana https://metrics.internal:3000 — owner @platform-team\nAPI https://api.example.com:443/v2/users, mail ops@example.com\nTeam page: https://example.com:8080/docs/team@example.com\n" } });
+      tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Docs: https://example.com/docs/x\nGrafana https://metrics.internal:3000 — owner @platform-team\nAPI https://api.example.com:443/v2/users, mail ops@example.com\nTeam page: https://example.com:8080/docs/team@example.com\nStatus page https://api.acme.io:8443?to=ops@acme.io\n" } });
     check("documentation URLs with ports and @handles still ALLOW", !denies(docs));
   }
   ```
@@ -2458,7 +2498,7 @@ tier: deep
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
   Expected output: `109 passed, 5 failed` (exit 1) as originally run, when Step 1 carried thirteen
-  fixtures; the B2 fix took it to sixteen. The five failures are `denies Write into <shared>/projects/`, `denies an Edit into <shared>/projects/ (the deny is not Write-only)`, `denies a secret-shaped string written into knowledge-base/`, `denies an Edit whose new_string carries a secret shape`, and `a credential pointer that trips the regex still denies without the hatch`. The other eight assert that the guard does NOT deny, so they pass before the matchers exist — Step 9's mutation kills are what prove them non-vacuous.
+  fixtures; the B2 fix took it to sixteen, and its round-2 delimiter widening to seventeen. The five failures are `denies Write into <shared>/projects/`, `denies an Edit into <shared>/projects/ (the deny is not Write-only)`, `denies a secret-shaped string written into knowledge-base/`, `denies an Edit whose new_string carries a secret shape`, and `a credential pointer that trips the regex still denies without the hatch`. The other eight assert that the guard does NOT deny, so they pass before the matchers exist — Step 9's mutation kills are what prove them non-vacuous.
 
 - [ ] **Step 3: Add the constant to `template/.claude/hooks/guard.mjs`.** Immediately after `const PROTECTED = new Set(["main", "master"]);` (`:26`), insert:
   ```js
@@ -2469,7 +2509,7 @@ tier: deep
   // blocks the WRITE, kb-check blocks the COMMIT. The `://user:pass@` alternative is the
   // connection-string form; its password class stops at `/` so a docs URL with a port and a
   // later `@` in the path is not a false positive.
-  const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[A-Za-z0-9_.\-]*:[^@\s\/]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
+  const KB_SECRET = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[^\s:\/?#@]*:[^@\s\/?#\\]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
   ```
 
 - [ ] **Step 4: Add the resolver helper to `template/.claude/hooks/guard.mjs`.** Immediately after the `protectedBranches(cwd)` function's closing `}` (`:36`), insert:
@@ -2527,8 +2567,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && node template/.claude/hooks/smoke-test.mjs | tail -1
   ```
-  Expected output: `114 passed, 0 failed` (exit 0) as originally run; **117 passed, 0 failed** after the
-  B2 fix added three connection-string fixtures.
+  Expected output: `114 passed, 0 failed` (exit 0) as originally run; **118 passed, 0 failed** after the
+  B2 fix added three connection-string fixtures and its round-2 widening added the Azure one.
 
 - [ ] **Step 7: Restore the five `guard.mjs` claims this commit has now earned.** Every one of these
   was removed, or written without its guard clause, under the branch rule that a claim ships only
@@ -2588,7 +2628,7 @@ tier: deep
 
 - [ ] **Step 9: Prove the three fixtures that pass before the hook exists are not vacuous.** Eight of
   Step 1's thirteen checks assert the guard does NOT deny, so they were green in Step 2 as well (ten of
-  sixteen after the B2 fix). Three of them pin behaviour nothing else pins; apply each mutation to
+  seventeen after the B2 fix and its round-2 widening). Three of them pin behaviour nothing else pins; apply each mutation to
   `guard.mjs`, run the smoke test, see the NAMED check red, then restore and see it green. The B2 fix
   adds a fourth of this kind — `documentation URLs with ports and @handles still ALLOW` — killed by
   widening the password class to swallow `/` (`:[^@\s\/]{8,}@` → `:[^@\s]{8,}@`), which takes the suite
@@ -2611,8 +2651,9 @@ tier: deep
   1 failed`; `denies an Edit whose new_string carries a secret shape` FAILs at `113 passed, 1 failed`;
   both `denies an Edit …` checks FAIL at `112 passed, 2 failed`; then `114 passed, 0 failed` after the
   final restore. A mutation that leaves the suite fully green means the fixture does not pin what it
-  names. Re-run after the B2 fix: the same three mutations FAIL at `116 passed, 1 failed`,
-  `116 passed, 1 failed` and `115 passed, 2 failed`, restoring to `117 passed, 0 failed`.
+  names. Re-run after the B2 fix and its round-2 widening: the same three mutations FAIL at
+  `117 passed, 1 failed`, `117 passed, 1 failed` and `116 passed, 2 failed`, restoring to
+  `118 passed, 0 failed`.
 
 - [ ] **Step 10: Make the duplicated regex detectable when it drifts.** `KB_SECRET` (Step 3) is a
   hand-copy of `tools/kb-check.mjs`'s `SECRET_SHAPE`, and until now nothing noticed them diverging —
@@ -2657,7 +2698,8 @@ tier: deep
   node cli/kb-check.test.js | tail -1
   ```
   Expected: `50 passed, 0 failed`, then `49 passed, 1 failed`, then `50 passed, 0 failed` as originally
-  run; **`53 passed, 0 failed` → `52 passed, 1 failed` → `53 passed, 0 failed`** after the B2 fix.
+  run; **`56 passed, 0 failed` → `55 passed, 1 failed` → `56 passed, 0 failed`** after the B2 fix and
+  its round-2 widening.
 
 - [ ] **Step 11: Commit.**
   ```bash
@@ -2798,8 +2840,8 @@ tier: deep
   ```bash
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -4
   ```
-  Expected: the last suite's summary `114 passed, 0 failed` and exit 0 as originally run; **117 passed,
-  0 failed** after the B2 fix.
+  Expected: the last suite's summary `114 passed, 0 failed` and exit 0 as originally run; **118 passed,
+  0 failed** after the B2 fix and its round-2 widening.
 
 - [ ] **Step 11: Commit.**
   ```bash
@@ -3068,7 +3110,7 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
   cd /Users/cristian-robertiosef/Dev/perfectHarnessEngineering && npm test 2>&1 | tail -3 && node tools/context-ledger.mjs template && node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold; echo "kb-check exit=$?"
   ```
   Expected, in order:
-  1. `117 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
+  1. `118 passed, 0 failed` (the hook smoke test, last in the `npm test` chain) and exit 0.
   2. The ledger table with `AGENTS.md 58`, `.claude/rules/00-core.md 45`, no `!! WARN`, no `!! HARD`, `Status: WARN — <n> / 2000 est. tokens` with `<n>` ≤ 1654.
   3. `kb-check: (b) skipped — the checked dir IS the shipped scaffold.` / `kb-check: GREEN — 7 file(s) in …` / `kb-check exit=0`.
 
@@ -3089,10 +3131,10 @@ gated on Step 3b's verified backup: no backup, no edit, report BLOCKED.
 
 ## End-to-end verification
 
-1. `npm test` → exits 0; final suite line `117 passed, 0 failed`.
-2. `node template/.claude/hooks/smoke-test.mjs` → `117 passed, 0 failed`, including the 6 session-start knowledge fixtures and the 16 guard boundary fixtures.
+1. `npm test` → exits 0; final suite line `118 passed, 0 failed`.
+2. `node template/.claude/hooks/smoke-test.mjs` → `118 passed, 0 failed`, including the 6 session-start knowledge fixtures and the 17 guard boundary fixtures.
 3. `node cli/knowledge-config.test.js` → `40 passed, 0 failed`.
-4. `node cli/kb-check.test.js` → `53 passed, 0 failed` (52 at Task 3; Task 9 Step 10 adds the regex byte-identity assert).
+4. `node cli/kb-check.test.js` → `56 passed, 0 failed` (55 at Task 3; Task 9 Step 10 adds the regex byte-identity assert).
 5. `node tools/context-ledger.mjs template` → total ≤ 1654 est. tokens, `Status: WARN`, no `!! WARN`, no `!! HARD`, `AGENTS.md` 58 lines, `00-core.md` 45 lines.
 6. `node tools/kb-check.mjs template/.claude/references/knowledge-base-scaffold --scaffold template/.claude/references/knowledge-base-scaffold` → GREEN, exit 0.
 7. Negative proof the gate has teeth:

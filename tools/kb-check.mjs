@@ -25,9 +25,14 @@ import { join, resolve, relative } from "node:path";
 // PEM headers and bare `key: value`, and was blind to Anthropic, OpenAI, GitHub, Stripe,
 // Slack, Google and JWT shapes. The `://user:pass@` alternative is the connection-string
 // form — how a runbook records a database, and what the scaffold's setup/run/deploy table
-// solicits. Its password class stops at `/`, `@` and whitespace and floors at 8 chars;
-// allowing `/` there made a docs URL with a port and a later `@` in the path a false positive.
-const SECRET_SHAPE = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[A-Za-z0-9_.\-]*:[^@\s\/]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
+// solicits. Both halves are DELIMITER-scoped, never allowlists: an allowlisted username class
+// missed `user%40server`, the percent-encoded `@` that Azure Database for PostgreSQL/MySQL
+// REQUIRES, and one out-of-class byte defeated the entire alternative. The password floors at
+// 8 and stops at the URL delimiters `/ ? # \` and whitespace, so a later `@` in a path or
+// query string is not a false positive. The cost is accepted, not overlooked: a password
+// CONTAINING one of those delimiters is missed, and placeholder templates (`<password>`,
+// `$DB_PASSWORD`, `{{password}}`) now deny — waive those with `<!-- kb-check:allow -->`.
+const SECRET_SHAPE = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-(?:proj|ant|[a-z]{2,8})-[A-Za-z0-9_\-]{20,}|\bsk-[A-Za-z0-9]{20,}|\b[sr]k_(?:live|test)_[A-Za-z0-9]{16,}|\bgh[pousr]_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}|\bxox[abprs]-[A-Za-z0-9-]{20,}|\bAIza[A-Za-z0-9_\-]{35}\b|\bAKIA[0-9A-Z]{16}\b|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|:\/\/[^\s:\/?#@]*:[^@\s\/?#\\]{8,}@|(?:password|passwd|api[_-]?key|secret|token)[A-Za-z0-9_.\-]*\s*[:=]\s*["']?[A-Za-z0-9_\-+/]{12,})/i;
 
 // Argv is parsed strictly. A gate that mis-parses its own invocation checks the wrong
 // directory and says GREEN: a valueless `--scaffold` used to fall through to the default,

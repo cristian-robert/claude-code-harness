@@ -162,6 +162,18 @@ assert('a connection string with inline credentials is RED',
   conn.code === 1 && conn.out.indexOf('(c) secret-shaped string: runbook.md:3') !== -1);
 fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + CONN + ' <!-- kb-check:allow -->\n');
 assert('the same connection string with the hatch is GREEN', run([C, '--scaffold', SCAFFOLD]).code === 0);
+
+// Fixing an INSTANCE is not fixing the BUG. The first pass allowlisted the username
+// (`[A-Za-z0-9_.\-]*`), so ONE out-of-class byte walked the whole alternative — and `%40` is
+// not an exotic byte, it is the mandatory percent-encoding of `@` in userinfo that Azure
+// Database for PostgreSQL/MySQL REQUIRES (`user%40servername`). Email usernames (Atlas,
+// Confluent, RDS IAM) and `+`/`~`/`!` slipped through the same gap. Both classes are now
+// delimiter-scoped.
+var AZURE = 'psql "postgresql://acmeadmin%40acme-prod:Hq7nR2wLtV9x@acme-prod.postgres.database.azure.com:5432/appdb?sslmode=require"';
+fs.writeFileSync(path.join(C, 'runbook.md'), '# Runbook\n\n' + AZURE + '\n');
+var azure = run([C, '--scaffold', SCAFFOLD]);
+assert('an Azure connection string (percent-encoded @ in the username) is RED',
+  azure.code === 1 && azure.out.indexOf('(c) secret-shaped string: runbook.md:3') !== -1);
 fs.rmSync(path.join(C, 'runbook.md'));
 
 // A widened regex that fires on ordinary documentation is worse than the hole it closed: the
@@ -182,13 +194,30 @@ fs.writeFileSync(path.join(C, 'links.md'), [
   'Grafana https://metrics.internal:3000 — owner @platform-team',
   'API https://api.example.com:443/v2/users, questions to ops@example.com',
   'Clone with ssh://git@github.com:org/repo.git',
-  'Template: postgres://<user>:<password>@localhost:5432/db',
   'Team page: https://example.com:8080/docs/team@example.com',
   'Chart: https://grafana.internal:3000/d/abc/svc?var=team@platform',
+  'Status page https://api.acme.io:8443?to=ops@acme.io',
   '',
 ].join('\n'));
 assert('documentation URLs, wikilinks and markdown links are GREEN',
   run([C, '--scaffold', SCAFFOLD]).code === 0);
+fs.rmSync(path.join(C, 'links.md'));
+
+// The PRICE of delimiter-scoped classes, pinned rather than left to be rediscovered. A
+// placeholder template is shaped exactly like the credential it stands in for, so widening the
+// username class to accept `%40` necessarily accepts `<`, `{`, `$` and `[` too. This line is a
+// deliberate accepted cost, not a bug: an author writing a template in a knowledge base takes
+// one `<!-- kb-check:allow -->`. If this assert ever flips to GREEN, the username class was
+// narrowed back to an allowlist and the Azure form is leaking again.
+fs.writeFileSync(path.join(C, 'template.md'),
+  '# Connecting\n\nTemplate: postgres://<user>:<password>@localhost:5432/db\n');
+var tpl = run([C, '--scaffold', SCAFFOLD]);
+assert('a placeholder connection template is RED — the accepted cost of delimiter-scoped classes',
+  tpl.code === 1 && tpl.out.indexOf('(c) secret-shaped string: template.md:3') !== -1);
+fs.writeFileSync(path.join(C, 'template.md'),
+  '# Connecting\n\nTemplate: postgres://<user>:<password>@localhost:5432/db <!-- kb-check:allow -->\n');
+assert('and the hatch is the documented remedy for it', run([C, '--scaffold', SCAFFOLD]).code === 0);
+fs.rmSync(path.join(C, 'template.md'));
 
 console.log('dotfiles are content; only named plumbing is skipped:');
 var D = path.join(TEST_DIR, 'd');

@@ -323,13 +323,19 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   const connHatched = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
     tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql postgres://app_user:Sup3rS3cretDbPass99@db.prod.internal:5432/appdb <!-- kb-check:allow -->\n" } });
   check("the hatch waives a connection string too", !denies(connHatched));
+  // Fixing an INSTANCE is not fixing the BUG. An allowlisted username class let ONE
+  // out-of-class byte walk the whole alternative, and `%40` is the mandatory percent-encoding
+  // of `@` in userinfo that Azure Database for PostgreSQL/MySQL REQUIRES (`user%40servername`).
+  const azure = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
+    tool_input: { file_path: join(proj, "knowledge-base", "runbook.md"), content: "psql \"postgresql://acmeadmin%40acme-prod:Hq7nR2wLtV9x@acme-prod.postgres.database.azure.com:5432/appdb?sslmode=require\"\n" } });
+  check("denies an Azure connection string (percent-encoded @ in the username)", denies(azure));
   // A widened regex that denies ordinary documentation gets the gate switched off by whoever
-  // hits it. The `team@example.com` line is the one that PINS the password class stopping at
-  // `/`: the others are green under a `/`-swallowing regex too, because the userinfo class also
-  // stops at `/` and never reaches the `:`. Only a host:port URL whose PATH then holds an `@`,
-  // with no whitespace between, tells the two apart.
+  // hits it. Two of these lines do the pinning. `team@example.com` pins the password stopping
+  // at `/`; `?to=ops@acme.io` pins it stopping at `?`, and that one DENIED before the classes
+  // became delimiter-scoped. The rest are green under a wider regex too — the userinfo class
+  // also stops at `/` and never reaches the `:` — so they pin nothing on their own.
   const docs = runHook("guard.mjs", { ...base, cwd: proj, tool_name: "Write",
-    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Docs: https://example.com/docs/x\nGrafana https://metrics.internal:3000 — owner @platform-team\nAPI https://api.example.com:443/v2/users, mail ops@example.com\nTeam page: https://example.com:8080/docs/team@example.com\n" } });
+    tool_input: { file_path: join(proj, "knowledge-base", "resources.md"), content: "Docs: https://example.com/docs/x\nGrafana https://metrics.internal:3000 — owner @platform-team\nAPI https://api.example.com:443/v2/users, mail ops@example.com\nTeam page: https://example.com:8080/docs/team@example.com\nStatus page https://api.acme.io:8443?to=ops@acme.io\n" } });
   check("documentation URLs with ports and @handles still ALLOW", !denies(docs));
 }
 
