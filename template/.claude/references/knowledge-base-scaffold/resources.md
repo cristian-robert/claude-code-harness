@@ -37,7 +37,7 @@ Where everything lives: the deploys, the dashboards, and POINTERS to credentials
 
 | Credential | Lives in | Notes |
 |---|---|---|
-| <name, e.g. deploy key> | <1Password vault / platform manager> | <rotation cadence> |
+| <name, e.g. deploy key> | <password manager or platform secret store> | <rotation cadence> |
 
 ## External references
 

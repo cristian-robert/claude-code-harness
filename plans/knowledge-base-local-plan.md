@@ -775,13 +775,14 @@ tier: deep
   ## Credentials INDEX
 
   > [!danger] Pointers only — this file is git-tracked and may be published
-  > Record **where** a credential lives, never the value itself. `kb-check` fails the gate on one.
+  > Record **where** a credential lives, never the value itself. `.claude/hooks/guard.mjs`
+  > denies a secret-shaped write here, and `kb-check` fails the gate on one.
   > A pointer that itself looks secret-shaped is waived one line at a time by appending
   > `<!-- kb-check:allow -->` to that line; the waiver is visible in the diff.
 
   | Credential | Lives in | Notes |
   |---|---|---|
-  | <name, e.g. deploy key> | <1Password vault / platform manager> | <rotation cadence> |
+  | <name, e.g. deploy key> | <password manager or platform secret store> | <rotation cadence> |
 
   ## External references
 
@@ -2655,7 +2656,7 @@ tier: deep
   ```
   with
   ```
-  - Knowledge: copy `.claude/references/knowledge-base-scaffold/` to `./knowledge-base/` (ALWAYS — it is git-tracked project content, not a payload file), then FILL it from detection + interview: `architecture.md` (module table, where-new-code-goes, `## Boundaries`), `runbook.md` (logs, repro recipes, failure classes from question 4), `resources.md` (links + credential POINTERS only), `decisions.md` (any incident that was really a decision). Delete the `<!-- … -->` guidance comments. Verify with `npx perfect-harness-engineering kb-check`. Shared store `existing` (from `harness.json` `knowledge.shared`) → it keeps `wiki/` + `agent-kb/` only; ensure both exist there, copying `.claude/references/vault-scaffold/` if the path is empty. `none` → local only; say so. Index Law already holds in both scaffolds.
+  - Knowledge: copy `.claude/references/knowledge-base-scaffold/` to `./knowledge-base/` (ALWAYS — it is git-tracked project content, not a payload file), then FILL it from detection + interview: EVERY `<placeholder>` in EVERY file — `_index.md` and each file's frontmatter `project:` + `# heading` pair included — deleting rows/sections that don't apply. Step 4's gate greps the WHOLE directory, so one survivor ends the init red, and `kb-check` will not catch it: its placeholder test is byte-identity against the scaffold, so a comment-stripped KB passes with every `<…>` intact. Richest sections: `architecture.md` (stack, module table, where-new-code-goes, `## Boundaries`, integration points), `runbook.md` (logs, repro recipes, failure classes from question 4), `resources.md` (links, infra, credential POINTERS only), `decisions.md` (any incident that was really a decision). Delete the `<!-- … -->` guidance comments. Verify with `npx perfect-harness-engineering kb-check` AND step 4's placeholder gate — neither covers the other. Shared store `existing` (from `harness.json` `knowledge.shared`) → it keeps `wiki/` + `agent-kb/` only; ensure both exist there, copying `.claude/references/vault-scaffold/` if the path is empty. `none` → local only; say so. Index Law already holds in both scaffolds.
   ```
 
 - [ ] **Step 6b: Replace `harness-init/SKILL.md:67` (the `.gitignore` line).** Replace

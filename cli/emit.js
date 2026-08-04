@@ -7,8 +7,8 @@
 // Why this exists: init/update emit a Codex snapshot that goes stale
 // immediately. The mandatory next step after init is /harness-init (or
 // $harness-init on Codex), whose entire job is to EDIT the canonical
-// sources -- fill AGENTS.md placeholders, fill the knowledge skills, prune
-// the MCP clause. Those edits never reach .agents/.codex on their own. Worse,
+// sources -- fill AGENTS.md placeholders, fill knowledge-base/, prune the
+// MCP clause. Those edits never reach .agents/.codex on their own. Worse,
 // `update` is not a safe escape hatch: it REVERTS .claude/ to the framework
 // template before it re-emits, so a hand-fitted skill can never survive an
 // update. `emit` is the one command that pushes .claude/ -> .agents/.codex/
