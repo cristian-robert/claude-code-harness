@@ -55,6 +55,14 @@ switch (command) {
     process.exit(kbResult.status === null ? 1 : kbResult.status);
     break;
   }
+  case 'capabilities':
+    try {
+      require('./capabilities.js').mainCli(process.argv.slice(3));
+    } catch (err) {
+      console.error('Error: ' + err.message);
+      process.exit(1);
+    }
+    break;
   case '--version':
   case '-v':
     console.log(require('../package.json').version);
@@ -67,11 +75,12 @@ perfect-harness-engineering — the harness around Claude Code that makes it rel
 
 Usage:
   npx perfect-harness-engineering init             Install the harness payload into the current project
-  npx perfect-harness-engineering update           Update payload files, preserving customizations (three-way merge)
+  npx perfect-harness-engineering update           Update payload files (user config merged; customized files backed up — reconcile via /harness-init)
   npx perfect-harness-engineering emit             Re-derive .agents//.codex/ from the current .claude/ tree (codex targets only; no download/backup/prompt)
   npx perfect-harness-engineering merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
   npx perfect-harness-engineering file-size-check  Lint always-loaded context (AGENTS.md/CLAUDE.md, rules, skills) against budgets
   npx perfect-harness-engineering kb-check         Check knowledge-base/ — index law, unfilled placeholders, secret shapes
+  npx perfect-harness-engineering capabilities     Resolve declared plugins/marketplaces (propose/apply/check; approval-gated)
   npx perfect-harness-engineering --version        Show version
   npx perfect-harness-engineering --help           Show this help
 

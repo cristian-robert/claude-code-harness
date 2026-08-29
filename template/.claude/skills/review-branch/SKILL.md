@@ -67,4 +67,4 @@ Report on disk; do not recap it in the terminal. End the run with exactly one li
 
 `Reviewed <slug>: <PASS|REQUEST_CHANGES> · Next: <command>` — `Next:` on PASS only: plan has `item:` set → `/accept backlog/<id>-<slug>.md` (the Stakeholder ceremony comes BEFORE /evolve); itemless → `/evolve`.
 
-Blockers (an unresolvable REQUEST_CHANGES included) REPLACE that line. After `/evolve`, finish the branch with `superpowers:finishing-a-development-branch`.
+Blockers (an unresolvable REQUEST_CHANGES included) REPLACE that line. After `/evolve`, finish the branch with `superpowers:finishing-a-development-branch` (plugin unavailable → merge or PR per AGENTS.md and `git worktree remove .worktrees/<slug>` yourself).

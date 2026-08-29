@@ -12,10 +12,11 @@ Run once, right after copying the template in. Goal: zero `<placeholder>` left, 
 
 Skip entirely if `.claude/.init-meta.json` is absent — fresh project, nothing to reconcile.
 
-`settings.json` is already merged: `init`/`update` deep-union your prior hooks + permissions with the framework's. You reconcile only the PROSE the CLI backed up but can't merge by rule — `AGENTS.md` and `.claude/rules/*.md` (never `CLAUDE.md` — see below). For each `backedUpFiles` entry that is one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
+`settings.json` is merged ONLY when `init`/`update` said so. If the run instead printed the "settings.json was replaced by the template version … NOT re-merged automatically" warning (no user-origin marker), your hand-added hooks + permissions survive only in `.claude/settings.json.backup` or its newest `.backup-<timestamp>` — re-add them by hand, or run `npx perfect-harness-engineering merge-settings`. You reconcile the PROSE the CLI backed up but can't merge by rule — `AGENTS.md` and `.claude/rules/*.md` (never `CLAUDE.md` — see below). For each `backedUpFiles` entry that names one of those AND has a live PHE counterpart, three-way merge `<file>.backup` (your prior content) INTO the freshly-installed `<file>` (PHE's structure):
 
 A pre-PHE project's `CLAUDE.md.backup` reconciles INTO `AGENTS.md` — that is where project content now lives. The installed `CLAUDE.md` is a generated shim; never merge user content into it.
 
+- An entry ending `.backup-<timestamp>` IS the backup: merge it into the live file its name prefixes (`AGENTS.md.backup-20260830T101112` → `AGENTS.md`). When a file has both, `<file>.backup` is the pre-adoption original and the NEWEST rotation is the user's latest content — merge both, newest last.
 - Carry the user's substance into PHE's shape: product one-liner, Commands rows, every incident-traced Convention/rule, protected-dir and live-infra rules.
 - On a shared discipline, PHE's wording wins; keep the user's traceable specifics.
 - Smallest diffs; never rewrite. A backed-up file PHE does NOT ship already survived untouched (no collision) — leave it.

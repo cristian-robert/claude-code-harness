@@ -228,7 +228,14 @@ function reconcileSettingsJson(projectRoot, opts) {
   const marker = path.join(projectRoot, '.claude', '.settings-user-origin');
   if (!fs.existsSync(live) || !fs.existsSync(backup)) return { merged: false };
   const userOrigin = opts.userBackupJustCreated === true || fs.existsSync(marker);
-  if (!userOrigin) return { merged: false };
+  // A backup EXISTS but we will not re-union it. For a fresh-project adopter
+  // (no marker was ever written, because init never backed up a pre-existing
+  // settings.json) this is the common path, and it used to be silent: the
+  // template's settings.json simply replaced theirs and their hand-added hooks
+  // stopped firing with no notice (review F2). Declining is still correct — the
+  // backup may be PHE's own previous file, and re-unioning that would resurrect
+  // hooks the framework intentionally removed — but the caller must SAY so.
+  if (!userOrigin) return { merged: false, reason: 'not-user-origin' };
   try {
     const user = readJson(backup);
     const framework = readJson(live);
@@ -244,6 +251,66 @@ function reconcileSettingsJson(projectRoot, opts) {
   } catch (e) {
     return { merged: false, error: e.message };
   }
+}
+
+// The warning both init.js and update.js print on a `not-user-origin` decline.
+// One text, one place: the two callers must not drift into saying different
+// things about the same loss.
+function settingsNotMergedWarning() {
+  return [
+    'WARNING: .claude/settings.json was replaced by the template version.',
+    '  Hooks and permissions you added by hand AFTER adopting the harness are NOT',
+    '  re-merged automatically — this project has no .settings-user-origin marker,',
+    '  which init writes only when it adopted a settings.json that already existed.',
+    '  They survive in .claude/settings.json.backup (or, if this run rotated one,',
+    '  the newest .claude/settings.json.backup-<timestamp>).',
+    '  /harness-init step 0 reconciles prose files (AGENTS.md, rules) — settings are',
+    '  not covered. Re-add them by hand, or re-union the backup with:',
+    '    npx perfect-harness-engineering merge-settings',
+  ];
+}
+
+// ─── Plugin keys survive the copy path ───────────────────────────────────────
+
+// Keys in .claude/settings.json that Claude Code itself writes on the user's behalf
+// (`claude plugin install --scope project`). backupAndCopy preserves only the FIRST
+// backup ever taken, so on re-init/update these keys would be overwritten by the
+// template and never re-unioned. init/update bracket the copy with this pair.
+const PLUGIN_KEYS = ['enabledPlugins', 'extraKnownMarketplaces'];
+
+function capturePluginKeys(projectRoot) {
+  const live = path.join(projectRoot, '.claude', 'settings.json');
+  if (!fs.existsSync(live)) return null;
+  let parsed;
+  try { parsed = readJson(live); } catch (e) { return null; }
+  const captured = {};
+  let any = false;
+  for (const k of PLUGIN_KEYS) {
+    if (parsed && parsed[k] && typeof parsed[k] === 'object' && !Array.isArray(parsed[k])) {
+      captured[k] = parsed[k];
+      any = true;
+    }
+  }
+  return any ? captured : null;
+}
+
+function restorePluginKeys(projectRoot, captured) {
+  if (!captured) return { restored: false };
+  const live = path.join(projectRoot, '.claude', 'settings.json');
+  if (!fs.existsSync(live)) return { restored: false };
+  let parsed;
+  try { parsed = readJson(live); } catch (e) { return { restored: false, error: e.message }; }
+  // Valid JSON that is not an object (null, array, scalar): assigning the plugin
+  // keys onto it would either throw (null) or serialize them away (array) — a
+  // silent key drop reported as success. Fail soft instead; the caller records it.
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { restored: false, error: live + ' is not a JSON object' };
+  }
+  for (const k of PLUGIN_KEYS) {
+    if (k in captured) parsed[k] = deepMergeUserWins(captured[k], parsed[k]);
+  }
+  writeJsonAtomic(live, parsed);
+  return { restored: true };
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
@@ -302,4 +369,13 @@ if (require.main === module) {
   console.log('merged → ' + args.user);
 }
 
-module.exports = { mergeSettings, mergeHooks, mergePermissions, deepMergeUserWins, reconcileSettingsJson };
+module.exports = {
+  mergeSettings,
+  mergeHooks,
+  mergePermissions,
+  deepMergeUserWins,
+  reconcileSettingsJson,
+  settingsNotMergedWarning,
+  capturePluginKeys,
+  restorePluginKeys,
+};

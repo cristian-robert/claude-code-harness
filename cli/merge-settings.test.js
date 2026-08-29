@@ -377,6 +377,115 @@ test('reconcileSettingsJson fails safe on a malformed backup (leaves framework s
   assert.strictEqual(fs.readFileSync(livePath, 'utf-8'), before, 'framework settings left intact');
 });
 
+// ─── capturePluginKeys / restorePluginKeys (plugin keys survive the copy path) ──
+//
+// backupAndCopy preserves only the FIRST backup ever taken, so enabledPlugins /
+// extraKnownMarketplaces — keys Claude Code itself writes via
+// `claude plugin install --scope project` — are clobbered by the template on
+// re-init/update and never re-unioned by reconcileSettingsJson (which only fires
+// off a genuine pre-PHE backup). capturePluginKeys/restorePluginKeys bracket the
+// copy directly instead.
+
+const { capturePluginKeys, restorePluginKeys } = require('./merge-settings.js');
+
+test('capturePluginKeys/restorePluginKeys: plugin keys survive the template overwriting settings.json', () => {
+  const { root, livePath } = seedProject('plugin-keys', {
+    permissions: {},
+    enabledPlugins: { 'superpowers@claude-plugins-official': true, 'x@m': false },
+    extraKnownMarketplaces: { 'openai-codex': { source: { source: 'github', repo: 'openai/codex-plugin-cc' } } },
+  });
+
+  const captured = capturePluginKeys(root);
+  assert.ok(captured && captured.enabledPlugins && captured.extraKnownMarketplaces, 'capture picks up both keys');
+
+  // Simulate the template copy clobbering the file (backupAndCopy overwrites settings.json).
+  fs.writeFileSync(livePath, JSON.stringify({ permissions: {}, hooks: {} }));
+
+  const res = restorePluginKeys(root, captured);
+  assert.strictEqual(res.restored, true, 'restore reports restored');
+
+  const after = JSON.parse(fs.readFileSync(livePath, 'utf-8'));
+  assert.strictEqual(after.enabledPlugins['superpowers@claude-plugins-official'], true, 'enabledPlugins restored');
+  assert.strictEqual(after.enabledPlugins['x@m'], false, 'user false preserved');
+  assert.ok(after.extraKnownMarketplaces['openai-codex'], 'marketplaces restored');
+  assert.ok(after.permissions && after.hooks, 'other keys intact');
+});
+
+test('capturePluginKeys returns null when settings.json is missing', () => {
+  assert.strictEqual(capturePluginKeys(path.join(TMP, 'plugin-keys-missing')), null, 'capture on missing file is null');
+});
+
+test('restorePluginKeys is a no-op when captured is null', () => {
+  const { root } = seedProject('plugin-keys-noop', { permissions: {} });
+  assert.strictEqual(restorePluginKeys(root, null).restored, false, 'restore with null is a no-op');
+});
+
+// Valid JSON that is not an object must degrade to {restored:false, error}, never
+// throw and never report success while silently dropping the keys — Task 6's
+// no-claude apply path calls restorePluginKeys on arbitrary projects and its
+// contract is "never throws" (plan Task 6 Interfaces).
+test('restorePluginKeys fails soft when settings.json is JSON null', () => {
+  const root = path.join(TMP, 'plugin-keys-null');
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.claude', 'settings.json'), 'null');
+  const res = restorePluginKeys(root, { enabledPlugins: { 'a@m': true } });
+  assert.strictEqual(res.restored, false, 'null settings → restored:false');
+  assert.ok(res.error, 'carries an error message');
+});
+
+test('restorePluginKeys fails soft when settings.json is a JSON array (no silent key drop)', () => {
+  const root = path.join(TMP, 'plugin-keys-array');
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+  const live = path.join(root, '.claude', 'settings.json');
+  fs.writeFileSync(live, '[1, 2]');
+  const res = restorePluginKeys(root, { enabledPlugins: { 'a@m': true } });
+  assert.strictEqual(res.restored, false, 'array settings → restored:false, not a lying restored:true');
+  assert.ok(res.error, 'carries an error message');
+  assert.strictEqual(fs.readFileSync(live, 'utf-8'), '[1, 2]', 'file left untouched');
+});
+
+// ─── Blocker 2: the silent decline gets loud ────────────────────────────────
+// A fresh-project adopter has no .settings-user-origin marker (init writes it
+// only when it backed up a PRE-existing settings.json). Their post-adoption
+// hooks and permissions are therefore clobbered by every update while
+// reconcileSettingsJson returned a bare {merged:false} and both callers printed
+// nothing (review F2). The decline now carries a reason, and both callers say so.
+
+test('decline with a backup present carries reason "not-user-origin"', () => {
+  const phe = { permissions: { deny: [] }, hooks: {} };
+  const userEdited = { permissions: { allow: ['Bash(pnpm test:*)'] }, hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node', args: ['./scripts/team-notify.mjs'] }] }] } };
+  const { root } = seedProject('recon-reason', phe, userEdited);
+  const res = reconcileSettingsJson(root, {});
+  assert.strictEqual(res.merged, false);
+  assert.strictEqual(res.reason, 'not-user-origin', 'the caller needs a reason to warn on');
+});
+
+test('a decline with NO backup carries no reason (nothing was dropped)', () => {
+  const { root } = seedProject('recon-reason-none', { hooks: {} } /* no backup */);
+  const res = reconcileSettingsJson(root, {});
+  assert.strictEqual(res.merged, false);
+  assert.strictEqual(res.reason, undefined, 'no backup → no user content to warn about');
+});
+
+test('a successful merge carries no reason', () => {
+  const { root } = seedProject('recon-reason-merged', { hooks: {} }, { hooks: {} });
+  const res = reconcileSettingsJson(root, { userBackupJustCreated: true });
+  assert.strictEqual(res.merged, true);
+  assert.strictEqual(res.reason, undefined);
+});
+
+test('settingsNotMergedWarning states what was lost, where it survives, and how to fix it', () => {
+  const { settingsNotMergedWarning } = require('./merge-settings.js');
+  assert.strictEqual(typeof settingsNotMergedWarning, 'function', 'both callers must share one warning text');
+  const text = settingsNotMergedWarning().join('\n');
+  assert.ok(/replaced|overwritt?en/i.test(text), 'says the live settings.json was replaced by the template');
+  assert.ok(/not .*re-?merged|NOT/.test(text), 'says hand-added hooks/permissions are NOT re-merged');
+  assert.ok(text.includes('.claude/settings.json.backup'), 'names the backup that still holds them');
+  assert.ok(text.includes('.backup-'), 'mentions the newest rotation backup');
+  assert.ok(text.includes('npx perfect-harness-engineering merge-settings'), 'gives the re-merge command');
+  assert.ok(text.includes('/harness-init'), 'says harness-init step 0 does not cover settings');
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });

@@ -4,12 +4,16 @@
 // root with backup + rollback semantics.
 //
 // If an existing CLAUDE.md is present at `destPath`:
-//   - Creates `<destPath>.backup` only if one doesn't already exist (so we
-//     never clobber a pre-existing user backup).
+//   - Preserves the existing content via preserveBeforeOverwrite (shared with
+//     backupAndCopy): `<destPath>.backup` on first adoption, a rotation backup
+//     `<destPath>.backup-<UTC stamp>` when the live file differs from BOTH the
+//     incoming template and the existing `.backup` — i.e. when it holds content
+//     that exists nowhere else. Nothing at all when the live file already
+//     equals the template or the existing backup.
 //   - Copies `sourcePath` -> `destPath`.
-//   - On copy failure, if we created the backup on THIS run, restores it and
-//     removes the fresh backup so the user's state is unchanged, then rethrows
-//     the original copy error.
+//   - On copy failure, if we wrote a backup on THIS run, restores from it and
+//     removes it so the user's state is unchanged, then rethrows the original
+//     copy error.
 //
 // If no existing CLAUDE.md: simple copy, records as created.
 //
@@ -17,6 +21,7 @@
 // can merge into their stats object.
 
 const fs = require('fs');
+const { preserveBeforeOverwrite } = require('./backup-copy');
 
 function copyClaudeMdWithBackup(sourcePath, destPath, options) {
   var opts = options || {};
@@ -33,28 +38,25 @@ function copyClaudeMdWithBackup(sourcePath, destPath, options) {
     return delta;
   }
 
-  var backupPath = destPath + '.backup';
-  var createdBackupThisRun = false;
-  if (!fs.existsSync(backupPath)) {
-    fs.copyFileSync(destPath, backupPath);
-    createdBackupThisRun = true;
-  }
+  var preserved = preserveBeforeOverwrite(destPath, sourcePath, backupLabel);
 
   try {
     fs.copyFileSync(sourcePath, destPath);
-    if (createdBackupThisRun) {
+    if (preserved.backedUp) {
       delta.backedUp = 1;
-      delta.backedUpFiles.push(backupLabel);
+      // The rotated name when we rotated, the label itself on first adoption —
+      // always the file the content actually lives in now.
+      delta.backedUpFiles.push(preserved.recordName);
     }
     delta.updated = 1;
     return delta;
   } catch (copyErr) {
-    // Rollback: if we created the backup on this run, restore it and
-    // discard the backup file so the user's state is unchanged.
-    if (createdBackupThisRun) {
+    // Rollback: if we wrote a backup on this run, restore from it and discard
+    // it so the user's state is unchanged.
+    if (preserved.backedUp) {
       try {
-        fs.copyFileSync(backupPath, destPath);
-        fs.unlinkSync(backupPath);
+        fs.copyFileSync(preserved.backupPath, destPath);
+        fs.unlinkSync(preserved.backupPath);
       } catch (rollbackErr) {
         // Best-effort rollback; surface the original error anyway.
       }

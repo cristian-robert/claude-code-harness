@@ -6,12 +6,14 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
-const { reconcileSettingsJson } = require('./merge-settings');
+const { backupAndCopy, preserveBeforeOverwrite, createInitMeta } = require('./backup-copy');
+const { reconcileSettingsJson, settingsNotMergedWarning, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { KNOWLEDGE_PROMPT, parseKnowledgeAnswer, writeKnowledgeConfig } = require('./knowledge-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 const { migrateRenamedSkills } = require('./migrations');
 const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
+const { initCapabilitiesFlow } = require('./capabilities');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -152,6 +154,29 @@ function cleanupTmpDir(tmpDir) {
   }
 }
 
+// Stack-signal vocabulary. The capabilities manifest's `when.stack` strings MUST come
+// from this list (cli/capabilities-manifest.test.js enforces it), so detector and
+// manifest cannot drift apart. Key order = output order (JS string-key insertion order).
+var DEP_SIGNALS = {
+  'next': 'Next.js', 'react': 'React', 'vue': 'Vue',
+  'svelte': 'Svelte', '@sveltejs/kit': 'Svelte',
+  'express': 'Express', '@nestjs/core': 'NestJS', 'expo': 'Expo',
+  '@supabase/supabase-js': 'Supabase', 'tailwindcss': 'Tailwind', 'stripe': 'Stripe',
+  'prisma': 'Prisma', '@prisma/client': 'Prisma',
+  'drizzle-orm': 'Drizzle', 'mongoose': 'MongoDB/Mongoose',
+};
+var PY_SIGNALS = { 'fastapi': 'FastAPI', 'django': 'Django', 'flask': 'Flask' };
+var STACK_SIGNALS = (function () {
+  var seen = {};
+  var out = [];
+  var all = Object.keys(DEP_SIGNALS).map(function (k) { return DEP_SIGNALS[k]; })
+    .concat(['Python'], Object.keys(PY_SIGNALS).map(function (k) { return PY_SIGNALS[k]; }), ['Go', 'Rust']);
+  for (var i = 0; i < all.length; i++) {
+    if (!seen[all[i]]) { seen[all[i]] = true; out.push(all[i]); }
+  }
+  return out;
+})();
+
 function detectTechStack() {
   var detected = [];
   // Guard package.json access so detection never crashes the installer on
@@ -168,19 +193,11 @@ function detectTechStack() {
       try {
         var pkg = JSON.parse(raw);
         var deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
-        if (deps['next']) detected.push('Next.js');
-        if (deps['react']) detected.push('React');
-        if (deps['vue']) detected.push('Vue');
-        if (deps['svelte'] || deps['@sveltejs/kit']) detected.push('Svelte');
-        if (deps['express']) detected.push('Express');
-        if (deps['@nestjs/core']) detected.push('NestJS');
-        if (deps['expo']) detected.push('Expo');
-        if (deps['@supabase/supabase-js']) detected.push('Supabase');
-        if (deps['tailwindcss']) detected.push('Tailwind');
-        if (deps['stripe']) detected.push('Stripe');
-        if (deps['prisma'] || deps['@prisma/client']) detected.push('Prisma');
-        if (deps['drizzle-orm']) detected.push('Drizzle');
-        if (deps['mongoose']) detected.push('MongoDB/Mongoose');
+        for (var depKey in DEP_SIGNALS) {
+          if (deps[depKey] && detected.indexOf(DEP_SIGNALS[depKey]) === -1) {
+            detected.push(DEP_SIGNALS[depKey]);
+          }
+        }
       } catch (parseErr) {
         console.warn('Warning: package.json is malformed; skipping tech-stack detection (' + parseErr.message + ')');
       }
@@ -196,9 +213,9 @@ function detectTechStack() {
       } else if (fs.existsSync('pyproject.toml')) {
         reqContent = fs.readFileSync('pyproject.toml', 'utf-8');
       }
-      if (reqContent.includes('fastapi')) detected.push('FastAPI');
-      if (reqContent.includes('django')) detected.push('Django');
-      if (reqContent.includes('flask')) detected.push('Flask');
+      for (var pyKey in PY_SIGNALS) {
+        if (reqContent.includes(pyKey)) detected.push(PY_SIGNALS[pyKey]);
+      }
     } catch (e) {
       // ignore
     }
@@ -224,107 +241,12 @@ function getVersion(dir) {
   }
 }
 
-// Back up every existing file, then copy source over it.
-// Returns { created, updated, backedUp, backedUpFiles[] }
-function backupAndCopy(sourceDir, targetDir, projectRoot) {
-  var stats = { created: 0, updated: 0, backedUp: 0, backedUpFiles: [] };
-
-  function copy(src, dest) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    var entries = fs.readdirSync(src, { withFileTypes: true });
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      var srcPath = path.join(src, entry.name);
-      var destPath = path.join(dest, entry.name);
-
-      // Refuse to follow symlinks. A malicious or accidental symlink in the
-      // source tree (e.g. inside an extracted tarball) could otherwise cause
-      // us to traverse into /etc, $HOME, or other directories outside the
-      // intended scope. Dirent.isSymbolicLink() reports the link itself
-      // without following it — no extra lstat needed.
-      if (entry.isSymbolicLink()) {
-        continue;
-      }
-
-      // Never ship/overwrite personal machine-local settings. Team settings
-      // live in .claude/settings.json; settings.local.json is the consumer's.
-      if (entry.name === 'settings.local.json') {
-        continue;
-      }
-
-      // harness.json is USER CONFIG, not template content — it holds the stop gate,
-      // the protected base branch, work tracking and the model map. Copying the
-      // template over it on a RE-init would reset all of them (the exact bug fixed
-      // in update.js). installHarnessConfig installs-or-merges it after this copy,
-      // so a re-init never even briefly wipes the user's file.
-      if (entry.name === 'harness.json') {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        copy(srcPath, destPath);
-      } else if (entry.isFile()) {
-        var destExists = fs.existsSync(destPath);
-
-        if (destExists) {
-          // Back up the existing file — only if no backup exists yet
-          // (preserves original user content on double-init/update)
-          var backupPath = destPath + '.backup';
-          if (!fs.existsSync(backupPath)) {
-            fs.copyFileSync(destPath, backupPath);
-            stats.backedUp++;
-            var relPath = toProjectRelative(destPath, projectRoot);
-            stats.backedUpFiles.push(relPath);
-          }
-        }
-
-        // Copy new framework file
-        var destDir = path.dirname(destPath);
-        if (!fs.existsSync(destDir)) {
-          fs.mkdirSync(destDir, { recursive: true });
-        }
-        fs.copyFileSync(srcPath, destPath);
-
-        if (destExists) {
-          stats.updated++;
-        } else {
-          stats.created++;
-        }
-      }
-      // Skip special files (sockets, devices, FIFOs) silently.
-    }
-  }
-
-  copy(sourceDir, targetDir);
-  return stats;
-}
-
 // Whether init should merge a just-backed-up settings.json as the USER's pre-PHE
 // config. True ONLY on genuine first adoption: a settings.json was backed up this
 // run AND PHE was not already installed. Re-running init on an already-PHE project
 // backs up PHE's OWN settings.json, which must not be treated as user content.
 function shouldMergeUserSettings(pheAlreadyInstalled, backedUpFiles) {
   return !pheAlreadyInstalled && backedUpFiles.indexOf('.claude/settings.json') !== -1;
-}
-
-// Write init metadata for /harness-init reconcile (lists backed-up files)
-function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
-  var metaDir = path.join(targetDir, '.claude');
-  if (!fs.existsSync(metaDir)) {
-    fs.mkdirSync(metaDir, { recursive: true });
-  }
-  var meta = {
-    timestamp: new Date().toISOString(),
-    previousVersion: previousVersion || 'unknown',
-    newVersion: newVersion || 'unknown',
-    backedUpFiles: backedUpFiles,
-  };
-  fs.writeFileSync(
-    path.join(metaDir, '.init-meta.json'),
-    JSON.stringify(meta, null, 2)
-  );
 }
 
 async function main() {
@@ -437,6 +359,12 @@ async function main() {
   try {
   // Install .claude/ with backup
   console.log('Installing framework...');
+  // Capture enabledPlugins/extraKnownMarketplaces BEFORE the copy — Claude Code
+  // writes these into .claude/settings.json via `claude plugin install
+  // --scope project`, and backupAndCopy only preserves the FIRST backup ever
+  // taken, so on a re-init the template would clobber them with no re-union.
+  // restorePluginKeys below puts them back after the copy + reconcile.
+  var capturedPluginKeys = capturePluginKeys(targetDir);
   var stats = backupAndCopy(
     path.join(sourceDir, 'template', '.claude'),
     path.join(targetDir, '.claude'),
@@ -504,11 +432,15 @@ async function main() {
     var rcDest = path.join(targetDir, rootConfigFiles[rc]);
     var rcExisted = fs.existsSync(rcDest);
     if (rcExisted) {
-      var rcBackup = rcDest + '.backup';
-      if (!fs.existsSync(rcBackup)) {
-        fs.copyFileSync(rcDest, rcBackup);
+      // Same preserve-or-rotate semantics as the .claude/ copy above (see
+      // backup-copy.js): a re-init must not overwrite a user-edited .mcp.json
+      // whose content exists nowhere else just because a .backup is present.
+      var rcPreserved = preserveBeforeOverwrite(
+        rcDest, rcSrc, toProjectRelative(rcDest, targetDir)
+      );
+      if (rcPreserved.backedUp) {
         stats.backedUp++;
-        stats.backedUpFiles.push(toProjectRelative(rcDest, targetDir));
+        stats.backedUpFiles.push(rcPreserved.recordName);
       }
     }
     fs.copyFileSync(rcSrc, rcDest);
@@ -544,6 +476,24 @@ async function main() {
     console.log('Merged your existing .claude/settings.json (hooks + permissions) with the framework version.');
   } else if (settingsReconcile.error) {
     console.warn('Could not merge your existing settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
+  } else if (settingsReconcile.reason === 'not-user-origin') {
+    var initSettingsWarning = settingsNotMergedWarning();
+    for (var swi = 0; swi < initSettingsWarning.length; swi++) {
+      console.warn(initSettingsWarning[swi]);
+    }
+  }
+
+  // Restore the plugin keys captured before the copy (see the capturePluginKeys
+  // call above).
+  restorePluginKeys(targetDir, capturedPluginKeys);
+
+  // Resolve tier-`required` capabilities — the one approval question. Fail-open
+  // twice over: the flow catches its own errors, and this catch guarantees a
+  // resolver bug can never kill init (spec: Failure handling).
+  try {
+    await initCapabilitiesFlow({ targetDir: targetDir, targets: targets, tty: !!process.stdin.isTTY, askFn: ask, log: console.log });
+  } catch (e) {
+    console.log('Capabilities: skipped (' + e.message + ')');
   }
 
   // Derive the Codex tree from the canonical .claude/ payload.
@@ -598,11 +548,12 @@ async function main() {
   }
   console.log('');
   console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan-work …/research)');
-  console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer');
+  console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer · architect-agent');
   console.log('  .claude/rules/       always-on core + paths-scoped domain rules');
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
   console.log('  .claude/references/  on-demand references + knowledge-base-scaffold + vault-scaffold');
   console.log('  .mcp.json/.lsp.json  symbol navigation (codebase-search + language servers)');
+  console.log('  .claude/capabilities.json  declared plugin/marketplace needs (resolve later: npx perfect-harness-engineering capabilities)');
   console.log('');
 
   console.log('Next steps:');
@@ -650,6 +601,8 @@ module.exports = {
   shouldMergeUserSettings: shouldMergeUserSettings,
   createPipedAsker: createPipedAsker,
   main: main,
+  detectTechStack: detectTechStack,
+  STACK_SIGNALS: STACK_SIGNALS,
 };
 
 if (require.main === module) {

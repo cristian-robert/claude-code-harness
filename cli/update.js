@@ -6,7 +6,8 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
-const { reconcileSettingsJson } = require('./merge-settings');
+const { backupAndCopy, preserveBeforeOverwrite, createInitMeta } = require('./backup-copy');
+const { reconcileSettingsJson, settingsNotMergedWarning, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
@@ -59,93 +60,6 @@ function getLocalFallbackDir() {
     return frameworkDir;
   }
   return null;
-}
-
-function backupAndCopy(sourceDir, targetDir, projectRoot) {
-  var stats = { created: 0, updated: 0, backedUp: 0, backedUpFiles: [] };
-
-  function copy(src, dest) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    var entries = fs.readdirSync(src, { withFileTypes: true });
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      var srcPath = path.join(src, entry.name);
-      var destPath = path.join(dest, entry.name);
-
-      // Refuse to traverse symlinks — a malicious or accidental link could
-      // otherwise redirect copy/backup into the user's home directory.
-      if (entry.isSymbolicLink()) {
-        continue;
-      }
-
-      // Never ship/overwrite personal machine-local settings (parity with
-      // init.js — matters on the local-fallback source path).
-      if (entry.name === 'settings.local.json') {
-        continue;
-      }
-
-      // harness.json is USER CONFIG, not template content — it holds the stop gate,
-      // the protected base branch, work tracking and the model map. Copying the
-      // template over it is what destroyed all three (see harness-config.js);
-      // installHarnessConfig below installs or merges it instead. Never copied here,
-      // so the user's file is never even briefly in a wiped state.
-      if (entry.name === 'harness.json') {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        copy(srcPath, destPath);
-      } else if (entry.isFile()) {
-        var destExists = fs.existsSync(destPath);
-
-        if (destExists) {
-          // Only create backup if one doesn't already exist (preserve original)
-          var backupPath = destPath + '.backup';
-          if (!fs.existsSync(backupPath)) {
-            fs.copyFileSync(destPath, backupPath);
-            stats.backedUp++;
-            var relPath = toProjectRelative(destPath, projectRoot);
-            stats.backedUpFiles.push(relPath);
-          }
-        }
-
-        var destDir = path.dirname(destPath);
-        if (!fs.existsSync(destDir)) {
-          fs.mkdirSync(destDir, { recursive: true });
-        }
-        fs.copyFileSync(srcPath, destPath);
-
-        if (destExists) {
-          stats.updated++;
-        } else {
-          stats.created++;
-        }
-      }
-      // Skip special files silently.
-    }
-  }
-
-  copy(sourceDir, targetDir);
-  return stats;
-}
-
-function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
-  var metaDir = path.join(targetDir, '.claude');
-  if (!fs.existsSync(metaDir)) {
-    fs.mkdirSync(metaDir, { recursive: true });
-  }
-  var meta = {
-    timestamp: new Date().toISOString(),
-    previousVersion: previousVersion || 'unknown',
-    newVersion: newVersion || 'unknown',
-    backedUpFiles: backedUpFiles,
-  };
-  fs.writeFileSync(
-    path.join(metaDir, '.init-meta.json'),
-    JSON.stringify(meta, null, 2)
-  );
 }
 
 async function main() {
@@ -230,6 +144,12 @@ async function main() {
 
     // Update .claude/ with backup
     console.log('Updating .claude/ ...');
+    // Capture enabledPlugins/extraKnownMarketplaces BEFORE the copy — Claude Code
+    // writes these into .claude/settings.json via `claude plugin install
+    // --scope project`, and backupAndCopy only preserves the FIRST backup ever
+    // taken, so on update the template would clobber them with no re-union.
+    // restorePluginKeys below puts them back after the copy + reconcile.
+    var capturedPluginKeys = capturePluginKeys(projectRoot);
     var stats = backupAndCopy(
       path.join(sourceDir, 'template', '.claude'),
       path.join(projectRoot, '.claude'),
@@ -297,11 +217,16 @@ async function main() {
       var rcDest = path.join(projectRoot, rootConfigFiles[rc]);
       var rcExisted = fs.existsSync(rcDest);
       if (rcExisted) {
-        var rcBackup = rcDest + '.backup';
-        if (!fs.existsSync(rcBackup)) {
-          fs.copyFileSync(rcDest, rcBackup);
+        // Same preserve-or-rotate semantics as the .claude/ copy above: these
+        // are user-editable configs (the MCP servers a project adds), so a
+        // second update must not overwrite one whose content exists nowhere
+        // else just because a .backup from the first update is present.
+        var rcPreserved = preserveBeforeOverwrite(
+          rcDest, rcSrc, toProjectRelative(rcDest, projectRoot)
+        );
+        if (rcPreserved.backedUp) {
           stats.backedUp++;
-          stats.backedUpFiles.push(toProjectRelative(rcDest, projectRoot));
+          stats.backedUpFiles.push(rcPreserved.recordName);
         }
       }
       fs.copyFileSync(rcSrc, rcDest);
@@ -331,7 +256,16 @@ async function main() {
       console.log('Merged your .claude/settings.json (hooks + permissions) with the updated framework version.');
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
+    } else if (settingsReconcile.reason === 'not-user-origin') {
+      var settingsWarning = settingsNotMergedWarning();
+      for (var swi = 0; swi < settingsWarning.length; swi++) {
+        console.warn(settingsWarning[swi]);
+      }
     }
+
+    // Restore the plugin keys captured before the copy (see the capturePluginKeys
+    // call above).
+    restorePluginKeys(projectRoot, capturedPluginKeys);
 
     // Re-derive the Codex tree so a payload change (new skill, edited agent)
     // reaches Codex. Generated trees are overwritten, never backed up.
