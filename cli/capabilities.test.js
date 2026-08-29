@@ -112,6 +112,28 @@ if (process.platform !== 'win32') {
     process.env.PATH = prevPath;
   }
 
+  // Duplicate bare names: the spec's bare-name match exists so "a --plugin-dir
+  // copy or the same plugin from another marketplace counts as present" — so an
+  // ENABLED copy anywhere must win the index over a disabled one, regardless of
+  // list order. Two enabled copies: first wins (stable).
+  {
+    const bindir = tmpdir();
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then echo "[]"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo \'[{"id":"superpowers@claude-plugins-official","enabled":false},{"id":"superpowers@elsewhere","enabled":true}]\'; exit 0; fi\n' +
+      'exit 1\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const state = cap.readState(tmpdir());
+    process.env.PATH = prevPath;
+    check('enabled copy wins the bare-name index over a disabled one',
+      !!state.pluginNames['superpowers'] && state.pluginNames['superpowers'].enabled === true);
+    check('both copies still listed in state.plugins', Array.isArray(state.plugins) && state.plugins.length === 2);
+  }
+
   // enabledPlugins that is an array must contribute nothing (index keys are junk)
   {
     const proj = tmpdir();

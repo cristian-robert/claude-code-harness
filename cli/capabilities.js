@@ -86,7 +86,14 @@ function readState(projectRoot) {
         var entry = state.plugins[i];
         if (!entry || typeof entry !== 'object') continue; // junk element
         var name = String(entry.id || '').split('@')[0];
-        if (name && !state.pluginNames[name]) state.pluginNames[name] = entry;
+        if (!name) continue;
+        // Bare-name index: an ENABLED copy from any marketplace counts as
+        // present (spec, Components 2), so it wins over a disabled copy
+        // regardless of list order; among equals the first entry is kept.
+        var prev = state.pluginNames[name];
+        if (!prev || (prev.enabled === false && entry.enabled !== false)) {
+          state.pluginNames[name] = entry;
+        }
       }
     } catch (e) { /* unparseable → treated as empty */ }
   }
