@@ -17,7 +17,7 @@
     "test:init": "node cli/init-backup.test.js",
     "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/knowledge-config.test.js && node cli/kb-check.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js",
     "test:hooks": "node template/.claude/hooks/smoke-test.mjs",
-    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/knowledge-config.test.js && node cli/kb-check.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js && node cli/skill-preview-guards.test.js && node template/.claude/hooks/smoke-test.mjs"
+    "test": "node cli/init-backup.test.js && node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/knowledge-config.test.js && node cli/kb-check.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js && node cli/skill-preview-guards.test.js && node template/.claude/hooks/smoke-test.mjs && node cli/capabilities-manifest.test.js && node cli/capabilities.test.js"
   },
   "engines": {
     "node": ">=18"
