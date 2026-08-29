@@ -152,6 +152,29 @@ function cleanupTmpDir(tmpDir) {
   }
 }
 
+// Stack-signal vocabulary. The capabilities manifest's `when.stack` strings MUST come
+// from this list (cli/capabilities-manifest.test.js enforces it), so detector and
+// manifest cannot drift apart. Key order = output order (JS string-key insertion order).
+var DEP_SIGNALS = {
+  'next': 'Next.js', 'react': 'React', 'vue': 'Vue',
+  'svelte': 'Svelte', '@sveltejs/kit': 'Svelte',
+  'express': 'Express', '@nestjs/core': 'NestJS', 'expo': 'Expo',
+  '@supabase/supabase-js': 'Supabase', 'tailwindcss': 'Tailwind', 'stripe': 'Stripe',
+  'prisma': 'Prisma', '@prisma/client': 'Prisma',
+  'drizzle-orm': 'Drizzle', 'mongoose': 'MongoDB/Mongoose',
+};
+var PY_SIGNALS = { 'fastapi': 'FastAPI', 'django': 'Django', 'flask': 'Flask' };
+var STACK_SIGNALS = (function () {
+  var seen = {};
+  var out = [];
+  var all = Object.keys(DEP_SIGNALS).map(function (k) { return DEP_SIGNALS[k]; })
+    .concat(['Python'], Object.keys(PY_SIGNALS).map(function (k) { return PY_SIGNALS[k]; }), ['Go', 'Rust']);
+  for (var i = 0; i < all.length; i++) {
+    if (!seen[all[i]]) { seen[all[i]] = true; out.push(all[i]); }
+  }
+  return out;
+})();
+
 function detectTechStack() {
   var detected = [];
   // Guard package.json access so detection never crashes the installer on
@@ -168,19 +191,11 @@ function detectTechStack() {
       try {
         var pkg = JSON.parse(raw);
         var deps = Object.assign({}, pkg.dependencies, pkg.devDependencies);
-        if (deps['next']) detected.push('Next.js');
-        if (deps['react']) detected.push('React');
-        if (deps['vue']) detected.push('Vue');
-        if (deps['svelte'] || deps['@sveltejs/kit']) detected.push('Svelte');
-        if (deps['express']) detected.push('Express');
-        if (deps['@nestjs/core']) detected.push('NestJS');
-        if (deps['expo']) detected.push('Expo');
-        if (deps['@supabase/supabase-js']) detected.push('Supabase');
-        if (deps['tailwindcss']) detected.push('Tailwind');
-        if (deps['stripe']) detected.push('Stripe');
-        if (deps['prisma'] || deps['@prisma/client']) detected.push('Prisma');
-        if (deps['drizzle-orm']) detected.push('Drizzle');
-        if (deps['mongoose']) detected.push('MongoDB/Mongoose');
+        for (var depKey in DEP_SIGNALS) {
+          if (deps[depKey] && detected.indexOf(DEP_SIGNALS[depKey]) === -1) {
+            detected.push(DEP_SIGNALS[depKey]);
+          }
+        }
       } catch (parseErr) {
         console.warn('Warning: package.json is malformed; skipping tech-stack detection (' + parseErr.message + ')');
       }
@@ -196,9 +211,9 @@ function detectTechStack() {
       } else if (fs.existsSync('pyproject.toml')) {
         reqContent = fs.readFileSync('pyproject.toml', 'utf-8');
       }
-      if (reqContent.includes('fastapi')) detected.push('FastAPI');
-      if (reqContent.includes('django')) detected.push('Django');
-      if (reqContent.includes('flask')) detected.push('Flask');
+      for (var pyKey in PY_SIGNALS) {
+        if (reqContent.includes(pyKey)) detected.push(PY_SIGNALS[pyKey]);
+      }
     } catch (e) {
       // ignore
     }
@@ -650,6 +665,8 @@ module.exports = {
   shouldMergeUserSettings: shouldMergeUserSettings,
   createPipedAsker: createPipedAsker,
   main: main,
+  detectTechStack: detectTechStack,
+  STACK_SIGNALS: STACK_SIGNALS,
 };
 
 if (require.main === module) {
