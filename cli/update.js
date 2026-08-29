@@ -6,7 +6,7 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
-const { reconcileSettingsJson } = require('./merge-settings');
+const { reconcileSettingsJson, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
@@ -230,6 +230,12 @@ async function main() {
 
     // Update .claude/ with backup
     console.log('Updating .claude/ ...');
+    // Capture enabledPlugins/extraKnownMarketplaces BEFORE the copy — Claude Code
+    // writes these into .claude/settings.json via `claude plugin install
+    // --scope project`, and backupAndCopy only preserves the FIRST backup ever
+    // taken, so on update the template would clobber them with no re-union.
+    // restorePluginKeys below puts them back after the copy + reconcile.
+    var capturedPluginKeys = capturePluginKeys(projectRoot);
     var stats = backupAndCopy(
       path.join(sourceDir, 'template', '.claude'),
       path.join(projectRoot, '.claude'),
@@ -332,6 +338,10 @@ async function main() {
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
     }
+
+    // Restore the plugin keys captured before the copy (see the capturePluginKeys
+    // call above).
+    restorePluginKeys(projectRoot, capturedPluginKeys);
 
     // Re-derive the Codex tree so a payload change (new skill, edited agent)
     // reaches Codex. Generated trees are overwritten, never backed up.

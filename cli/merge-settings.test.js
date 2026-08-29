@@ -377,6 +377,49 @@ test('reconcileSettingsJson fails safe on a malformed backup (leaves framework s
   assert.strictEqual(fs.readFileSync(livePath, 'utf-8'), before, 'framework settings left intact');
 });
 
+// ─── capturePluginKeys / restorePluginKeys (plugin keys survive the copy path) ──
+//
+// backupAndCopy preserves only the FIRST backup ever taken, so enabledPlugins /
+// extraKnownMarketplaces — keys Claude Code itself writes via
+// `claude plugin install --scope project` — are clobbered by the template on
+// re-init/update and never re-unioned by reconcileSettingsJson (which only fires
+// off a genuine pre-PHE backup). capturePluginKeys/restorePluginKeys bracket the
+// copy directly instead.
+
+const { capturePluginKeys, restorePluginKeys } = require('./merge-settings.js');
+
+test('capturePluginKeys/restorePluginKeys: plugin keys survive the template overwriting settings.json', () => {
+  const { root, livePath } = seedProject('plugin-keys', {
+    permissions: {},
+    enabledPlugins: { 'superpowers@claude-plugins-official': true, 'x@m': false },
+    extraKnownMarketplaces: { 'openai-codex': { source: { source: 'github', repo: 'openai/codex-plugin-cc' } } },
+  });
+
+  const captured = capturePluginKeys(root);
+  assert.ok(captured && captured.enabledPlugins && captured.extraKnownMarketplaces, 'capture picks up both keys');
+
+  // Simulate the template copy clobbering the file (backupAndCopy overwrites settings.json).
+  fs.writeFileSync(livePath, JSON.stringify({ permissions: {}, hooks: {} }));
+
+  const res = restorePluginKeys(root, captured);
+  assert.strictEqual(res.restored, true, 'restore reports restored');
+
+  const after = JSON.parse(fs.readFileSync(livePath, 'utf-8'));
+  assert.strictEqual(after.enabledPlugins['superpowers@claude-plugins-official'], true, 'enabledPlugins restored');
+  assert.strictEqual(after.enabledPlugins['x@m'], false, 'user false preserved');
+  assert.ok(after.extraKnownMarketplaces['openai-codex'], 'marketplaces restored');
+  assert.ok(after.permissions && after.hooks, 'other keys intact');
+});
+
+test('capturePluginKeys returns null when settings.json is missing', () => {
+  assert.strictEqual(capturePluginKeys(path.join(TMP, 'plugin-keys-missing')), null, 'capture on missing file is null');
+});
+
+test('restorePluginKeys is a no-op when captured is null', () => {
+  const { root } = seedProject('plugin-keys-noop', { permissions: {} });
+  assert.strictEqual(restorePluginKeys(root, null).restored, false, 'restore with null is a no-op');
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });

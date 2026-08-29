@@ -246,6 +246,43 @@ function reconcileSettingsJson(projectRoot, opts) {
   }
 }
 
+// ─── Plugin keys survive the copy path ───────────────────────────────────────
+
+// Keys in .claude/settings.json that Claude Code itself writes on the user's behalf
+// (`claude plugin install --scope project`). backupAndCopy preserves only the FIRST
+// backup ever taken, so on re-init/update these keys would be overwritten by the
+// template and never re-unioned. init/update bracket the copy with this pair.
+const PLUGIN_KEYS = ['enabledPlugins', 'extraKnownMarketplaces'];
+
+function capturePluginKeys(projectRoot) {
+  const live = path.join(projectRoot, '.claude', 'settings.json');
+  if (!fs.existsSync(live)) return null;
+  let parsed;
+  try { parsed = readJson(live); } catch (e) { return null; }
+  const captured = {};
+  let any = false;
+  for (const k of PLUGIN_KEYS) {
+    if (parsed && parsed[k] && typeof parsed[k] === 'object' && !Array.isArray(parsed[k])) {
+      captured[k] = parsed[k];
+      any = true;
+    }
+  }
+  return any ? captured : null;
+}
+
+function restorePluginKeys(projectRoot, captured) {
+  if (!captured) return { restored: false };
+  const live = path.join(projectRoot, '.claude', 'settings.json');
+  if (!fs.existsSync(live)) return { restored: false };
+  let parsed;
+  try { parsed = readJson(live); } catch (e) { return { restored: false, error: e.message }; }
+  for (const k of PLUGIN_KEYS) {
+    if (k in captured) parsed[k] = deepMergeUserWins(captured[k], parsed[k]);
+  }
+  writeJsonAtomic(live, parsed);
+  return { restored: true };
+}
+
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 function help() {
@@ -302,4 +339,12 @@ if (require.main === module) {
   console.log('merged → ' + args.user);
 }
 
-module.exports = { mergeSettings, mergeHooks, mergePermissions, deepMergeUserWins, reconcileSettingsJson };
+module.exports = {
+  mergeSettings,
+  mergeHooks,
+  mergePermissions,
+  deepMergeUserWins,
+  reconcileSettingsJson,
+  capturePluginKeys,
+  restorePluginKeys,
+};
