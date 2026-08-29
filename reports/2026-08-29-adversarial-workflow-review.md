@@ -30,7 +30,10 @@ Ledger at review time: **WARN 1654/2000 (83%)** — `node tools/context-ledger.m
 | MINOR | m5 codebase-search MCP: 4-file prune choreography for a Python-AST-only tool, superseded by pyright-lsp + native search | ✅ | **SPEC FIXED** — retirement added to increment 2 prune |
 | — | init.js:601 stale agent roster (found in the earlier name audit, same class) | ✅ | **FIXED** earlier this branch (`94bc97e`) |
 
-## STE100 output register — reviewer adjudication, PENDING PO DECISION
+## STE100 output register — DECIDED: guidance tier (PO, 2026-08-29)
+
+> PO accepted the adjudication below: guidance tier, the two-line `## Output register` in AGENTS.md,
+> funded by the M2 cuts. Ships in follow-up batch 1. No blocking mechanism.
 
 PO directive: "ENFORCE claude to answer only in ASD-STE100" (source: the two-word deslop technique,
 "Use ASD-STE100"; author's own caveats: hurts creative writing, fits ~80% of cases).
@@ -52,8 +55,7 @@ cutting". Optional non-blocking rung: one Note-level line in code-reviewer's che
 wirings: output style (Claude-only), rule file (no Codex reach), session-start injection (ignored
 surface), hook (docs/02).
 
-**Decision needed from the PO:** accept guidance-tier wording, or insist on a blocking mechanism
-knowing the doctrine and licensing objections above.
+**Decision (PO, 2026-08-29):** guidance tier accepted.
 
 ## Follow-up work queue (pipeline: /plan-work → … per repo hard rule)
 
