@@ -245,7 +245,8 @@ Every row: `init` still exits 0 with the payload installed; the outcome lands in
 
 | Condition | Detected by | Outcome |
 |---|---|---|
-| `claude` absent / too old for `plugin` | `claude --version` or `plugin list --json` fails | `manual`; hand-write `enabledPlugins`; print commands |
+| `claude` absent from PATH | PATH scan finds no binary | `manual`; hand-write `enabledPlugins`; print commands |
+| `claude` present but failing (too old, broken) | `claude --version` or `plugin list --json` fails | report-only: commands printed; nothing attempted, nothing hand-written |
 | Official marketplace not registered | `marketplace list --json` lacks it | offer `marketplace add`; decline → `unavailable(marketplace)` |
 | Offline / proxy | non-zero exit, network text | `unavailable(network)`; drift line points at retry; retried only on next `init`/`update`/`--apply` |
 | Policy refusal | exit text names the setting | `blocked` with the setting name; never retried, never nudged |

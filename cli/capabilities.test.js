@@ -842,6 +842,32 @@ if (process.platform !== 'win32') {
       check('t8g: no plugin install spawned', argv.every(l => l.indexOf('plugin install') === -1));
       check('t8g: result.installed carries the re-enabled id', !!r && r.installed.indexOf('superpowers@claude-plugins-official') !== -1);
     });
+
+    // Fix wave (I3): claude on PATH but BROKEN (`--version` fails) → every row
+    // stays report-only (spec failure table): the install command is printed
+    // per plugin row, nothing attempted, nothing hand-written, no question.
+    await t8('broken-claude-report-only', async () => {
+      const proj = mkProj8();
+      const bindir = tmpdir();
+      const argvLog = path.join(bindir, 'argv.log');
+      fs.writeFileSync(path.join(bindir, 'claude'),
+        '#!/bin/sh\n' +
+        'echo "$@" >> "' + argvLog + '"\n' +
+        'if [ "$1" = "--version" ]; then exit 1; fi\n' + // broken, not absent
+        'exit 0\n');
+      fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+      const askFn = mkAsk([]);
+      const lines = [];
+      const r = await withEnv(proj, bindir, () =>
+        cap.initCapabilitiesFlow({ targetDir: proj, targets: ['claude'], tty: true, askFn, log: (l) => lines.push(l) }));
+      const argv = fs.existsSync(argvLog) ? fs.readFileSync(argvLog, 'utf-8') : '';
+      check('t8h: askFn never called, nothing installed', askFn.calls.length === 0 && !!r && r.installed.length === 0);
+      check('t8h: no plugin install attempted', argv.indexOf('plugin install') === -1);
+      check('t8h: the install command printed per plugin row',
+        lines.join('\n').indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
+      const settings = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf-8'));
+      check('t8h: nothing hand-written into enabledPlugins', settings.enabledPlugins === undefined);
+    });
   }
 })().catch((e) => {
   failed++;

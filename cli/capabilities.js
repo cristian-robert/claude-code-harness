@@ -716,7 +716,15 @@ async function initCapabilitiesFlow(opts) {
       if (claudeMissing && entry.class === 'plugin' && !provisionManual[entry.id]) folded.push(entry);
       else reportOnly.push(entry);
     });
-    if (reportOnly.length) log('Capabilities: manual provisioning needed — ' + bucketIds(reportOnly));
+    if (reportOnly.length) {
+      log('Capabilities: manual provisioning needed — ' + bucketIds(reportOnly));
+      // Parity with mainCli --apply's reportOnly leg: a plugin row parked here
+      // (broken-but-present claude, provision:manual) is installable — just
+      // never BY this flow — so hand the user the exact command.
+      reportOnly.forEach(function (entry) {
+        if (entry.class === 'plugin') log('  manual — run yourself: claude plugin install ' + entry.id + ' --scope project');
+      });
+    }
     if (folded.length) {
       log('Capabilities: claude not found — declaring required plugins in .claude/settings.json; run the printed commands yourself.');
       var foldRes = applyCapabilities({
