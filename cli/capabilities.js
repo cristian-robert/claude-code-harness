@@ -122,10 +122,71 @@ function readState(projectRoot) {
   return state;
 }
 
+var TIER_RANK = { required: 3, recommended: 2, optional: 1 };
+
+function whenMatches(cap, stack, files) {
+  if (!cap.when) return true; // required/optional rows usually carry no `when`
+  var stacks = cap.when.stack || [];
+  for (var i = 0; i < stacks.length; i++) if (stack.indexOf(stacks[i]) !== -1) return true;
+  var fl = cap.when.files || [];
+  for (var j = 0; j < fl.length; j++) if (files.indexOf(fl[j]) !== -1) return true;
+  return false;
+}
+
+function planCapabilities(opts) {
+  var out = { present: [], disabledByUser: [], install: [], needsMarketplace: [], declined: [], reoffer: [], blocked: [], manual: [] };
+  var caps = (opts.manifest && opts.manifest.capabilities) || [];
+  var decisions = opts.decisions || {};
+  var registered = {};
+  for (var m = 0; m < (opts.state.marketplaces || []).length; m++) registered[opts.state.marketplaces[m].name] = true;
+
+  for (var i = 0; i < caps.length; i++) {
+    var cap = caps[i];
+    if (opts.tiers.indexOf(cap.tier) === -1) continue;
+    if (cap.tier === 'recommended' && !whenMatches(cap, opts.stack || [], opts.files || [])) continue;
+
+    var name = String(cap.id).split('@')[0];
+    var mkt = String(cap.id).split('@')[1] || null;
+    var catalogEntry = opts.state.catalog[cap.id] || {};
+    var entry = {
+      id: cap.id, tier: cap.tier, why: cap.why, class: cap.class || 'plugin',
+      requiresBinary: cap.requiresBinary || null,
+      binaryMissing: !!(cap.requiresBinary && opts.binaries && opts.binaries[cap.requiresBinary] === null),
+      source: catalogEntry.source || null, sha: catalogEntry.sha || (catalogEntry.source && catalogEntry.source.sha) || null,
+      marketplace: mkt,
+    };
+
+    // Order matters: recorded blocks beat everything; declines beat state reads.
+    var blockedRec = decisions.unavailable && decisions.unavailable[cap.id];
+    if (blockedRec && String(blockedRec.reason || '').indexOf('blocked') === 0) { out.blocked.push(entry); continue; }
+    var declinedRec = decisions.declined && decisions.declined[cap.id];
+    if (declinedRec) {
+      if (TIER_RANK[cap.tier] > (TIER_RANK[declinedRec.tier] || 0)) out.reoffer.push(entry);
+      else out.declined.push(entry);
+      continue;
+    }
+    if (cap.class === 'global-agent' || cap.provision === 'manual' || opts.state.claude === null) { out.manual.push(entry); continue; }
+
+    var installed = opts.state.pluginNames[name]; // bare-name match: any marketplace, --plugin-dir copies included
+    if (installed && installed.enabled !== false) { out.present.push(entry); continue; }
+    if (installed && installed.enabled === false) { out.disabledByUser.push(entry); continue; }
+    var userDisabled = opts.state.enabledIn[cap.id];
+    if (userDisabled && userDisabled.value === false && (userDisabled.scope === 'user' || userDisabled.scope === 'local')) {
+      entry.overridesUserDisable = true;
+      out.disabledByUser.push(entry); continue;
+    }
+    if (mkt && !registered[mkt]) { out.needsMarketplace.push(entry); continue; }
+    out.install.push(entry);
+  }
+  return out;
+}
+
 module.exports = {
   findOnPath: findOnPath,
   runClaude: runClaude,
   claudeConfigDir: claudeConfigDir,
   readEnabledPlugins: readEnabledPlugins,
   readState: readState,
+  planCapabilities: planCapabilities,
+  TIER_RANK: TIER_RANK,
 };
