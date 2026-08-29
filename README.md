@@ -38,6 +38,12 @@ npx perfect-harness-engineering update    # refreshes the payload (existing file
 
 `init` asks **which harness you use — Claude Code, Codex, or both** — and records it in `.claude/harness.json`, so `update` re-emits the right payload without asking again.
 
+`init` also resolves **capabilities**: one Y/n question offers the superpowers plugin at
+project scope. Your answer is recorded under `capabilities` in `.claude/harness.json`, and
+an accept is applied through Claude Code's own CLI — it lands as `enabledPlugins` in
+`.claude/settings.json`. Skipped it, or ran without a TTY? Resolve later with
+`npx perfect-harness-engineering capabilities`, or `/harness-init` in a session.
+
 **One source, two harnesses.** Canonical content lives once, under `.claude/` and `AGENTS.md`. When Codex is a target, PHE *derives* the trees Codex reads:
 
 | Generated | Derived from | Read by |
