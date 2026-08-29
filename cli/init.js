@@ -6,6 +6,7 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
+const { backupAndCopy, preserveBeforeOverwrite } = require('./backup-copy');
 const { reconcileSettingsJson, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { HARNESS_PROMPT, parseHarnessAnswer, writeHarnessTargets } = require('./harness-targets');
 const { KNOWLEDGE_PROMPT, parseKnowledgeAnswer, writeKnowledgeConfig } = require('./knowledge-config');
@@ -240,83 +241,6 @@ function getVersion(dir) {
   }
 }
 
-// Back up every existing file, then copy source over it.
-// Returns { created, updated, backedUp, backedUpFiles[] }
-function backupAndCopy(sourceDir, targetDir, projectRoot) {
-  var stats = { created: 0, updated: 0, backedUp: 0, backedUpFiles: [] };
-
-  function copy(src, dest) {
-    if (!fs.existsSync(dest)) {
-      fs.mkdirSync(dest, { recursive: true });
-    }
-    var entries = fs.readdirSync(src, { withFileTypes: true });
-    for (var i = 0; i < entries.length; i++) {
-      var entry = entries[i];
-      var srcPath = path.join(src, entry.name);
-      var destPath = path.join(dest, entry.name);
-
-      // Refuse to follow symlinks. A malicious or accidental symlink in the
-      // source tree (e.g. inside an extracted tarball) could otherwise cause
-      // us to traverse into /etc, $HOME, or other directories outside the
-      // intended scope. Dirent.isSymbolicLink() reports the link itself
-      // without following it — no extra lstat needed.
-      if (entry.isSymbolicLink()) {
-        continue;
-      }
-
-      // Never ship/overwrite personal machine-local settings. Team settings
-      // live in .claude/settings.json; settings.local.json is the consumer's.
-      if (entry.name === 'settings.local.json') {
-        continue;
-      }
-
-      // harness.json is USER CONFIG, not template content — it holds the stop gate,
-      // the protected base branch, work tracking and the model map. Copying the
-      // template over it on a RE-init would reset all of them (the exact bug fixed
-      // in update.js). installHarnessConfig installs-or-merges it after this copy,
-      // so a re-init never even briefly wipes the user's file.
-      if (entry.name === 'harness.json') {
-        continue;
-      }
-
-      if (entry.isDirectory()) {
-        copy(srcPath, destPath);
-      } else if (entry.isFile()) {
-        var destExists = fs.existsSync(destPath);
-
-        if (destExists) {
-          // Back up the existing file — only if no backup exists yet
-          // (preserves original user content on double-init/update)
-          var backupPath = destPath + '.backup';
-          if (!fs.existsSync(backupPath)) {
-            fs.copyFileSync(destPath, backupPath);
-            stats.backedUp++;
-            var relPath = toProjectRelative(destPath, projectRoot);
-            stats.backedUpFiles.push(relPath);
-          }
-        }
-
-        // Copy new framework file
-        var destDir = path.dirname(destPath);
-        if (!fs.existsSync(destDir)) {
-          fs.mkdirSync(destDir, { recursive: true });
-        }
-        fs.copyFileSync(srcPath, destPath);
-
-        if (destExists) {
-          stats.updated++;
-        } else {
-          stats.created++;
-        }
-      }
-      // Skip special files (sockets, devices, FIFOs) silently.
-    }
-  }
-
-  copy(sourceDir, targetDir);
-  return stats;
-}
-
 // Whether init should merge a just-backed-up settings.json as the USER's pre-PHE
 // config. True ONLY on genuine first adoption: a settings.json was backed up this
 // run AND PHE was not already installed. Re-running init on an already-PHE project
@@ -526,11 +450,15 @@ async function main() {
     var rcDest = path.join(targetDir, rootConfigFiles[rc]);
     var rcExisted = fs.existsSync(rcDest);
     if (rcExisted) {
-      var rcBackup = rcDest + '.backup';
-      if (!fs.existsSync(rcBackup)) {
-        fs.copyFileSync(rcDest, rcBackup);
+      // Same preserve-or-rotate semantics as the .claude/ copy above (see
+      // backup-copy.js): a re-init must not overwrite a user-edited .mcp.json
+      // whose content exists nowhere else just because a .backup is present.
+      var rcPreserved = preserveBeforeOverwrite(
+        rcDest, rcSrc, toProjectRelative(rcDest, targetDir)
+      );
+      if (rcPreserved.backedUp) {
         stats.backedUp++;
-        stats.backedUpFiles.push(toProjectRelative(rcDest, targetDir));
+        stats.backedUpFiles.push(rcPreserved.recordName);
       }
     }
     fs.copyFileSync(rcSrc, rcDest);
