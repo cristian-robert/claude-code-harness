@@ -1,18 +1,34 @@
 {
   "name": "perfect-harness-engineering",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "The harness around Claude Code that makes it reliable — tested hooks, two-tier context, a PIV+E pipeline with an agile delivery layer, doc-grounded research reuse, and a git-tracked project-local knowledge base with a shared-vault promotion path. Installs a hardened .claude/ payload.",
   "bin": {
     "perfect-harness-engineering": "cli/index.js"
   },
-  "keywords": ["claude", "claude-code", "harness", "agentic", "piv-loop", "context-engineering", "knowledge-base", "obsidian"],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "harness",
+    "agentic",
+    "piv-loop",
+    "context-engineering",
+    "knowledge-base",
+    "obsidian"
+  ],
   "author": "Cristian-Robert Iosef",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/cristian-robert/claude-code-harness.git"
   },
-  "files": ["cli/", "template/", "tools/context-ledger.mjs", "tools/kb-check.mjs", "docs/*.md", "README.md"],
+  "files": [
+    "cli/",
+    "template/",
+    "tools/context-ledger.mjs",
+    "tools/kb-check.mjs",
+    "docs/*.md",
+    "README.md"
+  ],
   "scripts": {
     "test:init": "node cli/init-backup.test.js",
     "test:cli": "node cli/cli-hardening.test.js && node cli/merge-settings.test.js && node cli/migrations.test.js && node cli/harness-targets.test.js && node cli/emit-codex.test.js && node cli/emit.test.js && node cli/knowledge-config.test.js && node cli/kb-check.test.js && node cli/init-input.test.js && node cli/model-tiers.test.js && node cli/update-harness-config.test.js",
