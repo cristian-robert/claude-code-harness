@@ -136,7 +136,7 @@ CLI) records **state**; `capabilities --check` reconciles the two.
     { "id": "architect-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
       "path": "~/.claude/agents/architect-agent/AGENT.md", "why": "harness-init degraded-roles notice" },
     { "id": "tester-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
-      "path": "~/.claude/agents/tester-agent/AGENT.md", "why": "same" }
+      "path": "~/.claude/agents/tester-agent/AGENT.md", "why": "harness-init degraded-roles notice" }
   ]
 }
 ```
