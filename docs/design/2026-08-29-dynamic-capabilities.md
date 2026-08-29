@@ -23,7 +23,11 @@ The template references capabilities it does not ship and never checks for:
 `cli/init.js` detects the stack (`detectTechStack()`, 15 signals) and prints it; nothing consumes it.
 `merge-settings.js` unions only `hooks` and `permissions` — an adopter's existing `enabledPlugins`
 would be clobbered on re-init. ADR-008 gave every superpowers call an inline fallback, so absence
-degrades silently: the pipeline runs a condensed discipline and nobody is told.
+degrades silently: the pipeline runs a condensed discipline and nobody is told. One exception breaks
+even that: the pipeline's terminal step `superpowers:finishing-a-development-branch` has NO inline
+fallback at its two sites (`evolve/SKILL.md:84`, `review-branch/SKILL.md:70`) — with declining now a
+first-class recorded state, increment 1 adds the missing 2-line fallback (merge/PR per the AGENTS.md
+flow, delete the worktree).
 
 ## Verified platform facts (Claude Code 2.1.251, official docs, 2026-08-29)
 
@@ -65,28 +69,37 @@ degrades silently: the pipeline runs a condensed discipline and nobody is told.
    `capabilities --reset`. Rejected: nag every session (a standing context tax that trains people to
    ignore hook output), hard block (breaks offline/CI/policy-locked installs, contradicts ADR-006).
 4. **Discovery may propose from any discoverable catalog, community included.** Adding a marketplace
-   is its own approval step with the repo URL shown; every community proposal carries source URL,
-   pinned SHA, and always-on cost, labelled "SHA-pinned, third-party, automated screening only".
-   Managed restrictions win over all of it.
+   is its own approval step with the repo URL shown; every community proposal carries the source URL,
+   the SHA read from `marketplace.json` **at proposal time** (provenance, not a pin — the repo can
+   move between proposal and install), and always-on cost, labelled "third-party, automated screening
+   only". After an install the resolver re-reads the marketplace entry and records a mismatch as
+   `unavailable(sha-drift)`. Managed restrictions win over all of it.
 5. **Global agents are out of scope for provisioning.** They appear in the manifest as
    `class: global-agent, provision: manual` so the report is complete; the install path is a
    follow-on (`phe-agents` plugin in a PHE marketplace, which would also unlock Approach C).
 
-## Architecture — one manifest, one resolver, four callers
+## Architecture — one manifest, one resolver, three callers
 
 ```
 template/.claude/capabilities.json      ← declares (tiers · classes · stack matrix · why per row)
 cli/capabilities.js                     ← readState() · plan() [pure] · apply() [thin shell]
-        ▲              ▲              ▲                 ▲
-      init         /harness-init   session-start.mjs   update  (+ /evolve prune line)
-   required tier   stack tier +    drift ≤2 lines,     manifest delta,
-   one Y/n         discovery,      no spawning         rename guard
+        ▲              ▲              ▲
+      init         /harness-init    update            (+ /evolve prune line)
+   required tier   stack tier +     manifest delta,
+   one Y/n         discovery,       rename guard
                    one AUQ round
 ```
 
+There is deliberately **no session-start component**. For the teammate scenario the committed
+`.claude/settings.json` carries the plugin id, so a "missing everywhere" check reads *present* while
+the external-source plugin is genuinely absent — the check cannot fire exactly where the drift is.
+Claude Code itself already prints the `claude plugin install` command for an enabled-but-uninstalled
+plugin (verified fact 2), and a deliberate `/plugin` uninstall must not be nagged. The authoritative
+reconciliation is `capabilities --check` in `/harness-init` and `/evolve`.
+
 Deterministic work lives in Node and is fixture-tested; the model only adds discovery and the
 interview. `harness.json` records **decisions**; `.claude/settings.json` (written by Claude Code's own
-CLI) records **state**; session-start reconciles the two.
+CLI) records **state**; `capabilities --check` reconciles the two.
 
 ## Components — six units
 
@@ -110,19 +123,16 @@ CLI) records **state**; session-start reconciles the two.
     { "id": "codex@openai-codex", "class": "plugin", "tier": "optional", "skills": ["rescue"], "usedBy": ["review-branch"],
       "requiresBinary": "codex", "why": "second-opinion rescue pass; needs the Codex CLI" },
     { "id": "typescript-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended",
-      "when": { "stack": ["Next.js","React","Vue","Svelte","Express","NestJS","Expo"] },
+      "when": { "files": ["tsconfig.json"] },
       "requiresBinary": "typescript-language-server", "supersedes": { "lsp": "typescript" },
-      "why": "official LSP plugin replaces the hand-rolled .lsp.json entry" },
+      "why": "official LSP plugin replaces the hand-rolled .lsp.json typescript entry; files-trigger because detectTechStack() has no plain-TS signal" },
     { "id": "pyright-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Python"] },
-      "requiresBinary": "pyright-langserver", "supersedes": { "lsp": "python" }, "why": "same" },
+      "requiresBinary": "pyright-langserver", "supersedes": { "lsp": "python" },
+      "why": "official LSP plugin replaces the hand-rolled .lsp.json python entry AND the codebase-search MCP's Python-AST niche" },
     { "id": "gopls-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Go"] },
-      "requiresBinary": "gopls", "why": "same" },
+      "requiresBinary": "gopls", "why": "Go has no .lsp.json entry today — closes a diagnostics gap the hand-rolled file never covered" },
     { "id": "rust-analyzer-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Rust"] },
-      "requiresBinary": "rust-analyzer", "why": "same" },
-    { "id": "supabase@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Supabase"] },
-      "why": "detected dependency; bundles an MCP server (per-server approval, cache cost)" },
-    { "id": "stripe@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Stripe"] },
-      "why": "detected dependency" },
+      "requiresBinary": "rust-analyzer", "why": "Rust has no .lsp.json entry today — same gap" },
     { "id": "architect-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
       "path": "~/.claude/agents/architect-agent/AGENT.md", "why": "harness-init degraded-roles notice" },
     { "id": "tester-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
@@ -134,8 +144,12 @@ CLI) records **state**; session-start reconciles the two.
 Rules: `tier` ∈ required (asked at `init`) · recommended (`when` matches, proposed at `/harness-init`)
 · optional (listed, off by default). `when.stack` matches the strings `detectTechStack()` emits;
 `when.files` matches paths — no new detection language. `supersedes` is the prune half of the ratchet.
-`requiresBinary` is checked with `command -v`; a missing binary labels the proposal but does not block
-it. `skills` is the rename guard. Every row carries `why` (ratchet: no incident/reason, no row).
+`requiresBinary` is checked by scanning `process.env.PATH` in Node (PATHEXT-aware on win32) — never
+`command -v`; ADR-007's lesson is that shell-dependent checks fail open on Windows. A missing binary
+labels the proposal but does not block it. `skills` is the rename guard. Every row carries `why`
+(ratchet: no incident/reason, no row). Stacks the matrix does not name (Supabase, Stripe, anything
+else `detectTechStack()` flags) are `/harness-init` discovery's job — marketplace metadata against the
+detected stack — so the matrix stays LSP-small and cannot rot into a second catalog.
 
 **2. Resolver** — `cli/capabilities.js`.
 
@@ -155,7 +169,11 @@ it. `skills` is the rename guard. Every row carries `why` (ratchet: no incident/
 - `enabledPlugins` is written by `claude plugin install` (Claude Code owns the format). Only the
   no-`claude` path hand-writes the documented `{ "<id>": true }` shape so cloud sessions and teammates
   still get the declaration.
-- Non-TTY: `apply` runs nothing; one line names what would be asked and how to resolve later.
+- TTY rules: only tier *prompting* requires a TTY. `--apply <ids>` carries prior approval — the ids
+  WERE the approval, gathered at `init`'s prompt or `/harness-init`'s AskUserQuestion round — and runs
+  without a TTY, which is exactly how it executes from a session's Bash tool. A piped `init` (no ids,
+  no TTY) still installs nothing and prints one line naming what would be asked. A plugin declaring
+  `userConfig` is never installed non-TTY: it lands in `manual` with its install command printed.
 - CLI: `npx perfect-harness-engineering capabilities [--propose --json] [--apply <ids>] [--check]
   [--scope user|project|local] [--reset]`.
 
@@ -175,8 +193,10 @@ value wins. Closes the re-init clobber gap.
 
 **5. Callers** — see Data flow.
 
-**6. Ratchet test** — `cli/capabilities-manifest.test.js` greps `template/` for `<plugin>:<skill>`
-references and fails if any plugin or skill is not declared in the manifest.
+**6. Ratchet test** — `cli/capabilities-manifest.test.js` makes two assertions: (a) every
+`<plugin>:<skill>` reference grepped from `template/` is declared in the manifest; (b) every
+`when.stack` string in the manifest appears in `detectTechStack()`'s exported signal vocabulary —
+matrix/detector drift fails the build in both directions.
 
 ## Data flow
 
@@ -206,11 +226,6 @@ interview belongs to `/harness-init`.
 - Step 4 VERIFY: `capabilities --check` row; the degraded-roles notice becomes "declined/unavailable
   required capabilities + missing global agents", written once to `reports/harness-init.md`.
 
-**`session-start.mjs`** — no spawning, no network, ≤2 lines: for each `accepted` plugin, look for its
-id in the three settings files; missing everywhere → `Capability drift: <id> accepted <date> but not
-enabled — claude plugin install <id> --scope project`. Declined/unavailable never print. No
-`capabilities` key (pre-3.1 project) → silent.
-
 **`update`** — diff the project's old manifest against the new one before the copy: new
 required/recommended rows → resolver on the delta (TTY only); rows PHE dropped → "no longer needed by
 the harness; `claude plugin uninstall …` if nothing else uses it" (never uninstalls); declined item
@@ -235,34 +250,41 @@ Every row: `init` still exits 0 with the payload installed; the outcome lands in
 | Offline / proxy | non-zero exit, network text | `unavailable(network)`; drift line points at retry; retried only on next `init`/`update`/`--apply` |
 | Policy refusal | exit text names the setting | `blocked` with the setting name; never retried, never nudged |
 | Plugin gone from catalog | "not found" | `unavailable(not-found)`; `update` re-checks |
-| Install ok, needs reload | any install | one `/reload-plugins` line |
-| Plugin prompts `userConfig` | TTY path only | stdio inherited so the prompt is the user's |
+| Install ok, needs reload | any install | one `/reload-plugins` line (native command, verified in the official commands list 2026-08-29) |
+| Plugin declares `userConfig` | catalog entry | TTY `init`: stdio inherited so the prompt is the user's; non-TTY (incl. `--apply` from a session): `manual`, command printed |
 | User-scope `false` overridden | settings scan | warning in the approval line; `overrodeUserDisable: true` |
 | Range-conflict / dependency errors | exit text | `unavailable(<text>)`; no retry |
 | Unmatched non-zero exit | any | `unavailable(<first line>)` — wording drift degrades to a report, never a crash |
 
 ## Ratchet + prune
 
-- `.lsp.json` entries superseded by an accepted LSP plugin are deleted; the hand-rolled file shrinks
-  to languages without an official plugin.
+- Both shipped `.lsp.json` entries (typescript, python) are covered by `supersedes`: on acceptance
+  delete the FILE, not just the entry, and prune its reference web in the same increment —
+  `AGENTS.md:48`, `00-core.md:24`, `references/symbol-navigation.md`, `harness-init` step 3 —
+  or they dangle.
+- The codebase-search MCP (Python-AST-only, `uv`-dependent, with a 4-file prune choreography in
+  `harness-init:64-65`) is superseded by `pyright-lsp` + native search: retire it from the template in
+  increment 2; `.mcp.json` ships context7-only.
 - The manual context7 MCP row is skipped when the plugin is accepted — one server, one mechanism.
-- No always-loaded context is added: JSON read by tools; a session-start line only on drift;
-  declined items silent forever.
-- The ratchet test refuses undeclared `<plugin>:<skill>` references.
+- No always-loaded context is added: JSON read by tools; declined items silent forever; no
+  session-start component at all.
+- The ratchet test refuses undeclared `<plugin>:<skill>` references and unmapped `when.stack` strings.
 
 ## Budget
 
-`session-start.mjs` output stays ≤20 lines (≤2 from this feature). `harness-init/SKILL.md` gains ~8
-lines — measure with `tools/context-ledger.mjs template`; cut elsewhere in the skill if it crosses
-100. Template CLAUDE.md, rules: unchanged.
+No session-start output and no always-loaded context from this feature. `harness-init/SKILL.md` gains
+~8 lines — measure with `tools/context-ledger.mjs template`; cut elsewhere in the skill if it crosses
+100. Template CLAUDE.md, rules: unchanged by this feature (the always-loaded ledger currently reads
+WARN 1654/2000 — separate dedup work, tracked in `reports/2026-08-29-adversarial-workflow-review.md`).
 
 ## Acceptance
 
 1. Fresh TTY `init` on a Node project with no plugins: asks exactly one required question; on Y,
    `claude plugin list --json` shows `superpowers@claude-plugins-official` at `project` scope and
    `.claude/settings.json` carries `enabledPlugins`; `harness.json.capabilities.accepted` records it.
-2. Same run with `n`: nothing installed; `declined` recorded; the next session-start prints no
-   capability line; `/harness-init` report lists it under degraded roles.
+2. Same run with `n`: nothing installed; `declined` recorded; `/harness-init` report lists it under
+   degraded roles; `/evolve` and `/review-branch` still terminate cleanly via the new
+   finishing-a-development-branch fallback.
 3. Piped `init` (`printf … | node cli/init.js`): no install attempted, one skipped line, exit 0.
 4. `init` with `claude` shimmed absent: `enabledPlugins` hand-written; commands printed; exit 0.
 5. `init` with the shim returning a `strictKnownMarketplaces` refusal: `blocked` recorded; re-running
@@ -272,17 +294,19 @@ lines — measure with `tools/context-ledger.mjs template`; cut elsewhere in the
    delta; a declined item with an unchanged tier is not re-asked.
 8. Rename guard: shim `installPath` lacking `executing-plans` → `update` warns naming
    `implement/SKILL.md`.
-9. `node template/.claude/hooks/smoke-test.mjs` green with four new session-start fixtures (drift, no
-   drift, declined-only, no key); `npm test` green including the manifest ratchet test.
+9. `node template/.claude/hooks/smoke-test.mjs` green (no new fixtures — no hook changes); `npm test`
+   green including both ratchet-test assertions.
 10. `tools/context-ledger.mjs template` within budget.
 
 ## Delivery order — three increments, each independently shippable
 
-1. **Manifest + resolver + `init` + tests** (`capabilities.json`, `capabilities.js`, `merge-settings`
-   keys, `init` required prompt, ratchet test, shim-based tests). Ships value on day one: superpowers is
-   pulled at init.
-2. **`/harness-init` + session-start + `/evolve`** (stack tier, discovery, empty-dir interview,
-   `supersedes` prune, drift line, smoke fixtures).
+1. **Manifest + resolver + `init` + tests + the missing terminal fallback** (`capabilities.json`,
+   `capabilities.js`, `merge-settings` keys, `init` required prompt, both ratchet-test assertions,
+   shim-based tests, the 2-line finishing-a-development-branch fallback in `evolve` +
+   `review-branch`). Ships value on day one: superpowers is pulled at init.
+2. **`/harness-init` + `/evolve`** (stack tier, discovery, empty-dir interview, `supersedes` prune
+   including `.lsp.json` file deletion + its reference web + codebase-search MCP retirement,
+   `capabilities --check` rungs).
 3. **`update` delta + rename guard.**
 
 Release 3.1.0 (minor, additive). ADR-017 "Capabilities are declared, resolved with approval, never
@@ -292,12 +316,14 @@ README install section: one paragraph.
 ## Known limits (accepted, not fixed)
 
 - Superpowers on Codex is unverified; Codex users get the inline fallbacks and a report line.
-- `enabledPlugins` presence ≠ installed (cache could be missing); session-start's drift check is a
-  nudge, the authoritative check is `capabilities --check` (spawns `claude`) in `/harness-init` and
-  `/evolve`.
+- There is no per-session drift detection at all — by design: `enabledPlugins` presence ≠ installed,
+  so a settings-file check lies in the committed-settings teammate case (it reads *present* while the
+  external plugin is absent), and Claude Code already prints the install command there. The
+  authoritative check is `capabilities --check` (spawns `claude`) in `/harness-init` and `/evolve`.
+- Stack detection reads the repo root only; monorepo packages under `packages/*` are invisible to
+  `when.stack` — `/harness-init` discovery and the interview are the monorepo path.
 - `claude plugin details` is parsed by nobody: cost lines are shown verbatim or omitted.
-- Detection proposes, never decides: a `stripe` devDependency in a test util still yields a proposal;
-  the approval gate is the filter.
+- Detection proposes, never decides — and the approval gate is the filter for its false positives.
 - Project-scope `true` overriding a teammate's user-scope `false` is a platform property; we warn the
   adopter, we cannot warn the teammate.
 - Approach C (PHE as a plugin with `dependencies`) is the cleaner end state and is deliberately
