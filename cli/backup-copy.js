@@ -201,10 +201,82 @@ function backupAndCopy(sourceDir, targetDir, projectRoot) {
   return stats;
 }
 
+// ─── .init-meta.json ─────────────────────────────────────────────────────────
+
+// Read an existing .init-meta.json. Any failure — missing, unreadable,
+// unparseable, or the wrong shape — is reported as "no record", never thrown:
+// a corrupt breadcrumb file must not abort an update.
+function readInitMeta(metaPath) {
+  try {
+    var parsed = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+    return parsed;
+  } catch (e) {
+    return null;
+  }
+}
+
+function isMeaningfulVersion(v) {
+  return typeof v === 'string' && v !== '' && v !== 'unknown';
+}
+
+// Write the breadcrumb /harness-init step 0 walks ("for each backedUpFiles
+// entry, reconcile it back into the live file").
+//
+// backedUpFiles ACCUMULATES across runs. It used to be replaced, so a second
+// update listed only that run's backups — the first adoption's AGENTS.md and
+// rules dropped out of the list, and the reconcile that would have recovered
+// the user's content never looked at them again (review F3).
+//
+// previousVersion/newVersion are always this run's. The first adoption's
+// previousVersion is preserved separately as firstInstalledVersion, so the
+// whole upgrade span stays visible instead of collapsing to the last hop.
+function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
+  var metaDir = path.join(targetDir, '.claude');
+  if (!fs.existsSync(metaDir)) {
+    fs.mkdirSync(metaDir, { recursive: true });
+  }
+  var metaPath = path.join(metaDir, '.init-meta.json');
+  var existing = readInitMeta(metaPath);
+
+  var union = [];
+  var seen = Object.create(null);
+  function add(list) {
+    if (!Array.isArray(list)) return;
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i];
+      if (typeof entry !== 'string' || seen[entry]) continue;
+      seen[entry] = true;
+      union.push(entry);
+    }
+  }
+  if (existing) add(existing.backedUpFiles);
+  add(backedUpFiles);
+
+  var meta = {
+    timestamp: new Date().toISOString(),
+    previousVersion: previousVersion || 'unknown',
+    newVersion: newVersion || 'unknown',
+    backedUpFiles: union,
+  };
+
+  // The OLDEST record wins: an earlier run's firstInstalledVersion if it already
+  // carried one, otherwise that run's previousVersion.
+  if (existing) {
+    var first = isMeaningfulVersion(existing.firstInstalledVersion)
+      ? existing.firstInstalledVersion
+      : existing.previousVersion;
+    if (isMeaningfulVersion(first)) meta.firstInstalledVersion = first;
+  }
+
+  fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+}
+
 module.exports = {
   backupAndCopy: backupAndCopy,
   preserveBeforeOverwrite: preserveBeforeOverwrite,
   rotationBackupPath: rotationBackupPath,
   utcStamp: utcStamp,
   sameContent: sameContent,
+  createInitMeta: createInitMeta,
 };

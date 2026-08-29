@@ -6,7 +6,7 @@ const { execFileSync } = require('child_process');
 const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
-const { backupAndCopy, preserveBeforeOverwrite } = require('./backup-copy');
+const { backupAndCopy, preserveBeforeOverwrite, createInitMeta } = require('./backup-copy');
 const { reconcileSettingsJson, settingsNotMergedWarning, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
@@ -60,23 +60,6 @@ function getLocalFallbackDir() {
     return frameworkDir;
   }
   return null;
-}
-
-function createInitMeta(targetDir, previousVersion, newVersion, backedUpFiles) {
-  var metaDir = path.join(targetDir, '.claude');
-  if (!fs.existsSync(metaDir)) {
-    fs.mkdirSync(metaDir, { recursive: true });
-  }
-  var meta = {
-    timestamp: new Date().toISOString(),
-    previousVersion: previousVersion || 'unknown',
-    newVersion: newVersion || 'unknown',
-    backedUpFiles: backedUpFiles,
-  };
-  fs.writeFileSync(
-    path.join(metaDir, '.init-meta.json'),
-    JSON.stringify(meta, null, 2)
-  );
 }
 
 async function main() {

@@ -303,6 +303,106 @@ test('an unreadable dest is backed up rather than skipped (fail toward preservin
   assert.strictEqual(r.backedUp, 1, 'a comparison that cannot be made must still back up');
 });
 
+// ─── Blocker 3: .init-meta.json must accumulate, not replace ────────────────
+// createInitMeta REPLACED the file, so a second update listed only that run's
+// backups — the first adoption's AGENTS.md and rules vanished from the list and
+// /harness-init step 0 ("for each backedUpFiles entry…") reconciled none of the
+// user's content (review F3).
+
+const { createInitMeta } = backupCopy;
+
+function meta(root) {
+  return JSON.parse(read(path.join(root, '.claude', '.init-meta.json')));
+}
+
+test('init.js and update.js use the shared createInitMeta (no private copies)', () => {
+  assert.strictEqual(typeof createInitMeta, 'function', 'backup-copy.js must export createInitMeta');
+  ['init.js', 'update.js'].forEach((file) => {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf-8');
+    assert.ok(
+      !/function createInitMeta\s*\(/.test(src),
+      file + ' must not keep a private createInitMeta — that is how the two drifted'
+    );
+    const req = src.match(/const \{[^}]*\} = require\('\.\/backup-copy'\);/);
+    assert.ok(req && req[0].includes('createInitMeta'), file + ' must import createInitMeta from backup-copy');
+  });
+});
+
+test('a first run writes the files it backed up, with no firstInstalledVersion', () => {
+  const root = dir('meta-first');
+  createInitMeta(root, '2.0.0', '3.1.0', ['AGENTS.md', '.claude/rules/00-core.md']);
+  const m = meta(root);
+  assert.deepStrictEqual(m.backedUpFiles, ['AGENTS.md', '.claude/rules/00-core.md']);
+  assert.strictEqual(m.previousVersion, '2.0.0');
+  assert.strictEqual(m.newVersion, '3.1.0');
+  assert.ok(!('firstInstalledVersion' in m), 'nothing earlier exists to record');
+});
+
+test('a second run UNIONS both runs\' files, deduped and order-stable', () => {
+  const root = dir('meta-union');
+  createInitMeta(root, '2.0.0', '3.1.0', ['AGENTS.md', '.claude/rules/00-core.md']);
+  createInitMeta(root, '3.1.0', '3.2.0', [
+    '.claude/rules/00-core.md.backup-20260830T101112',
+    'AGENTS.md.backup-20260830T101112',
+    'AGENTS.md',
+  ]);
+  const m = meta(root);
+  assert.deepStrictEqual(
+    m.backedUpFiles,
+    [
+      'AGENTS.md',
+      '.claude/rules/00-core.md',
+      '.claude/rules/00-core.md.backup-20260830T101112',
+      'AGENTS.md.backup-20260830T101112',
+    ],
+    'old entries keep their order and come first; each file appears exactly once'
+  );
+  assert.strictEqual(m.backedUpFiles.filter((f) => f === 'AGENTS.md').length, 1, 'no duplicates');
+});
+
+test('the OLDEST record\'s previousVersion is kept as firstInstalledVersion', () => {
+  const root = dir('meta-first-version');
+  createInitMeta(root, '2.0.0', '3.1.0', ['AGENTS.md']);
+  createInitMeta(root, '3.1.0', '3.2.0', ['CLAUDE.md']);
+  let m = meta(root);
+  assert.strictEqual(m.firstInstalledVersion, '2.0.0', 'the first adoption version must survive');
+  assert.strictEqual(m.previousVersion, '3.1.0', 'this run stamps its own versions');
+  assert.strictEqual(m.newVersion, '3.2.0');
+
+  createInitMeta(root, '3.2.0', '3.3.0', ['examples/x.md']);
+  m = meta(root);
+  assert.strictEqual(m.firstInstalledVersion, '2.0.0', 'still the OLDEST, not the previous run');
+  assert.strictEqual(m.previousVersion, '3.2.0');
+  assert.deepStrictEqual(m.backedUpFiles, ['AGENTS.md', 'CLAUDE.md', 'examples/x.md']);
+});
+
+test('an "unknown" previous version is not recorded as firstInstalledVersion', () => {
+  const root = dir('meta-unknown');
+  createInitMeta(root, null, '3.1.0', ['AGENTS.md']);
+  createInitMeta(root, '3.1.0', '3.2.0', ['CLAUDE.md']);
+  const m = meta(root);
+  assert.ok(!('firstInstalledVersion' in m), 'do not stamp a meaningless "unknown"');
+  assert.deepStrictEqual(m.backedUpFiles, ['AGENTS.md', 'CLAUDE.md']);
+});
+
+test('a malformed existing .init-meta.json is treated as absent (never crashes)', () => {
+  const root = dir('meta-malformed');
+  write(path.join(root, '.claude', '.init-meta.json'), '{ not json at all');
+  createInitMeta(root, '3.1.0', '3.2.0', ['AGENTS.md']);
+  const m = meta(root);
+  assert.deepStrictEqual(m.backedUpFiles, ['AGENTS.md']);
+  assert.strictEqual(m.previousVersion, '3.1.0');
+});
+
+test('an existing meta whose backedUpFiles is not a string array is ignored', () => {
+  const root = dir('meta-wrong-shape');
+  write(path.join(root, '.claude', '.init-meta.json'), JSON.stringify({ backedUpFiles: { a: 1 }, previousVersion: '2.0.0' }));
+  createInitMeta(root, '3.1.0', '3.2.0', ['AGENTS.md', 'AGENTS.md']);
+  const m = meta(root);
+  assert.deepStrictEqual(m.backedUpFiles, ['AGENTS.md'], 'this run\'s list, itself deduped');
+  assert.strictEqual(m.firstInstalledVersion, '2.0.0', 'a readable previousVersion is still salvaged');
+});
+
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log('\n' + passed + ' passed, ' + failed + ' failed\n');
 process.exit(failed > 0 ? 1 : 0);
