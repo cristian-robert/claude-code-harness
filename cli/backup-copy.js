@@ -23,9 +23,16 @@
 // they were user content, and /harness-init then reconciled PHE files instead
 // of the user's.
 //
-// Fail-open: every comparison and every filesystem probe here is wrapped, and
-// failure always falls toward TAKING a backup. The backup machinery must never
-// be the thing that kills an update, and it must never skip a backup on doubt.
+// Fail-open applies to DECISIONS only: every comparison and existence probe here
+// is wrapped, and failure always falls toward TAKING a backup — a file we cannot
+// read is never assumed to be safe somewhere else.
+//
+// The two backup WRITES (fs.copyFileSync into .backup / into the rotation name)
+// are deliberately NOT wrapped. If the backup cannot be written, the overwrite it
+// exists to protect must not happen either, so the error propagates and the
+// caller aborts the run with nothing clobbered. Aborting is the fail-SAFE choice
+// for data; swallowing the error would overwrite the live file unprotected —
+// exactly the loss this module was written to stop.
 
 const fs = require('fs');
 const path = require('path');
