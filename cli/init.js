@@ -598,7 +598,7 @@ async function main() {
   }
   console.log('');
   console.log('  .claude/skills/      pipeline + delivery + knowledge skills (/plan-work …/research)');
-  console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer');
+  console.log('  .claude/agents/      scout · code-reviewer · qa-evaluator · research-gatherer · architect-agent');
   console.log('  .claude/rules/       always-on core + paths-scoped domain rules');
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
   console.log('  .claude/references/  on-demand references + knowledge-base-scaffold + vault-scaffold');
