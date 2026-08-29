@@ -405,6 +405,40 @@ if (process.platform !== 'win32') {
       result.manual.length === 1 && result.manual[0].command === 'claude plugin install superpowers@claude-plugins-official --scope project');
     check('apply: no claude → nothing under installed/failed', result.installed.length === 0 && result.failed.length === 0);
   }
+
+  // Fix wave (C2): a disabledByUser id must be re-ENABLED, never re-installed —
+  // `claude plugin enable` is the documented re-enable path; install-on-disabled
+  // is undocumented, so the consent override may not take effect while
+  // harness.json records accepted+overrodeUserDisable.
+  {
+    const bindir = tmpdir();
+    const argvLog = path.join(bindir, 'argv.log');
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'echo "$@" >> "' + argvLog + '"\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo "[]"; exit 0; fi\n' +
+      'exit 0\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const proj = tmpdir();
+    const { result } = capture(() => cap.applyCapabilities({
+      ids: ['superpowers@claude-plugins-official'],
+      planned: plannedWith('disabledByUser', entryFor({ overridesUserDisable: true })),
+      scope: 'project', projectRoot: proj, manifestVersion: 1, manifest: MANIFEST,
+    }));
+    process.env.PATH = prevPath;
+    const argv = fs.readFileSync(argvLog, 'utf-8').split('\n');
+    check('apply: disabledByUser id → plugin enable <id> --scope project',
+      argv.indexOf('plugin enable superpowers@claude-plugins-official --scope project') !== -1);
+    check('apply: disabledByUser id → NO plugin install spawned',
+      argv.every(l => l.indexOf('plugin install') === -1));
+    const hjEnable = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('apply: enable recorded as accepted with overrodeUserDisable',
+      !!hjEnable.capabilities.accepted['superpowers@claude-plugins-official'] &&
+      hjEnable.capabilities.accepted['superpowers@claude-plugins-official'].overrodeUserDisable === true);
+    check('apply: enabled id lands in result.installed', result.installed.indexOf('superpowers@claude-plugins-official') !== -1);
+  }
 }
 
 // ── Task 7: `capabilities` subcommand end-to-end via cli/index.js ────────
@@ -777,6 +811,36 @@ if (process.platform !== 'win32') {
       check('t8e: the exact command logged',
         lines.join('\n').indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
       check('t8e: no skippedReason, nothing installed', !!r && r.skippedReason === undefined && r.installed.length === 0);
+    });
+
+    // Fix wave (C2): an installed-but-disabled required plugin is ASKED with
+    // the override NOTE line, and a 'y' answer routes to `plugin enable`,
+    // never `plugin install`.
+    await t8('disabled-reenables', async () => {
+      const proj = mkProj8();
+      const bindir = tmpdir();
+      const argvLog = path.join(bindir, 'argv.log');
+      fs.writeFileSync(path.join(bindir, 'claude'),
+        '#!/bin/sh\n' +
+        'echo "$@" >> "' + argvLog + '"\n' +
+        'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo \'[{"name":"claude-plugins-official"}]\'; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo \'[{"id":"superpowers@claude-plugins-official","enabled":false,"scope":"user"}]\'; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "details" ]; then echo "details"; exit 0; fi\n' +
+        'exit 0\n');
+      fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+      const askFn = mkAsk(['y']);
+      const lines = [];
+      const r = await withEnv(proj, bindir, () =>
+        cap.initCapabilitiesFlow({ targetDir: proj, targets: ['claude'], tty: true, askFn, log: (l) => lines.push(l) }));
+      const argv = fs.readFileSync(argvLog, 'utf-8').split('\n');
+      check('t8g: asked once, with the override NOTE line',
+        askFn.calls.length === 1 &&
+        lines.join('\n').indexOf('NOTE: you disabled this at user scope — project-scope enable overrides it.') !== -1);
+      check('t8g: y routes to plugin enable at project scope',
+        argv.indexOf('plugin enable superpowers@claude-plugins-official --scope project') !== -1);
+      check('t8g: no plugin install spawned', argv.every(l => l.indexOf('plugin install') === -1));
+      check('t8g: result.installed carries the re-enabled id', !!r && r.installed.indexOf('superpowers@claude-plugins-official') !== -1);
     });
   }
 })().catch((e) => {

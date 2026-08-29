@@ -342,7 +342,12 @@ function applyCapabilities(opts) {
         result.marketplacesAdded.push(entry.marketplace);
       }
 
-      var res = runClaude(['plugin', 'install', id, '--scope', scope]);
+      // A disabledByUser row is re-ENABLED, never re-installed: `claude plugin
+      // enable` is the documented re-enable path (platform-verified);
+      // install-on-disabled is undocumented and may leave the plugin disabled
+      // while harness.json records accepted+overrodeUserDisable.
+      var verb = found.bucket === 'disabledByUser' ? 'enable' : 'install';
+      var res = runClaude(['plugin', verb, id, '--scope', scope]);
       if (res === null) { goManual(id, entry); continue; }
       if (!res.ok) { fail(id, classifyFailure((res.err || '') + '\n' + (res.out || ''))); continue; }
 
