@@ -407,5 +407,191 @@ if (process.platform !== 'win32') {
   }
 }
 
+// ── Task 7: `capabilities` subcommand end-to-end via cli/index.js ────────
+// Spawned like a user would run it: node cli/index.js capabilities <flags>,
+// cwd = a tmp project, PATH = shim dir (or an empty dir for no-claude paths).
+if (process.platform !== 'win32') {
+  const { spawnSync } = require('child_process');
+  const INDEX = path.join(__dirname, 'index.js');
+  // The Task 5 fixture manifest, written as the project's installed copy.
+  const FIXTURE = { marketplaces: { 'claude-plugins-official': { source: { source: 'github', repo: 'anthropics/claude-plugins-official' }, trust: 'official' } }, capabilities: [
+    { id: 'superpowers@claude-plugins-official', class: 'plugin', tier: 'required', skills: ['brainstorming'], why: 'w' },
+    { id: 'typescript-lsp@claude-plugins-official', class: 'plugin', tier: 'recommended', when: { files: ['tsconfig.json'] }, requiresBinary: 'typescript-language-server', why: 'w' },
+    { id: 'codex@openai-codex', class: 'plugin', tier: 'optional', skills: ['rescue'], why: 'w' },
+    { id: 'architect-agent', class: 'global-agent', tier: 'recommended', provision: 'manual', why: 'w' },
+  ] };
+  const mkProject = (harness, opts) => {
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    if (!opts || !opts.noManifest) {
+      fs.writeFileSync(path.join(proj, '.claude', 'capabilities.json'), JSON.stringify(FIXTURE));
+    }
+    fs.writeFileSync(path.join(proj, '.claude', 'harness.json'), JSON.stringify(harness || {}));
+    return proj;
+  };
+  const mkShim = (body) => {
+    const bindir = tmpdir();
+    fs.writeFileSync(path.join(bindir, 'claude'), '#!/bin/sh\n' + body);
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    return bindir;
+  };
+  // CLAUDE_CONFIG_DIR isolated so readEnabledPlugins never reads the real ~/.claude.
+  const run = (args, proj, pathDir) => spawnSync(
+    process.execPath, [INDEX, 'capabilities'].concat(args),
+    { cwd: proj, encoding: 'utf-8', env: Object.assign({}, process.env, { PATH: pathDir, CLAUDE_CONFIG_DIR: tmpdir() }) });
+  const okShimBody =
+    'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+    'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo \'[{"name":"claude-plugins-official"}]\'; exit 0; fi\n' +
+    'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo "[]"; exit 0; fi\n';
+
+  // --propose --json: full pipeline — manifest, stack, files, binaries, tiers all three.
+  {
+    const proj = mkProject({});
+    fs.writeFileSync(path.join(proj, 'tsconfig.json'), '{}'); // when.files trigger
+    const r = run(['--propose', '--json'], proj, mkShim(okShimBody + 'exit 1\n'));
+    check('propose: exit 0', r.status === 0);
+    let parsed = null;
+    try { parsed = JSON.parse(r.stdout); } catch (e) { /* fails below */ }
+    check('propose: stdout parses as {stack, plan}', !!parsed && Array.isArray(parsed.stack) && !!parsed.plan);
+    check('propose: plan.install names superpowers', !!parsed && parsed.plan.install.some(e => e.id === 'superpowers@claude-plugins-official'));
+    check('propose: tiers include optional → codex in needsMarketplace', !!parsed && parsed.plan.needsMarketplace.some(e => e.id === 'codex@openai-codex'));
+    check('propose: when.files matched, missing binary flagged', !!parsed && parsed.plan.install.some(e => e.id === 'typescript-lsp@claude-plugins-official' && e.binaryMissing === true));
+    check('propose: global-agent in manual', !!parsed && parsed.plan.manual.some(e => e.id === 'architect-agent'));
+  }
+
+  // --propose with no manifest: one-line error naming the path, exit 1.
+  {
+    const proj = mkProject({}, { noManifest: true });
+    const r = run(['--propose', '--json'], proj, tmpdir());
+    check('propose: missing manifest → exit 1', r.status === 1);
+    check('propose: error names the manifest path', (r.stderr + r.stdout).indexOf(path.join('.claude', 'capabilities.json')) !== -1);
+  }
+
+  // --check: accepted id not installed → each missing id + install command, exit 1.
+  {
+    const proj = mkProject({ capabilities: { scope: 'project', accepted: { 'superpowers@claude-plugins-official': { at: 'x', tier: 'required' } } } });
+    const r = run(['--check'], proj, mkShim(okShimBody + 'exit 1\n')); // plugin list []
+    check('check: accepted-but-uninstalled → exit 1', r.status === 1);
+    check('check: prints the missing id + install command',
+      r.stdout.indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
+  }
+
+  // --check: all accepted installed → one ok line, exit 0.
+  {
+    const proj = mkProject({ capabilities: { accepted: { 'superpowers@claude-plugins-official': { at: 'x', tier: 'required' } } } });
+    const shim = mkShim(
+      'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo \'[{"id":"superpowers@elsewhere","enabled":true}]\'; exit 0; fi\n' +
+      'echo "[]"; exit 0\n');
+    const r = run(['--check'], proj, shim);
+    check('check: bare-name match across marketplaces → exit 0', r.status === 0);
+  }
+
+  // --check: no claude → the exact cannot-verify line, exit 0 (fail-open, ADR-006).
+  {
+    const proj = mkProject({ capabilities: { accepted: { 'superpowers@claude-plugins-official': { at: 'x', tier: 'required' } } } });
+    const r = run(['--check'], proj, tmpdir());
+    check('check: no claude → exit 0', r.status === 0);
+    check('check: no claude → the documented line', r.stdout.indexOf('capabilities --check: claude not on PATH — cannot verify') !== -1);
+  }
+
+  // --reset: declined + unavailable cleared; accepted/scope/other keys survive.
+  {
+    const proj = mkProject({ stopGate: { enabled: true }, capabilities: {
+      scope: 'project', resolvedAt: 'x',
+      accepted: { 'superpowers@claude-plugins-official': { at: 'x', tier: 'required' } },
+      declined: { 'codex@openai-codex': { at: 'x', tier: 'optional' } },
+      unavailable: { 'stripe@claude-plugins-official': { at: 'x', reason: 'network' } },
+    } });
+    const r = run(['--reset'], proj, tmpdir());
+    const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('reset: exit 0', r.status === 0);
+    check('reset: declined and unavailable gone', hj.capabilities.declined === undefined && hj.capabilities.unavailable === undefined);
+    check('reset: accepted/scope/resolvedAt/other keys intact',
+      !!hj.capabilities.accepted['superpowers@claude-plugins-official'] && hj.capabilities.scope === 'project' &&
+      hj.capabilities.resolvedAt === 'x' && hj.stopGate.enabled === true);
+    check('reset: prints what was cleared', r.stdout.indexOf('codex@openai-codex') !== -1 && r.stdout.indexOf('stripe@claude-plugins-official') !== -1);
+  }
+
+  // --apply, no claude: manual command printed VERBATIM (carry-forward from the
+  // Task 6 review: apply returns the list, the CALLER prints it), settings
+  // hand-written, exit 0.
+  {
+    const proj = mkProject({});
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'), '{}');
+    const r = run(['--apply', 'superpowers@claude-plugins-official'], proj, tmpdir());
+    check('apply: no claude → exit 0', r.status === 0);
+    check('apply: manual line carries the exact command',
+      r.stdout.indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
+    const settings = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf-8'));
+    check('apply: no claude → enabledPlugins hand-written', !!settings.enabledPlugins && settings.enabledPlugins['superpowers@claude-plugins-official'] === true);
+  }
+
+  // --apply scope resolution: no --scope flag → recorded capabilities.scope wins.
+  {
+    const proj = mkProject({ capabilities: { scope: 'user' } });
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'), '{}');
+    const r = run(['--apply', 'superpowers@claude-plugins-official'], proj, tmpdir());
+    check('apply: recorded scope used when no --scope flag', r.stdout.indexOf('--scope user') !== -1);
+  }
+
+  // --apply, install refused by policy: failed row printed with its reason, STILL exit 0.
+  {
+    const proj = mkProject({});
+    const shim = mkShim(okShimBody +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then echo "Error: blocked by strictKnownMarketplaces" >&2; exit 1; fi\n' +
+      'exit 0\n');
+    const r = run(['--apply', 'superpowers@claude-plugins-official'], proj, shim);
+    check('apply: failure still exits 0 (fail-open)', r.status === 0);
+    check('apply: failed row printed with id + reason',
+      r.stdout.indexOf('superpowers@claude-plugins-official') !== -1 && r.stdout.indexOf('blocked: strictKnownMarketplaces') !== -1);
+  }
+
+  // --apply, success: installed line + reload hint land on stdout.
+  {
+    const proj = mkProject({});
+    const shim = mkShim(okShimBody +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi\n' +
+      'exit 0\n');
+    const r = run(['--apply', 'superpowers@claude-plugins-official'], proj, shim);
+    check('apply: success exits 0', r.status === 0);
+    check('apply: installed id + reload hint printed',
+      r.stdout.indexOf('superpowers@claude-plugins-official') !== -1 &&
+      r.stdout.indexOf('Run /reload-plugins in any open session.') !== -1);
+  }
+
+  // --apply of a provision:manual PLUGIN with claude present: never installed
+  // by apply (spec: userConfig/manual rows), but the command is printed so the
+  // user can run it themselves. Exit 0.
+  {
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(proj, '.claude', 'capabilities.json'), JSON.stringify({
+      marketplaces: FIXTURE.marketplaces,
+      capabilities: [{ id: 'fussy@claude-plugins-official', class: 'plugin', tier: 'required', provision: 'manual', why: 'w' }],
+    }));
+    fs.writeFileSync(path.join(proj, '.claude', 'harness.json'), '{}');
+    const argvLog = path.join(tmpdir(), 'argv.log');
+    const shim = mkShim('echo "$@" >> "' + argvLog + '"\n' + okShimBody + 'exit 0\n');
+    const r = run(['--apply', 'fussy@claude-plugins-official'], proj, shim);
+    check('apply: provision-manual plugin → exit 0, command printed, not installed',
+      r.status === 0 &&
+      r.stdout.indexOf('claude plugin install fussy@claude-plugins-official --scope project') !== -1 &&
+      (!fs.existsSync(argvLog) || fs.readFileSync(argvLog, 'utf-8').indexOf('plugin install fussy') === -1));
+  }
+
+  // Unusable invocations: usage to stderr, exit 1.
+  {
+    const proj = mkProject({});
+    const bogus = run(['--bogus'], proj, tmpdir());
+    check('usage: unknown flag → exit 1 + usage on stderr', bogus.status === 1 && bogus.stderr.indexOf('Usage') !== -1);
+    const none = run([], proj, tmpdir());
+    check('usage: no mode → exit 1', none.status === 1 && none.stderr.indexOf('Usage') !== -1);
+    const emptyApply = run(['--apply'], proj, tmpdir());
+    check('usage: --apply without ids → exit 1', emptyApply.status === 1);
+    const badScope = run(['--apply', 'x@y', '--scope', 'galactic'], proj, tmpdir());
+    check('usage: invalid --scope value → exit 1', badScope.status === 1);
+  }
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed === 0 ? 0 : 1);

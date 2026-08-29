@@ -380,6 +380,231 @@ function applyCapabilities(opts) {
   return result;
 }
 
+// ── mainCli — the `capabilities` subcommand (spec: Components 2, CLI line) ──
+// Exit-code strategy: process.exitCode, never process.exit — mainCli is fully
+// synchronous, so setting exitCode before returning behaves identically while
+// letting piped stdout flush (process.exit can truncate it). Operational
+// failures print and exit 0 (fail-open, ADR-006); ONLY an unusable invocation
+// (unknown flag, no mode, bad --scope, --apply without ids), a missing/corrupt
+// manifest, a corrupt harness.json on --reset, or a --check miss exits 1.
+
+var USAGE = [
+  'Usage: npx perfect-harness-engineering capabilities <mode> [--scope user|project|local]',
+  '',
+  'Modes (exactly one):',
+  '  --propose [--json]   Print the resolution plan as JSON: {stack, plan}',
+  '  --apply id1,id2      Install the named planner-approved ids (the ids ARE the approval; runs without a TTY)',
+  '  --check              Verify every accepted plugin is still installed; exit 1 when one is missing',
+  '  --reset              Clear recorded declined/unavailable decisions (accepted and scope are kept)',
+].join('\n');
+
+var SCOPES = ['user', 'project', 'local'];
+
+// harness.json `capabilities`, with every failure degrading to {} — the CLI
+// must still propose when the decisions file is absent or corrupt. Fail-open
+// on READS only; the write path stays strict via writeCapabilityDecisions.
+function readDecisions(projectRoot) {
+  try {
+    var parsed = JSON.parse(fs.readFileSync(path.join(projectRoot, '.claude', 'harness.json'), 'utf-8'));
+    var caps = parsed && parsed.capabilities;
+    return caps && typeof caps === 'object' && !Array.isArray(caps) ? caps : {};
+  } catch (e) { return {}; }
+}
+
+// Shared by --propose and --apply: manifest → detection inputs → plan.
+// files/binaries are derived FROM the manifest (only names it asks about are
+// probed), so the probe list can never drift from the declaration.
+function buildProposal(projectRoot) {
+  var manifestPath = path.join(projectRoot, '.claude', 'capabilities.json');
+  var manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('not an object');
+  } catch (e) {
+    return { error: 'capabilities: no readable manifest at ' + manifestPath + ' — run init first' };
+  }
+  var caps = Array.isArray(manifest.capabilities) ? manifest.capabilities : [];
+  var files = [];
+  var binaries = {};
+  for (var i = 0; i < caps.length; i++) {
+    var names = (caps[i] && caps[i].when && caps[i].when.files) || [];
+    for (var j = 0; j < names.length; j++) {
+      if (files.indexOf(names[j]) === -1 && fs.existsSync(path.join(projectRoot, names[j]))) files.push(names[j]);
+    }
+    var bin = caps[i] && caps[i].requiresBinary;
+    if (bin && !(bin in binaries)) binaries[bin] = findOnPath(bin);
+  }
+  var decisions = readDecisions(projectRoot);
+  var state = readState(projectRoot);
+  var stack = require('./init.js').detectTechStack(); // reads cwd === projectRoot
+  var plan = planCapabilities({
+    manifest: manifest, stack: stack, files: files, binaries: binaries,
+    state: state, decisions: decisions, tiers: ['required', 'recommended', 'optional'],
+  });
+  return { manifest: manifest, stack: stack, plan: plan, state: state, decisions: decisions };
+}
+
+function mainCli(argv) {
+  argv = argv || [];
+  var mode = null, applyIds = null, scopeFlag = null;
+  function bad(msg) {
+    if (msg) console.error('capabilities: ' + msg);
+    console.error(USAGE);
+    process.exitCode = 1;
+  }
+  // Plain argv scan, no parsing library. --json is accepted as a marker next
+  // to --propose; JSON is the only propose format today, so it changes nothing.
+  for (var i = 0; i < argv.length; i++) {
+    var a = argv[i];
+    if (a === '--propose' || a === '--check' || a === '--reset') {
+      if (mode) return bad('one mode at a time');
+      mode = a.slice(2);
+    } else if (a === '--apply') {
+      if (mode) return bad('one mode at a time');
+      mode = 'apply';
+      var idsRaw = argv[i + 1];
+      if (!idsRaw || idsRaw.slice(0, 2) === '--') return bad('--apply needs a comma-separated id list');
+      i++;
+      applyIds = idsRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!applyIds.length) return bad('--apply needs a comma-separated id list');
+    } else if (a === '--scope') {
+      if (SCOPES.indexOf(argv[i + 1]) === -1) return bad('--scope must be user, project or local');
+      i++;
+      scopeFlag = argv[i];
+    } else if (a === '--json') {
+      // marker only — see above
+    } else {
+      return bad('unknown flag: ' + a);
+    }
+  }
+  if (!mode) return bad(null);
+  var projectRoot = process.cwd();
+
+  if (mode === 'propose') {
+    var prop = buildProposal(projectRoot);
+    if (prop.error) { console.error(prop.error); process.exitCode = 1; return; }
+    console.log(JSON.stringify({ stack: prop.stack, plan: prop.plan }, null, 2));
+    return;
+  }
+
+  if (mode === 'apply') {
+    var ap = buildProposal(projectRoot);
+    if (ap.error) { console.error(ap.error); process.exitCode = 1; return; }
+    var recorded = SCOPES.indexOf(ap.decisions.scope) !== -1 ? ap.decisions.scope : null;
+    var scope = scopeFlag || recorded || 'project';
+    // No claude → the planner parks EVERY row in `manual`; approved plugin rows
+    // still belong to apply (its own no-claude branch hand-writes settings and
+    // returns the exact command). Intrinsically-manual rows (global agents,
+    // provision: manual) are installable by nobody — reported, never applied.
+    var planned = {
+      install: ap.plan.install.slice(), needsMarketplace: ap.plan.needsMarketplace,
+      reoffer: ap.plan.reoffer, disabledByUser: ap.plan.disabledByUser,
+    };
+    var reportOnly = {};
+    ap.plan.manual.forEach(function (entry) {
+      if (applyIds.indexOf(entry.id) === -1) return;
+      if (ap.state.claude === null && entry.class === 'plugin') planned.install.push(entry);
+      else reportOnly[entry.id] = entry;
+    });
+    var runIds = applyIds.filter(function (id) { return !reportOnly[id]; });
+    var result = applyCapabilities({
+      ids: runIds, planned: planned, scope: scope, projectRoot: projectRoot,
+      manifestVersion: ap.manifest.version, manifest: ap.manifest,
+    });
+    // Every outcome lands as a printed line — apply RETURNS the lists, the
+    // CALLER prints them (Task 6 review carry-forward).
+    result.installed.forEach(function (id) { console.log('installed: ' + id); });
+    result.marketplacesAdded.forEach(function (n) { console.log('marketplace added: ' + n); });
+    result.manual.forEach(function (m) { console.log('manual — run yourself: ' + m.command); });
+    result.failed.forEach(function (f) { console.log('failed: ' + (f.id || '(apply)') + ' — ' + f.reason); });
+    Object.keys(reportOnly).forEach(function (id) {
+      // A provision:manual PLUGIN is installable — just never BY apply (spec:
+      // userConfig/manual rows) — so hand the user the command. Global agents
+      // and other classes have no install command at all.
+      if (reportOnly[id].class === 'plugin') {
+        console.log('manual — run yourself: claude plugin install ' + id + ' --scope ' + scope);
+      } else {
+        console.log('manual provisioning (' + reportOnly[id].class + '): ' + id + ' — not installable via claude');
+      }
+    });
+    return; // exit 0 whatever the per-item outcomes were (fail-open, ADR-006)
+  }
+
+  if (mode === 'check') {
+    var decisions = readDecisions(projectRoot);
+    var accepted = decisions.accepted && typeof decisions.accepted === 'object' && !Array.isArray(decisions.accepted)
+      ? Object.keys(decisions.accepted) : [];
+    if (findOnPath('claude') === null) {
+      console.log('capabilities --check: claude not on PATH — cannot verify');
+      return;
+    }
+    var list = runClaude(['plugin', 'list', '--json']);
+    var installedNames = null;
+    if (list && list.ok) {
+      try {
+        var arr = JSON.parse(list.out);
+        if (Array.isArray(arr)) {
+          installedNames = {};
+          arr.forEach(function (entry) {
+            if (!entry || typeof entry !== 'object') return;
+            var name = String(entry.id || '').split('@')[0];
+            if (name) installedNames[name] = true; // any copy counts, enabled or not
+          });
+        }
+      } catch (e) { /* unparseable → cannot verify */ }
+    }
+    if (installedNames === null) {
+      console.log('capabilities --check: could not read `claude plugin list --json` — cannot verify');
+      return; // fail-open: a broken claude must not fail the pipeline
+    }
+    var checkScope = SCOPES.indexOf(decisions.scope) !== -1 ? decisions.scope : 'project';
+    var missing = accepted.filter(function (id) { return !installedNames[String(id).split('@')[0]]; });
+    if (missing.length) {
+      missing.forEach(function (id) {
+        console.log(id + ' — accepted but not installed. Run: claude plugin install ' + id + ' --scope ' + checkScope);
+      });
+      process.exitCode = 1;
+      return;
+    }
+    console.log('capabilities --check: ok — ' + accepted.length + ' accepted, all installed');
+    return;
+  }
+
+  // mode === 'reset'
+  var hj = path.join(projectRoot, '.claude', 'harness.json');
+  if (!fs.existsSync(hj)) { console.log('capabilities --reset: nothing to clear'); return; }
+  var current;
+  try {
+    current = JSON.parse(fs.readFileSync(hj, 'utf-8'));
+    if (!current || typeof current !== 'object' || Array.isArray(current)) throw new Error('not an object');
+  } catch (e) {
+    // Same stance as writeCapabilityDecisions: harness.json holds the stop
+    // gate — a corrupt file is REFUSED, never overwritten.
+    console.error('capabilities --reset: ' + hj + ' is not a JSON object. Fix it by hand and re-run — refusing to overwrite it.');
+    process.exitCode = 1;
+    return;
+  }
+  var caps = current.capabilities;
+  if (!caps || typeof caps !== 'object' || Array.isArray(caps)) {
+    console.log('capabilities --reset: nothing to clear');
+    return;
+  }
+  var cleared = [];
+  ['declined', 'unavailable'].forEach(function (k) {
+    if (caps[k] && typeof caps[k] === 'object' && !Array.isArray(caps[k])) {
+      Object.keys(caps[k]).forEach(function (id) { cleared.push(k + ': ' + id); });
+    }
+    delete caps[k];
+  });
+  writeJsonAtomic(hj, current);
+  if (cleared.length) {
+    console.log('capabilities --reset: cleared');
+    cleared.forEach(function (line) { console.log('  ' + line); });
+  } else {
+    console.log('capabilities --reset: nothing to clear');
+  }
+}
+
 module.exports = {
   findOnPath: findOnPath,
   runClaude: runClaude,
@@ -391,4 +616,5 @@ module.exports = {
   classifyFailure: classifyFailure,
   writeCapabilityDecisions: writeCapabilityDecisions,
   applyCapabilities: applyCapabilities,
+  mainCli: mainCli,
 };
