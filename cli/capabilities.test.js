@@ -36,5 +36,42 @@ check('STACK_SIGNALS has no duplicates', new Set(initMod.STACK_SIGNALS).size ===
   check('detect: Prisma deduped', got.filter(s => s === 'Prisma').length === 1);
 }
 
+// ── Task 4: findOnPath / runClaude / readState with a fake `claude` ──────
+if (process.platform !== 'win32') {
+  const cap = require('./capabilities.js');
+  {
+    const bindir = tmpdir();
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo \'[{"id":"superpowers@claude-plugins-official","scope":"user","enabled":true,"installPath":"/tmp/x","version":"6.3.0"}]\'; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then echo "[]"; exit 0; fi\n' +
+      'exit 1\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir; // shim is the ONLY thing on PATH
+
+    check('findOnPath finds the shim', cap.findOnPath('claude') === path.join(bindir, 'claude'));
+    check('findOnPath misses absent bins', cap.findOnPath('definitely-not-a-binary-xyz') === null);
+    const v = cap.runClaude(['--version']);
+    check('runClaude ok', v && v.ok === true && v.out.indexOf('9.9.9') !== -1);
+    const bad = cap.runClaude(['nonsense']);
+    check('runClaude failure carries ok:false, not a throw', bad && bad.ok === false);
+
+    const proj = tmpdir();
+    const state = cap.readState(proj);
+    check('state.claude read', state.claude === '9.9.9 (Claude Code)');
+    check('plugin indexed by bare name', !!state.pluginNames['superpowers']);
+
+    process.env.PATH = prevPath;
+    check('no claude → state.claude null', (function () {
+      process.env.PATH = tmpdir(); // empty dir
+      const s = cap.readState(proj);
+      process.env.PATH = prevPath;
+      return s.claude === null;
+    })());
+  }
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed === 0 ? 0 : 1);
