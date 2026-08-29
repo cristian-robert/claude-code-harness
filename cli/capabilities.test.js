@@ -579,6 +579,45 @@ if (process.platform !== 'win32') {
       (!fs.existsSync(argvLog) || fs.readFileSync(argvLog, 'utf-8').indexOf('plugin install fussy') === -1));
   }
 
+  // Fix round 1 (Important): claude ON PATH but `--version` fails → readState
+  // says claude:null, but applyCapabilities' noClaude check (findOnPath) says
+  // present. The fold must NOT push manual rows into planned.install there, or
+  // apply attempts REAL `plugin install` runs instead of the hand-write.
+  {
+    const proj = mkProject({});
+    const argvLog = path.join(tmpdir(), 'argv.log');
+    const shim = mkShim(
+      'echo "$@" >> "' + argvLog + '"\n' +
+      'if [ "$1" = "--version" ]; then exit 1; fi\n' + // broken, not absent
+      'exit 0\n');
+    const r = run(['--apply', 'superpowers@claude-plugins-official'], proj, shim);
+    const argv = fs.existsSync(argvLog) ? fs.readFileSync(argvLog, 'utf-8') : '';
+    check('apply: claude on PATH but --version fails → NO real install attempted',
+      r.status === 0 && argv.indexOf('plugin install') === -1);
+    check('apply: broken claude → command still printed for the user',
+      r.stdout.indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
+  }
+
+  // Fix round 1 (Minor 2): on the no-claude path a provision:manual plugin is
+  // report-only — command printed, but NOT hand-written into enabledPlugins
+  // (the manifest author marked it hands-off).
+  {
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(proj, '.claude', 'capabilities.json'), JSON.stringify({
+      marketplaces: FIXTURE.marketplaces,
+      capabilities: [{ id: 'fussy@claude-plugins-official', class: 'plugin', tier: 'required', provision: 'manual', why: 'w' }],
+    }));
+    fs.writeFileSync(path.join(proj, '.claude', 'harness.json'), '{}');
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'), '{}');
+    const r = run(['--apply', 'fussy@claude-plugins-official'], proj, tmpdir()); // no claude anywhere
+    const settings = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf-8'));
+    check('apply: no claude → provision:manual plugin NOT hand-written into enabledPlugins',
+      r.status === 0 && settings.enabledPlugins === undefined);
+    check('apply: no claude → provision:manual plugin command still printed',
+      r.stdout.indexOf('claude plugin install fussy@claude-plugins-official --scope project') !== -1);
+  }
+
   // Unusable invocations: usage to stderr, exit 1.
   {
     const proj = mkProject({});

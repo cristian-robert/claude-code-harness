@@ -494,16 +494,28 @@ function mainCli(argv) {
     var scope = scopeFlag || recorded || 'project';
     // No claude → the planner parks EVERY row in `manual`; approved plugin rows
     // still belong to apply (its own no-claude branch hand-writes settings and
-    // returns the exact command). Intrinsically-manual rows (global agents,
-    // provision: manual) are installable by nobody — reported, never applied.
+    // returns the exact command). The fold predicate MUST be findOnPath — the
+    // same check applyCapabilities uses — not state.claude, which is ALSO null
+    // when claude is on PATH but `--version` fails; folding in that corner
+    // would send rows to real `plugin install` runs instead of the hand-write.
+    // Broken-but-present claude therefore keeps every row report-only:
+    // commands printed, nothing attempted, nothing hand-written.
+    // provision:manual plugins never fold either — the manifest author marked
+    // them hands-off, so they get their command printed, never an
+    // enabledPlugins entry. Global agents are installable by nobody.
     var planned = {
       install: ap.plan.install.slice(), needsMarketplace: ap.plan.needsMarketplace,
       reoffer: ap.plan.reoffer, disabledByUser: ap.plan.disabledByUser,
     };
+    var provisionManual = {};
+    (Array.isArray(ap.manifest.capabilities) ? ap.manifest.capabilities : []).forEach(function (c) {
+      if (c && c.provision === 'manual') provisionManual[c.id] = true;
+    });
+    var claudeMissing = findOnPath('claude') === null;
     var reportOnly = {};
     ap.plan.manual.forEach(function (entry) {
       if (applyIds.indexOf(entry.id) === -1) return;
-      if (ap.state.claude === null && entry.class === 'plugin') planned.install.push(entry);
+      if (claudeMissing && entry.class === 'plugin' && !provisionManual[entry.id]) planned.install.push(entry);
       else reportOnly[entry.id] = entry;
     });
     var runIds = applyIds.filter(function (id) { return !reportOnly[id]; });
