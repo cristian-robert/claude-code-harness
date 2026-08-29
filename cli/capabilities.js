@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { writeJsonAtomic } = require('./harness-config');
-const { deepMergeUserWins } = require('./merge-settings');
+const { deepMergeUserWins, restorePluginKeys } = require('./merge-settings');
 
 // PATH scan in Node — never `command -v`/`which` (ADR-007: shell checks fail open
 // on Windows). PATHEXT makes `claude` match claude.CMD on win32.
@@ -181,6 +181,205 @@ function planCapabilities(opts) {
   return out;
 }
 
+// ── apply — the thin shell (spec: "apply() [thin shell]") ────────────────
+
+// Pure text → reason. Order mirrors the spec's failure table: a policy setting
+// name beats network text beats "not found"; anything else degrades to the
+// first non-empty line (wording drift becomes a report line, never a crash).
+function classifyFailure(err) {
+  try {
+    var text = String(err == null ? '' : err);
+    var blocked = text.match(/(strictKnownMarketplaces|blockedMarketplaces|disableCommandPluginSources|managed settings)/i);
+    if (blocked) return 'blocked: ' + blocked[1];
+    if (/ENOTFOUND|ETIMEDOUT|EAI_AGAIN|network|fetch failed|getaddrinfo/i.test(text)) return 'network';
+    if (/not found/i.test(text)) return 'not-found';
+    var lines = text.split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line) return line.slice(0, 120);
+    }
+    return 'unknown';
+  } catch (e) { return 'unknown'; } // a hostile toString still gets a reason
+}
+
+var DECISION_STATES = ['accepted', 'declined', 'unavailable'];
+
+// Merge capability decisions into harness.json, preserving every other key.
+// The ONE deliberate throw in this module: harness.json holds the stop gate, so
+// an unparseable file REFUSES rather than overwrites (writeKnowledgeConfig parity).
+function writeCapabilityDecisions(projectRoot, patch) {
+  var p = path.join(projectRoot, '.claude', 'harness.json');
+  var current = {};
+  if (fs.existsSync(p)) {
+    try { current = JSON.parse(fs.readFileSync(p, 'utf-8')); }
+    catch (e) { throw new Error(p + ' is not valid JSON. Fix it by hand and re-run — refusing to overwrite it.'); }
+    if (!current || typeof current !== 'object' || Array.isArray(current)) {
+      throw new Error(p + ' is not a JSON object. Fix it by hand and re-run — refusing to overwrite it.');
+    }
+  }
+  var caps = current.capabilities && typeof current.capabilities === 'object' && !Array.isArray(current.capabilities)
+    ? current.capabilities : {};
+  DECISION_STATES.forEach(function (k) {
+    if (!patch[k]) return;
+    var prev = caps[k] && typeof caps[k] === 'object' && !Array.isArray(caps[k]) ? caps[k] : {};
+    caps[k] = Object.assign({}, prev, patch[k]);
+  });
+  // One id, one decision state: a new accept evicts a stale decline/unavailable,
+  // and vice versa. Exception: the SAME patch co-naming an id in two states is
+  // deliberate — sha-drift records unavailable ALONGSIDE the accept (spec,
+  // locked decision 4: provenance, not a pin).
+  DECISION_STATES.forEach(function (k) {
+    if (!patch[k]) return;
+    Object.keys(patch[k]).forEach(function (id) {
+      DECISION_STATES.forEach(function (other) {
+        if (other === k) return;
+        if (patch[other] && Object.prototype.hasOwnProperty.call(patch[other], id)) return;
+        if (caps[other] && typeof caps[other] === 'object') delete caps[other][id];
+      });
+    });
+  });
+  ['scope', 'resolvedAt', 'manifestVersion'].forEach(function (k) {
+    if (patch[k] !== undefined) caps[k] = patch[k];
+  });
+  current.capabilities = caps;
+  writeJsonAtomic(p, current);
+}
+
+// `claude plugin marketplace add` argument for a manifest marketplace:
+// github source → owner/repo shorthand, anything else → its url.
+function marketplaceAddSpec(manifest, mktName) {
+  var m = manifest && manifest.marketplaces && manifest.marketplaces[mktName];
+  var src = m && m.source;
+  if (!src) return null;
+  if (src.source === 'github' && src.repo) return src.repo;
+  return src.url || null;
+}
+
+// Post-install provenance re-read (spec, locked decision 4): the proposal-time
+// sha is provenance, not a pin — the repo can move between proposal and install.
+// Best-effort by design: an unreadable catalog means "cannot compare", not drift.
+function readCatalogSha(id) {
+  try {
+    var name = String(id).split('@')[0];
+    var mktName = String(id).split('@')[1] || null;
+    if (!mktName) return null;
+    var res = runClaude(['plugin', 'marketplace', 'list', '--json']);
+    if (!res || !res.ok) return null;
+    var arr = JSON.parse(res.out);
+    if (!Array.isArray(arr)) return null;
+    for (var i = 0; i < arr.length; i++) {
+      var mkt = arr[i];
+      if (!mkt || typeof mkt !== 'object' || mkt.name !== mktName || !mkt.installLocation) continue;
+      var catFile = path.join(mkt.installLocation, '.claude-plugin', 'marketplace.json');
+      var cat = JSON.parse(fs.readFileSync(catFile, 'utf-8'));
+      var plugins = Array.isArray(cat.plugins) ? cat.plugins : [];
+      for (var j = 0; j < plugins.length; j++) {
+        var pl = plugins[j];
+        if (pl && pl.name === name) return pl.sha || (pl.source && pl.source.sha) || null;
+      }
+    }
+    return null;
+  } catch (e) { return null; }
+}
+
+// Install the approved ids. Fail-open shell: every outcome lands in the returned
+// buckets and harness.json, never in a throw — init exits 0 whatever happens.
+// opts: {ids, planned, scope, projectRoot, manifestVersion, manifest} — manifest
+// is optional but needed to resolve `marketplace add` sources and to hand-write
+// extraKnownMarketplaces on the no-claude path.
+function applyCapabilities(opts) {
+  var result = { installed: [], failed: [], manual: [], marketplacesAdded: [] };
+  try {
+    var ids = opts.ids || [];
+    var planned = opts.planned || {};
+    var scope = opts.scope || 'project';
+    var iso = new Date().toISOString().slice(0, 10);
+    var accepted = {};
+    var unavailable = {};
+    var handwrite = null; // accumulated across ids, ONE settings write at the end
+    var addedMkts = {};
+
+    // Only planner-approved rows are actionable — apply never invents an install.
+    var byId = {};
+    ['install', 'needsMarketplace', 'reoffer', 'disabledByUser'].forEach(function (b) {
+      (planned[b] || []).forEach(function (entry) {
+        if (entry && entry.id && !byId[entry.id]) byId[entry.id] = { entry: entry, bucket: b };
+      });
+    });
+
+    // No binary → no runClaude ever: declare intent in settings, hand back commands.
+    function goManual(id, entry) {
+      handwrite = handwrite || { enabledPlugins: {} };
+      handwrite.enabledPlugins[id] = true;
+      var m = entry.marketplace && opts.manifest && opts.manifest.marketplaces &&
+        opts.manifest.marketplaces[entry.marketplace];
+      if (m && m.source) {
+        handwrite.extraKnownMarketplaces = handwrite.extraKnownMarketplaces || {};
+        handwrite.extraKnownMarketplaces[entry.marketplace] = { source: m.source };
+      }
+      result.manual.push({ id: id, command: 'claude plugin install ' + id + ' --scope ' + scope });
+    }
+    function fail(id, reason) {
+      unavailable[id] = { at: iso, reason: reason };
+      result.failed.push({ id: id, reason: reason });
+    }
+
+    var noClaude = findOnPath('claude') === null;
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var found = byId[id];
+      if (!found) { result.failed.push({ id: id, reason: 'not-in-plan' }); continue; }
+      if (noClaude) { goManual(id, found.entry); continue; }
+      var entry = found.entry;
+
+      if (found.bucket === 'needsMarketplace' && entry.marketplace && !addedMkts[entry.marketplace]) {
+        var spec = marketplaceAddSpec(opts.manifest, entry.marketplace);
+        if (!spec) { fail(id, 'no-marketplace-source: ' + entry.marketplace); continue; }
+        var addRes = runClaude(['plugin', 'marketplace', 'add', spec]);
+        if (addRes === null) { goManual(id, entry); continue; } // binary vanished mid-run
+        if (!addRes.ok) { fail(id, classifyFailure((addRes.err || '') + '\n' + (addRes.out || ''))); continue; }
+        addedMkts[entry.marketplace] = true;
+        result.marketplacesAdded.push(entry.marketplace);
+      }
+
+      var res = runClaude(['plugin', 'install', id, '--scope', scope]);
+      if (res === null) { goManual(id, entry); continue; }
+      if (!res.ok) { fail(id, classifyFailure((res.err || '') + '\n' + (res.out || ''))); continue; }
+
+      accepted[id] = { at: iso, tier: entry.tier, overrodeUserDisable: !!entry.overridesUserDisable };
+      var postSha = readCatalogSha(id);
+      if (entry.sha && postSha && entry.sha !== postSha) {
+        // Drift is recorded ALONGSIDE the accept — the install happened; the
+        // provenance mismatch is a report line, not a rollback.
+        unavailable[id] = { at: iso, reason: 'sha-drift' };
+      }
+      result.installed.push(id);
+    }
+
+    if (handwrite) {
+      var restored = restorePluginKeys(opts.projectRoot, handwrite);
+      if (restored && restored.error) console.log('Could not hand-write .claude/settings.json: ' + restored.error);
+    }
+    if (Object.keys(accepted).length || Object.keys(unavailable).length) {
+      var patch = { scope: scope, resolvedAt: iso };
+      if (Object.keys(accepted).length) patch.accepted = accepted;
+      if (Object.keys(unavailable).length) patch.unavailable = unavailable;
+      if (opts.manifestVersion !== undefined) patch.manifestVersion = opts.manifestVersion;
+      try { writeCapabilityDecisions(opts.projectRoot, patch); }
+      catch (e) {
+        // The one function here allowed to throw — but apply is not: the install
+        // already happened, so surface the unrecorded decision and keep going.
+        result.decisionsError = e.message;
+        console.log('Capability decisions not recorded: ' + e.message);
+      }
+    }
+    if (result.installed.length > 0) console.log('Run /reload-plugins in any open session.');
+  } catch (e) {
+    result.failed.push({ id: null, reason: classifyFailure(e && e.message || e) });
+  }
+  return result;
+}
+
 module.exports = {
   findOnPath: findOnPath,
   runClaude: runClaude,
@@ -189,4 +388,7 @@ module.exports = {
   readState: readState,
   planCapabilities: planCapabilities,
   TIER_RANK: TIER_RANK,
+  classifyFailure: classifyFailure,
+  writeCapabilityDecisions: writeCapabilityDecisions,
+  applyCapabilities: applyCapabilities,
 };

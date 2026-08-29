@@ -185,5 +185,227 @@ if (process.platform !== 'win32') {
   check('recorded blocked → blocked, never install', P({ decisions: { unavailable: { 'superpowers@claude-plugins-official': { at: 'x', reason: 'blocked: strictKnownMarketplaces' } } } }).blocked.length === 1);
 }
 
+
+// ── Task 6: classifyFailure (pure) ───────────────────────────────────────
+{
+  const cap = require('./capabilities.js');
+  check('classify: policy refusal → blocked: <setting name>',
+    cap.classifyFailure('Error: blocked by strictKnownMarketplaces') === 'blocked: strictKnownMarketplaces');
+  check('classify: DNS failure → network',
+    cap.classifyFailure('getaddrinfo ENOTFOUND github.com') === 'network');
+  check('classify: gone from catalog → not-found',
+    cap.classifyFailure('Plugin superpowers not found in marketplace') === 'not-found');
+  check('classify: unmatched text → first non-empty line',
+    cap.classifyFailure('\n\nsome unrecognised failure\nsecond line') === 'some unrecognised failure');
+  check('classify: fallback truncated to 120 chars',
+    cap.classifyFailure('x'.repeat(200)).length === 120);
+}
+
+// ── Task 6: writeCapabilityDecisions ─────────────────────────────────────
+{
+  const cap = require('./capabilities.js');
+  const proj = tmpdir();
+  fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+  const hj = path.join(proj, '.claude', 'harness.json');
+  fs.writeFileSync(hj, JSON.stringify({ stopGate: { enabled: true }, knowledge: { local: 'knowledge-base' } }));
+
+  cap.writeCapabilityDecisions(proj, { accepted: { 'a@m': { at: '2026-08-30', tier: 'required' } }, scope: 'project', manifestVersion: 1 });
+  cap.writeCapabilityDecisions(proj, { declined: { 'b@m': { at: '2026-08-30', tier: 'optional' } } });
+  let got = JSON.parse(fs.readFileSync(hj, 'utf-8'));
+  check('decisions: accepted survives a later declined patch', got.capabilities.accepted['a@m'].tier === 'required');
+  check('decisions: declined patch landed', got.capabilities.declined['b@m'].tier === 'optional');
+  check('decisions: other harness.json keys intact', got.stopGate.enabled === true && got.knowledge.local === 'knowledge-base');
+  check('decisions: scope/manifestVersion recorded', got.capabilities.scope === 'project' && got.capabilities.manifestVersion === 1);
+
+  // One id, one decision state — a new decision evicts the old one.
+  cap.writeCapabilityDecisions(proj, { declined: { 'a@m': { at: 'x', tier: 'required' } } });
+  got = JSON.parse(fs.readFileSync(hj, 'utf-8'));
+  check('decisions: a new decline evicts the accept', got.capabilities.accepted['a@m'] === undefined && got.capabilities.declined['a@m'].at === 'x');
+  cap.writeCapabilityDecisions(proj, { accepted: { 'a@m': { at: 'y', tier: 'required' } } });
+  got = JSON.parse(fs.readFileSync(hj, 'utf-8'));
+  check('decisions: a new accept evicts the decline', got.capabilities.declined['a@m'] === undefined && got.capabilities.accepted['a@m'].at === 'y');
+
+  // The ONE exception: accept + unavailable co-named in the SAME patch is the
+  // sha-drift record (spec, locked decision 4) — both must land.
+  cap.writeCapabilityDecisions(proj, { accepted: { 'c@m': { at: 'z', tier: 'required' } }, unavailable: { 'c@m': { at: 'z', reason: 'sha-drift' } } });
+  got = JSON.parse(fs.readFileSync(hj, 'utf-8'));
+  check('decisions: sha-drift co-write keeps both states', got.capabilities.accepted['c@m'].at === 'z' && got.capabilities.unavailable['c@m'].reason === 'sha-drift');
+
+  // Unparseable harness.json → throws and leaves the file untouched.
+  const proj2 = tmpdir();
+  fs.mkdirSync(path.join(proj2, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(proj2, '.claude', 'harness.json'), '{ not json');
+  let threw = null;
+  try { cap.writeCapabilityDecisions(proj2, { accepted: { 'a@m': { at: 'x' } } }); } catch (e) { threw = e; }
+  check('decisions: unparseable harness.json throws, does not overwrite',
+    threw !== null && fs.readFileSync(path.join(proj2, '.claude', 'harness.json'), 'utf-8') === '{ not json');
+
+  // Missing harness.json → created holding capabilities only.
+  const proj3 = tmpdir();
+  cap.writeCapabilityDecisions(proj3, { accepted: { 'a@m': { at: 'x', tier: 'required' } } });
+  const fresh = JSON.parse(fs.readFileSync(path.join(proj3, '.claude', 'harness.json'), 'utf-8'));
+  check('decisions: missing harness.json → {capabilities} only', Object.keys(fresh).length === 1 && fresh.capabilities.accepted['a@m'].at === 'x');
+}
+
+// ── Task 6: applyCapabilities against a shimmed claude ───────────────────
+if (process.platform !== 'win32') {
+  const cap = require('./capabilities.js');
+  const entryFor = (over) => Object.assign({
+    id: 'superpowers@claude-plugins-official', tier: 'required', why: 'w', class: 'plugin',
+    requiresBinary: null, binaryMissing: false, source: null, sha: null, marketplace: 'claude-plugins-official',
+  }, over);
+  const plannedWith = (bucket, entry) => {
+    const p = { install: [], needsMarketplace: [], reoffer: [], disabledByUser: [] };
+    p[bucket] = [entry];
+    return p;
+  };
+  const MANIFEST = { marketplaces: { 'claude-plugins-official': { source: { source: 'github', repo: 'anthropics/claude-plugins-official' }, trust: 'official' } }, capabilities: [] };
+  const capture = (fn) => {
+    const lines = [];
+    const orig = console.log;
+    console.log = (...a) => lines.push(a.join(' '));
+    try { return { result: fn(), lines }; } finally { console.log = orig; }
+  };
+
+  // Success path: argv recorded, accepted recorded, reload line printed once.
+  {
+    const bindir = tmpdir();
+    const argvLog = path.join(bindir, 'argv.log');
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'echo "$@" >> "' + argvLog + '"\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo "[]"; exit 0; fi\n' +
+      'exit 0\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const proj = tmpdir();
+    const { result, lines } = capture(() => cap.applyCapabilities({
+      ids: ['superpowers@claude-plugins-official'],
+      planned: plannedWith('install', entryFor()),
+      scope: 'project', projectRoot: proj, manifestVersion: 1, manifest: MANIFEST,
+    }));
+    const notInPlan = capture(() => cap.applyCapabilities({
+      ids: ['nope@x'], planned: plannedWith('install', entryFor()),
+      scope: 'project', projectRoot: tmpdir(), manifest: MANIFEST,
+    })).result;
+    process.env.PATH = prevPath;
+    const argv = fs.readFileSync(argvLog, 'utf-8');
+    check('apply: install argv is plugin install <id> --scope project',
+      argv.split('\n').indexOf('plugin install superpowers@claude-plugins-official --scope project') !== -1);
+    const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('apply: accepted recorded in harness.json',
+      !!hj.capabilities.accepted['superpowers@claude-plugins-official'] && hj.capabilities.accepted['superpowers@claude-plugins-official'].tier === 'required');
+    check('apply: installed lists the id', result.installed.indexOf('superpowers@claude-plugins-official') !== -1);
+    check('apply: reload line printed once', lines.filter(l => l === 'Run /reload-plugins in any open session.').length === 1);
+    check('apply: unknown id → failed not-in-plan', notInPlan.failed.length === 1 && notInPlan.failed[0].reason === 'not-in-plan');
+  }
+
+  // Policy refusal: unavailable with a blocked: prefix, function still returns.
+  {
+    const bindir = tmpdir();
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then echo "Error: blocked by strictKnownMarketplaces" >&2; exit 1; fi\n' +
+      'echo "[]"; exit 0\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const proj = tmpdir();
+    let threw = null, out = null, lines = null;
+    try {
+      const r = capture(() => cap.applyCapabilities({
+        ids: ['superpowers@claude-plugins-official'], planned: plannedWith('install', entryFor()),
+        scope: 'project', projectRoot: proj, manifest: MANIFEST,
+      }));
+      out = r.result; lines = r.lines;
+    } catch (e) { threw = e; }
+    process.env.PATH = prevPath;
+    check('apply: policy refusal returns, never throws', threw === null && !!out);
+    const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('apply: refusal recorded unavailable with blocked: prefix',
+      String(hj.capabilities.unavailable['superpowers@claude-plugins-official'].reason).indexOf('blocked:') === 0);
+    check('apply: failed carries the id, nothing installed', out.failed.length === 1 && out.installed.length === 0);
+    check('apply: no reload line when nothing installed', lines.indexOf('Run /reload-plugins in any open session.') === -1);
+  }
+
+  // needsMarketplace: marketplace add precedes install, github source → repo shorthand.
+  {
+    const bindir = tmpdir();
+    const argvLog = path.join(bindir, 'argv.log');
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'echo "$@" >> "' + argvLog + '"\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "add" ]; then exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi\n' +
+      'echo "[]"; exit 0\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const proj = tmpdir();
+    const { result } = capture(() => cap.applyCapabilities({
+      ids: ['superpowers@claude-plugins-official'], planned: plannedWith('needsMarketplace', entryFor()),
+      scope: 'project', projectRoot: proj, manifest: MANIFEST,
+    }));
+    process.env.PATH = prevPath;
+    const argv = fs.readFileSync(argvLog, 'utf-8').split('\n');
+    check('apply: github marketplace added by repo shorthand before install',
+      argv.indexOf('plugin marketplace add anthropics/claude-plugins-official') !== -1 &&
+      argv.indexOf('plugin marketplace add anthropics/claude-plugins-official') < argv.indexOf('plugin install superpowers@claude-plugins-official --scope project'));
+    check('apply: marketplacesAdded records the name', result.marketplacesAdded.indexOf('claude-plugins-official') !== -1);
+  }
+
+  // sha-drift: post-install catalog sha differs from proposal-time sha →
+  // unavailable(sha-drift) recorded ALONGSIDE the accept.
+  {
+    const bindir = tmpdir();
+    const mktDir = tmpdir();
+    fs.mkdirSync(path.join(mktDir, '.claude-plugin'), { recursive: true });
+    fs.writeFileSync(path.join(mktDir, '.claude-plugin', 'marketplace.json'),
+      JSON.stringify({ plugins: [{ name: 'superpowers', sha: 'post-install-sha' }] }));
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo \'' + JSON.stringify([{ name: 'claude-plugins-official', installLocation: mktDir }]) + '\'; exit 0; fi\n' +
+      'exit 0\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+    const proj = tmpdir();
+    capture(() => cap.applyCapabilities({
+      ids: ['superpowers@claude-plugins-official'], planned: plannedWith('install', entryFor({ sha: 'proposal-sha' })),
+      scope: 'project', projectRoot: proj, manifest: MANIFEST,
+    }));
+    process.env.PATH = prevPath;
+    const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('apply: sha drift recorded alongside the accept',
+      !!hj.capabilities.accepted['superpowers@claude-plugins-official'] &&
+      hj.capabilities.unavailable['superpowers@claude-plugins-official'].reason === 'sha-drift');
+  }
+
+  // No claude on PATH: hand-write project settings, return the exact command.
+  {
+    const prevPath = process.env.PATH;
+    process.env.PATH = tmpdir(); // empty dir — no claude anywhere
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'), '{}');
+    const { result } = capture(() => cap.applyCapabilities({
+      ids: ['superpowers@claude-plugins-official'], planned: plannedWith('install', entryFor()),
+      scope: 'project', projectRoot: proj, manifest: MANIFEST,
+    }));
+    process.env.PATH = prevPath;
+    const settings = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf-8'));
+    check('apply: no claude → enabledPlugins hand-written true',
+      settings.enabledPlugins['superpowers@claude-plugins-official'] === true);
+    check('apply: no claude → manifest marketplace hand-written into extraKnownMarketplaces',
+      !!settings.extraKnownMarketplaces && settings.extraKnownMarketplaces['claude-plugins-official'].source.repo === 'anthropics/claude-plugins-official');
+    check('apply: no claude → manual carries the exact command',
+      result.manual.length === 1 && result.manual[0].command === 'claude plugin install superpowers@claude-plugins-official --scope project');
+    check('apply: no claude → nothing under installed/failed', result.installed.length === 0 && result.failed.length === 0);
+  }
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed === 0 ? 0 : 1);
