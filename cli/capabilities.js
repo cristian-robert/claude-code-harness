@@ -8,6 +8,10 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const { writeJsonAtomic } = require('./harness-config');
 const { deepMergeUserWins, restorePluginKeys } = require('./merge-settings');
+// Fallback anchor for capabilities.manifestVersion: the shipped manifest has no
+// `version` key, and CLI + payload ship together (3.0.0), so the package
+// version names the manifest revision — increment 3's update delta needs it.
+var PKG_VERSION = require('./../package.json').version;
 
 // PATH scan in Node — never `command -v`/`which` (ADR-007: shell checks fail open
 // on Windows). PATHEXT makes `claude` match claude.CMD on win32.
@@ -528,7 +532,7 @@ function mainCli(argv) {
     var runIds = applyIds.filter(function (id) { return !reportOnly[id]; });
     var result = applyCapabilities({
       ids: runIds, planned: planned, scope: scope, projectRoot: projectRoot,
-      manifestVersion: ap.manifest.version, manifest: ap.manifest,
+      manifestVersion: ap.manifest.version || PKG_VERSION, manifest: ap.manifest,
     });
     // Every outcome lands as a printed line — apply RETURNS the lists, the
     // CALLER prints them (Task 6 review carry-forward).
@@ -734,7 +738,7 @@ async function initCapabilitiesFlow(opts) {
           reoffer: plan.reoffer, disabledByUser: plan.disabledByUser,
         },
         scope: 'project', projectRoot: opts.targetDir,
-        manifestVersion: prop.manifest.version, manifest: prop.manifest,
+        manifestVersion: prop.manifest.version || PKG_VERSION, manifest: prop.manifest,
       });
       surfaceApplyResult(foldRes, log);
     }
@@ -765,7 +769,7 @@ async function initCapabilitiesFlow(opts) {
       if (a === '' || a === 'y' || a === 'yes') {
         var res = applyCapabilities({
           ids: [entry.id], planned: plan, scope: 'project', projectRoot: opts.targetDir,
-          manifestVersion: prop.manifest.version, manifest: prop.manifest,
+          manifestVersion: prop.manifest.version || PKG_VERSION, manifest: prop.manifest,
         });
         surfaceApplyResult(res, log);
         result.installed = result.installed.concat(res.installed);

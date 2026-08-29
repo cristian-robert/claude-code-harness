@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
+const PKG_VERSION = require('../package.json').version;
 
 let passed = 0, failed = 0;
 function check(name, cond) {
@@ -591,6 +592,12 @@ if (process.platform !== 'win32') {
     check('apply: installed id + reload hint printed',
       r.stdout.indexOf('superpowers@claude-plugins-official') !== -1 &&
       r.stdout.indexOf('Run /reload-plugins in any open session.') !== -1);
+    // Fix wave (I4): the shipped manifest carries no `version` key, so the
+    // recorded anchor falls back to the CLI package version — the pair ships
+    // together (3.0.0 release note), so it names the manifest revision too.
+    const hjApply = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+    check('apply: manifestVersion falls back to the package version',
+      hjApply.capabilities.manifestVersion === PKG_VERSION);
   }
 
   // --apply of a provision:manual PLUGIN with claude present: never installed
@@ -773,6 +780,8 @@ if (process.platform !== 'win32') {
       const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
       check('t8c: accepted recorded in harness.json',
         !!hj.capabilities && !!hj.capabilities.accepted && hj.capabilities.accepted['superpowers@claude-plugins-official'].tier === 'required');
+      check('t8c: manifestVersion falls back to the package version',
+        hj.capabilities.manifestVersion === PKG_VERSION);
       check('t8c: result.installed carries the id', !!r && r.installed.indexOf('superpowers@claude-plugins-official') !== -1);
       check('t8c: prompt block shows id + why',
         lines.join('\n').indexOf('superpowers@claude-plugins-official') !== -1 && lines.join('\n').indexOf('ADR-008') !== -1);
