@@ -12,6 +12,7 @@ const { KNOWLEDGE_PROMPT, parseKnowledgeAnswer, writeKnowledgeConfig } = require
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
 const { migrateRenamedSkills } = require('./migrations');
 const { installHarnessConfig, readHarnessConfig } = require('./harness-config');
+const { initCapabilitiesFlow } = require('./capabilities');
 
 const REPO = 'cristian-robert/claude-code-harness';
 const BRANCH = 'main';
@@ -571,6 +572,15 @@ async function main() {
   // call above).
   restorePluginKeys(targetDir, capturedPluginKeys);
 
+  // Resolve tier-`required` capabilities — the one approval question. Fail-open
+  // twice over: the flow catches its own errors, and this catch guarantees a
+  // resolver bug can never kill init (spec: Failure handling).
+  try {
+    await initCapabilitiesFlow({ targetDir: targetDir, targets: targets, tty: !!process.stdin.isTTY, askFn: ask, log: console.log });
+  } catch (e) {
+    console.log('Capabilities: skipped (' + e.message + ')');
+  }
+
   // Derive the Codex tree from the canonical .claude/ payload.
   var codexCounts = null;
   if (targets.indexOf('codex') !== -1) {
@@ -628,6 +638,7 @@ async function main() {
   console.log('  .claude/hooks/       6 tested hooks (wired via .claude/settings.json)');
   console.log('  .claude/references/  on-demand references + knowledge-base-scaffold + vault-scaffold');
   console.log('  .mcp.json/.lsp.json  symbol navigation (codebase-search + language servers)');
+  console.log('  .claude/capabilities.json  declared plugin/marketplace needs (resolve later: npx perfect-harness-engineering capabilities)');
   console.log('');
 
   console.log('Next steps:');

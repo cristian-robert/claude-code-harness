@@ -632,5 +632,157 @@ if (process.platform !== 'win32') {
   }
 }
 
-console.log('\n' + passed + ' passed, ' + failed + ' failed');
-process.exit(failed === 0 ? 0 : 1);
+// ── Task 8: initCapabilitiesFlow — the one required question at init ─────
+// Called DIRECTLY with tmp dirs (never via init's main(), which downloads
+// from GitHub). The flow is async, so these cases run inside an async IIFE
+// and the summary/exit moves into its .then — still last in execution order.
+(async function task8() {
+  const cap = require('./capabilities.js');
+  const T8_MANIFEST = {
+    marketplaces: { 'claude-plugins-official': { source: { source: 'github', repo: 'anthropics/claude-plugins-official' }, trust: 'official' } },
+    capabilities: [
+      { id: 'superpowers@claude-plugins-official', class: 'plugin', tier: 'required', skills: ['brainstorming'], why: 'ADR-008: execution discipline inside every PIV stage' },
+    ],
+  };
+  const mkProj8 = (opts) => {
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    if (!opts || !opts.noManifest) fs.writeFileSync(path.join(proj, '.claude', 'capabilities.json'), JSON.stringify(T8_MANIFEST));
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'), '{}');
+    return proj;
+  };
+  const mkAsk = (answers) => {
+    const fn = (prompt) => { fn.calls.push(prompt); return Promise.resolve(fn.answers.length ? fn.answers.shift() : ''); };
+    fn.calls = []; fn.answers = answers.slice();
+    return fn;
+  };
+  // Each case isolated: a throw records a FAIL for that case, not a suite abort.
+  const t8 = async (name, fn) => {
+    try { await fn(); } catch (e) { check('t8 ' + name + ' must not throw — got: ' + (e && e.message), false); }
+  };
+
+  // (a) codex-only target: skipped, askFn NEVER consulted.
+  await t8('codex-only', async () => {
+    const askFn = mkAsk([]);
+    const lines = [];
+    const r = await cap.initCapabilitiesFlow({ targetDir: mkProj8(), targets: ['codex'], tty: true, askFn, log: (l) => lines.push(l) });
+    check('t8a: skippedReason codex-only', !!r && r.skippedReason === 'codex-only');
+    check('t8a: askFn never called', askFn.calls.length === 0);
+    check('t8a: the skipped line printed', lines.join('\n').indexOf('Capabilities: skipped (Codex-only target).') !== -1);
+  });
+
+  // (b) no TTY: skipped with the pointer line, askFn NEVER consulted
+  // (acceptance 3: a piped init must not consume an answer line).
+  await t8('no-tty', async () => {
+    const askFn = mkAsk(['y']);
+    const lines = [];
+    const r = await cap.initCapabilitiesFlow({ targetDir: mkProj8(), targets: ['claude', 'codex'], tty: false, askFn, log: (l) => lines.push(l) });
+    check('t8b: skippedReason no-tty', !!r && r.skippedReason === 'no-tty');
+    check('t8b: askFn never called', askFn.calls.length === 0);
+    check('t8b: pointer line names the fallbacks', lines.join('\n').indexOf('npx perfect-harness-engineering capabilities') !== -1);
+  });
+
+  // (f) missing manifest: skipped no-manifest, one log line, nothing thrown.
+  await t8('no-manifest', async () => {
+    const askFn = mkAsk([]);
+    const lines = [];
+    const r = await cap.initCapabilitiesFlow({ targetDir: mkProj8({ noManifest: true }), targets: ['claude'], tty: true, askFn, log: (l) => lines.push(l) });
+    check('t8f: skippedReason no-manifest', !!r && r.skippedReason === 'no-manifest');
+    check('t8f: askFn never called', askFn.calls.length === 0);
+    check('t8f: exactly one log line', lines.length === 1);
+  });
+
+  if (process.platform !== 'win32') {
+    // PATH/CLAUDE_CONFIG_DIR/cwd isolated per case: the flow spawns whatever
+    // `claude` PATH resolves and buildProposal detects the stack from cwd.
+    const withEnv = async (proj, pathDir, fn) => {
+      const prevPath = process.env.PATH, prevCfg = process.env.CLAUDE_CONFIG_DIR, prevCwd = process.cwd();
+      process.env.PATH = pathDir;
+      process.env.CLAUDE_CONFIG_DIR = tmpdir();
+      process.chdir(proj);
+      try { return await fn(); } finally {
+        process.env.PATH = prevPath;
+        if (prevCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = prevCfg;
+        process.chdir(prevCwd);
+      }
+    };
+    const mkShim8 = () => {
+      const bindir = tmpdir();
+      const argvLog = path.join(bindir, 'argv.log');
+      fs.writeFileSync(path.join(bindir, 'claude'),
+        '#!/bin/sh\n' +
+        'echo "$@" >> "' + argvLog + '"\n' +
+        'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ] && [ "$3" = "list" ]; then echo \'[{"name":"claude-plugins-official"}]\'; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo "[]"; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "details" ]; then echo "cost: 12k tokens (details verbatim)"; exit 0; fi\n' +
+        'if [ "$1" = "plugin" ] && [ "$2" = "install" ]; then exit 0; fi\n' +
+        'exit 0\n');
+      fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+      return { bindir, argvLog };
+    };
+
+    // (c) TTY + claude shim + 'y': install spawned at project scope, accepted
+    // recorded (acceptance 1); details output lands verbatim in the log.
+    await t8('yes-installs', async () => {
+      const proj = mkProj8();
+      const { bindir, argvLog } = mkShim8();
+      const askFn = mkAsk(['y']);
+      const lines = [];
+      const r = await withEnv(proj, bindir, () =>
+        cap.initCapabilitiesFlow({ targetDir: proj, targets: ['claude'], tty: true, askFn, log: (l) => lines.push(l) }));
+      const argv = fs.readFileSync(argvLog, 'utf-8').split('\n');
+      check('t8c: exactly one question, the documented prompt',
+        askFn.calls.length === 1 && askFn.calls[0] === 'Install to project scope? [Y/n] ');
+      check('t8c: install argv is plugin install <id> --scope project',
+        argv.indexOf('plugin install superpowers@claude-plugins-official --scope project') !== -1);
+      const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+      check('t8c: accepted recorded in harness.json',
+        !!hj.capabilities && !!hj.capabilities.accepted && hj.capabilities.accepted['superpowers@claude-plugins-official'].tier === 'required');
+      check('t8c: result.installed carries the id', !!r && r.installed.indexOf('superpowers@claude-plugins-official') !== -1);
+      check('t8c: prompt block shows id + why',
+        lines.join('\n').indexOf('superpowers@claude-plugins-official') !== -1 && lines.join('\n').indexOf('ADR-008') !== -1);
+      check('t8c: details output surfaced verbatim', lines.join('\n').indexOf('cost: 12k tokens (details verbatim)') !== -1);
+    });
+
+    // (d) 'n': nothing spawned beyond version/list/details reads; declined
+    // recorded (acceptance 2).
+    await t8('no-declines', async () => {
+      const proj = mkProj8();
+      const { bindir, argvLog } = mkShim8();
+      const askFn = mkAsk(['n']);
+      const r = await withEnv(proj, bindir, () =>
+        cap.initCapabilitiesFlow({ targetDir: proj, targets: ['claude'], tty: true, askFn, log: () => {} }));
+      const argv = fs.readFileSync(argvLog, 'utf-8');
+      check('t8d: no plugin install spawned', argv.indexOf('plugin install') === -1);
+      const hj = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'harness.json'), 'utf-8'));
+      check('t8d: declined recorded with tier',
+        !!hj.capabilities && !!hj.capabilities.declined && hj.capabilities.declined['superpowers@claude-plugins-official'].tier === 'required');
+      check('t8d: result.declined carries the id', !!r && r.declined.indexOf('superpowers@claude-plugins-official') !== -1);
+      check('t8d: asked exactly once', !!r && r.asked === 1);
+    });
+
+    // (e) empty PATH: planner parks required rows in `manual`; NO question,
+    // enabledPlugins hand-written, command logged (acceptance 4).
+    await t8('no-claude', async () => {
+      const proj = mkProj8();
+      const askFn = mkAsk([]);
+      const lines = [];
+      const r = await withEnv(proj, tmpdir(), () =>
+        cap.initCapabilitiesFlow({ targetDir: proj, targets: ['claude'], tty: true, askFn, log: (l) => lines.push(l) }));
+      check('t8e: askFn never called', askFn.calls.length === 0);
+      const settings = JSON.parse(fs.readFileSync(path.join(proj, '.claude', 'settings.json'), 'utf-8'));
+      check('t8e: enabledPlugins hand-written true',
+        !!settings.enabledPlugins && settings.enabledPlugins['superpowers@claude-plugins-official'] === true);
+      check('t8e: the exact command logged',
+        lines.join('\n').indexOf('claude plugin install superpowers@claude-plugins-official --scope project') !== -1);
+      check('t8e: no skippedReason, nothing installed', !!r && r.skippedReason === undefined && r.installed.length === 0);
+    });
+  }
+})().catch((e) => {
+  failed++;
+  console.log('  FAIL  task 8 suite threw: ' + (e && e.message));
+}).then(() => {
+  console.log('\n' + passed + ' passed, ' + failed + ' failed');
+  process.exit(failed === 0 ? 0 : 1);
+});

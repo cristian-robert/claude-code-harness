@@ -411,10 +411,12 @@ function readDecisions(projectRoot) {
   } catch (e) { return {}; }
 }
 
-// Shared by --propose and --apply: manifest → detection inputs → plan.
-// files/binaries are derived FROM the manifest (only names it asks about are
-// probed), so the probe list can never drift from the declaration.
-function buildProposal(projectRoot) {
+// Shared by --propose, --apply and initCapabilitiesFlow: manifest → detection
+// inputs → plan. files/binaries are derived FROM the manifest (only names it
+// asks about are probed), so the probe list can never drift from the
+// declaration. `tiers` narrows the plan (init passes ['required']); omitted →
+// all three, the CLI's behavior.
+function buildProposal(projectRoot, tiers) {
   var manifestPath = path.join(projectRoot, '.claude', 'capabilities.json');
   var manifest;
   try {
@@ -439,7 +441,7 @@ function buildProposal(projectRoot) {
   var stack = require('./init.js').detectTechStack(); // reads cwd === projectRoot
   var plan = planCapabilities({
     manifest: manifest, stack: stack, files: files, binaries: binaries,
-    state: state, decisions: decisions, tiers: ['required', 'recommended', 'optional'],
+    state: state, decisions: decisions, tiers: tiers || ['required', 'recommended', 'optional'],
   });
   return { manifest: manifest, stack: stack, plan: plan, state: state, decisions: decisions };
 }
@@ -617,6 +619,160 @@ function mainCli(argv) {
   }
 }
 
+// ── initCapabilitiesFlow — the one required question (spec: Data flow → init)
+// Called from cli/init.js main() after restorePluginKeys. Fail-open at every
+// layer: the skip paths return a reason, a decisions-write throw is caught in
+// the loop, and the outer catch turns any resolver bug into one log line —
+// init exits 0 whatever happens (ADR-006).
+
+// The spec's approval line: `  <id> — <repo-or-url> @ <sha> · <why>`, with the
+// source/sha segments dropped when the catalog did not provide them.
+function formatCapabilityLine(entry) {
+  var src = entry.source;
+  var srcName = null;
+  if (src && typeof src === 'object') srcName = src.repo || src.url || null;
+  else if (typeof src === 'string') srcName = src;
+  var tail = [];
+  if (srcName) tail.push(srcName + (entry.sha ? ' @ ' + entry.sha : ''));
+  if (entry.why) tail.push(entry.why);
+  return '  ' + entry.id + (tail.length ? ' — ' + tail.join(' · ') : '');
+}
+
+// Scope word for the disabledByUser override warning. Best-effort: the
+// settings scan knows its file's scope; a plugin-list row may carry one;
+// otherwise 'user' (the only scopes that park a row here are user/local).
+function disabledScope(state, entry) {
+  var rec = state.enabledIn && state.enabledIn[entry.id];
+  if (rec && rec.value === false && rec.scope) return rec.scope;
+  var inst = state.pluginNames && state.pluginNames[String(entry.id).split('@')[0]];
+  if (inst && inst.scope) return inst.scope;
+  return 'user';
+}
+
+// Every apply outcome lands as a printed line (Task 6 review carry-forward):
+// apply RETURNS the lists, the caller prints them.
+function surfaceApplyResult(res, log) {
+  res.installed.forEach(function (id) { log('  installed: ' + id); });
+  res.marketplacesAdded.forEach(function (n) { log('  marketplace added: ' + n); });
+  res.manual.forEach(function (m) { log('  manual — run yourself: ' + m.command); });
+  res.failed.forEach(function (f) { log('  failed: ' + (f.id || '(apply)') + ' — ' + f.reason); });
+}
+
+// opts: {targetDir, targets, tty, askFn, log} → {asked, installed, declined,
+// skippedReason?}. askFn is init.js's ask (TTY promise or piped-line shift) —
+// NEVER called on the codex-only/no-tty paths: a piped init must not consume
+// an answer line (spec acceptance 3).
+async function initCapabilitiesFlow(opts) {
+  var log = opts.log || console.log;
+  var result = { asked: 0, installed: [], declined: [] };
+  try {
+    if ((opts.targets || []).indexOf('claude') === -1) {
+      result.skippedReason = 'codex-only';
+      log('Capabilities: skipped (Codex-only target).');
+      return result;
+    }
+    if (!opts.tty) {
+      result.skippedReason = 'no-tty';
+      log('Capabilities: not resolved (no TTY) — run npx perfect-harness-engineering capabilities, or /harness-init in a session.');
+      return result;
+    }
+    // init resolves tier `required` ONLY — the stack tier and discovery belong
+    // to /harness-init (spec, locked decision 1).
+    var prop = buildProposal(opts.targetDir, ['required']);
+    if (prop.error) {
+      result.skippedReason = 'no-manifest';
+      log('Capabilities: skipped (no readable .claude/capabilities.json).');
+      return result;
+    }
+    var plan = prop.plan;
+    var iso = new Date().toISOString().slice(0, 10);
+    function bucketIds(bucket) {
+      return bucket.map(function (e) { return e.id; }).join(', ');
+    }
+
+    // Informational buckets: one summary line each, never a question.
+    if (plan.present.length) log('Capabilities: already present — ' + bucketIds(plan.present));
+    if (plan.blocked.length) log('Capabilities: blocked by policy — ' + bucketIds(plan.blocked) + ' (recorded; not retried)');
+    if (plan.declined.length) log('Capabilities: previously declined — ' + bucketIds(plan.declined));
+
+    // Manual bucket: plugin rows parked there only because claude is ABSENT
+    // fold into apply's hand-write path (spec failure table row 1: declare in
+    // enabledPlugins, print the command). Predicate is findOnPath, NOT
+    // state.claude — broken-but-present claude stays report-only (mainCli
+    // parity). provision:manual rows and global agents are never folded.
+    var claudeMissing = findOnPath('claude') === null;
+    var provisionManual = {};
+    (Array.isArray(prop.manifest.capabilities) ? prop.manifest.capabilities : []).forEach(function (c) {
+      if (c && c.provision === 'manual') provisionManual[c.id] = true;
+    });
+    var folded = [];
+    var reportOnly = [];
+    plan.manual.forEach(function (entry) {
+      if (claudeMissing && entry.class === 'plugin' && !provisionManual[entry.id]) folded.push(entry);
+      else reportOnly.push(entry);
+    });
+    if (reportOnly.length) log('Capabilities: manual provisioning needed — ' + bucketIds(reportOnly));
+    if (folded.length) {
+      log('Capabilities: claude not found — declaring required plugins in .claude/settings.json; run the printed commands yourself.');
+      var foldRes = applyCapabilities({
+        ids: folded.map(function (e) { return e.id; }),
+        planned: {
+          install: plan.install.concat(folded), needsMarketplace: plan.needsMarketplace,
+          reoffer: plan.reoffer, disabledByUser: plan.disabledByUser,
+        },
+        scope: 'project', projectRoot: opts.targetDir,
+        manifestVersion: prop.manifest.version, manifest: prop.manifest,
+      });
+      surfaceApplyResult(foldRes, log);
+    }
+
+    // The question loop: install + needsMarketplace + reoffer, then
+    // disabledByUser with its override warning. All entries here are tier
+    // `required`, so the spec's header fits every block.
+    var queue = [];
+    plan.install.concat(plan.needsMarketplace, plan.reoffer).forEach(function (e) {
+      queue.push({ entry: e, note: null });
+    });
+    plan.disabledByUser.forEach(function (e) {
+      queue.push({ entry: e, note: 'NOTE: you disabled this at ' + disabledScope(prop.state, e) + ' scope — project-scope enable overrides it.' });
+    });
+    for (var q = 0; q < queue.length; q++) {
+      var entry = queue[q].entry;
+      log('');
+      log('Required by the pipeline:');
+      log(formatCapabilityLine(entry));
+      // Cost lines: raw `claude plugin details` output, verbatim, never parsed
+      // (spec, locked decision: unknown format stays useful by not touching it).
+      var details = runClaude(['plugin', 'details', entry.id]);
+      if (details && details.ok && details.out) log(details.out.replace(/\n$/, ''));
+      if (queue[q].note) log(queue[q].note);
+      result.asked++;
+      var answer = await opts.askFn('Install to project scope? [Y/n] ');
+      var a = String(answer == null ? '' : answer).trim().toLowerCase();
+      if (a === '' || a === 'y' || a === 'yes') {
+        var res = applyCapabilities({
+          ids: [entry.id], planned: plan, scope: 'project', projectRoot: opts.targetDir,
+          manifestVersion: prop.manifest.version, manifest: prop.manifest,
+        });
+        surfaceApplyResult(res, log);
+        result.installed = result.installed.concat(res.installed);
+      } else {
+        var decline = {};
+        decline[entry.id] = { at: iso, tier: entry.tier };
+        try { writeCapabilityDecisions(opts.targetDir, { declined: decline }); }
+        catch (e2) { log('Capability decisions not recorded: ' + e2.message); }
+        result.declined.push(entry.id);
+        log('  declined: ' + entry.id + ' (recorded in .claude/harness.json)');
+      }
+    }
+  } catch (e) {
+    // Last resort — a resolver bug becomes one line, never a failed init.
+    if (!result.skippedReason) result.skippedReason = 'error';
+    log('Capabilities: skipped (' + (e && e.message ? e.message : String(e)) + ')');
+  }
+  return result;
+}
+
 module.exports = {
   findOnPath: findOnPath,
   runClaude: runClaude,
@@ -628,5 +784,7 @@ module.exports = {
   classifyFailure: classifyFailure,
   writeCapabilityDecisions: writeCapabilityDecisions,
   applyCapabilities: applyCapabilities,
+  buildProposal: buildProposal,
+  initCapabilitiesFlow: initCapabilitiesFlow,
   mainCli: mainCli,
 };
