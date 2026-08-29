@@ -276,6 +276,12 @@ function restorePluginKeys(projectRoot, captured) {
   if (!fs.existsSync(live)) return { restored: false };
   let parsed;
   try { parsed = readJson(live); } catch (e) { return { restored: false, error: e.message }; }
+  // Valid JSON that is not an object (null, array, scalar): assigning the plugin
+  // keys onto it would either throw (null) or serialize them away (array) — a
+  // silent key drop reported as success. Fail soft instead; the caller records it.
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { restored: false, error: live + ' is not a JSON object' };
+  }
   for (const k of PLUGIN_KEYS) {
     if (k in captured) parsed[k] = deepMergeUserWins(captured[k], parsed[k]);
   }

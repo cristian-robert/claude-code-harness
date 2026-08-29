@@ -420,6 +420,30 @@ test('restorePluginKeys is a no-op when captured is null', () => {
   assert.strictEqual(restorePluginKeys(root, null).restored, false, 'restore with null is a no-op');
 });
 
+// Valid JSON that is not an object must degrade to {restored:false, error}, never
+// throw and never report success while silently dropping the keys — Task 6's
+// no-claude apply path calls restorePluginKeys on arbitrary projects and its
+// contract is "never throws" (plan Task 6 Interfaces).
+test('restorePluginKeys fails soft when settings.json is JSON null', () => {
+  const root = path.join(TMP, 'plugin-keys-null');
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.claude', 'settings.json'), 'null');
+  const res = restorePluginKeys(root, { enabledPlugins: { 'a@m': true } });
+  assert.strictEqual(res.restored, false, 'null settings → restored:false');
+  assert.ok(res.error, 'carries an error message');
+});
+
+test('restorePluginKeys fails soft when settings.json is a JSON array (no silent key drop)', () => {
+  const root = path.join(TMP, 'plugin-keys-array');
+  fs.mkdirSync(path.join(root, '.claude'), { recursive: true });
+  const live = path.join(root, '.claude', 'settings.json');
+  fs.writeFileSync(live, '[1, 2]');
+  const res = restorePluginKeys(root, { enabledPlugins: { 'a@m': true } });
+  assert.strictEqual(res.restored, false, 'array settings → restored:false, not a lying restored:true');
+  assert.ok(res.error, 'carries an error message');
+  assert.strictEqual(fs.readFileSync(live, 'utf-8'), '[1, 2]', 'file left untouched');
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });
