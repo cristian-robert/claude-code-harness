@@ -73,5 +73,59 @@ if (process.platform !== 'win32') {
   }
 }
 
+// ── Task 4 hardening: readState never throws, whatever shape claude prints ──
+// Spec (Components 2): "readState() — best-effort, never throws". JSON that
+// parses but is not the expected array (`null`, an object wrapper, junk
+// elements) must degrade to the documented empty shapes, not leak through.
+if (process.platform !== 'win32') {
+  const cap = require('./capabilities.js');
+  {
+    const bindir = tmpdir();
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then echo "null"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo \'[null,{"id":"codex@openai-codex","enabled":true}]\'; exit 0; fi\n' +
+      'exit 1\n');
+    fs.chmodSync(path.join(bindir, 'claude'), 0o755);
+    const prevPath = process.env.PATH;
+    process.env.PATH = bindir;
+
+    let state = null, threw = null;
+    try { state = cap.readState(tmpdir()); } catch (e) { threw = e; }
+    check('readState survives marketplace list printing null', threw === null);
+    check('null marketplace list degrades to []', !!state && Array.isArray(state.marketplaces) && state.marketplaces.length === 0);
+    check('junk plugin-list element skipped, real one indexed', !!state && !!state.pluginNames['codex']);
+
+    // plugin list itself printing null → plugins stays an array, never null
+    fs.writeFileSync(path.join(bindir, 'claude'),
+      '#!/bin/sh\n' +
+      'if [ "$1" = "--version" ]; then echo "9.9.9 (Claude Code)"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "marketplace" ]; then echo "[]"; exit 0; fi\n' +
+      'if [ "$1" = "plugin" ] && [ "$2" = "list" ]; then echo "null"; exit 0; fi\n' +
+      'exit 1\n');
+    let state2 = null, threw2 = null;
+    try { state2 = cap.readState(tmpdir()); } catch (e) { threw2 = e; }
+    check('readState survives plugin list printing null', threw2 === null);
+    check('null plugin list degrades to []', !!state2 && Array.isArray(state2.plugins) && state2.plugins.length === 0);
+
+    process.env.PATH = prevPath;
+  }
+
+  // enabledPlugins that is an array must contribute nothing (index keys are junk)
+  {
+    const proj = tmpdir();
+    fs.mkdirSync(path.join(proj, '.claude'), { recursive: true });
+    fs.writeFileSync(path.join(proj, '.claude', 'settings.json'),
+      JSON.stringify({ enabledPlugins: ['a@m', 'b@m'] }));
+    const prevCfg = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = tmpdir(); // isolate from the real ~/.claude
+    const enabled = cap.readEnabledPlugins(proj);
+    if (prevCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = prevCfg;
+    check('array-shaped enabledPlugins contributes nothing', Object.keys(enabled).length === 0);
+  }
+}
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 process.exit(failed === 0 ? 0 : 1);

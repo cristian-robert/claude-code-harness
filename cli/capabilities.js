@@ -62,7 +62,7 @@ function readEnabledPlugins(projectRoot) {
     try {
       var parsed = JSON.parse(fs.readFileSync(files[i].p, 'utf-8'));
       var ep = parsed && parsed.enabledPlugins;
-      if (ep && typeof ep === 'object') {
+      if (ep && typeof ep === 'object' && !Array.isArray(ep)) {
         for (var id in ep) out[id] = { value: ep[id], scope: files[i].scope };
       }
     } catch (e) { /* absent/unparseable file contributes nothing */ }
@@ -78,26 +78,36 @@ function readState(projectRoot) {
   var list = runClaude(['plugin', 'list', '--json']);
   if (list && list.ok) {
     try {
-      state.plugins = JSON.parse(list.out);
+      // Parseable-but-not-an-array (null, an object wrapper) must degrade to
+      // the documented empty array, never leak a foreign shape downstream.
+      var parsedList = JSON.parse(list.out);
+      if (Array.isArray(parsedList)) state.plugins = parsedList;
       for (var i = 0; i < state.plugins.length; i++) {
-        var name = String(state.plugins[i].id || '').split('@')[0];
-        if (name && !state.pluginNames[name]) state.pluginNames[name] = state.plugins[i];
+        var entry = state.plugins[i];
+        if (!entry || typeof entry !== 'object') continue; // junk element
+        var name = String(entry.id || '').split('@')[0];
+        if (name && !state.pluginNames[name]) state.pluginNames[name] = entry;
       }
     } catch (e) { /* unparseable → treated as empty */ }
   }
   var mkts = runClaude(['plugin', 'marketplace', 'list', '--json']);
   if (mkts && mkts.ok) {
-    try { state.marketplaces = JSON.parse(mkts.out); } catch (e) {}
+    try {
+      var parsedMkts = JSON.parse(mkts.out);
+      if (Array.isArray(parsedMkts)) state.marketplaces = parsedMkts; // same guard: null would throw below
+    } catch (e) { /* unparseable → treated as empty */ }
   }
   for (var m = 0; m < state.marketplaces.length; m++) {
-    var loc = state.marketplaces[m].installLocation;
+    var mkt = state.marketplaces[m];
+    if (!mkt || typeof mkt !== 'object') continue; // junk element
+    var loc = mkt.installLocation;
     if (!loc) continue;
     try {
       var catFile = path.join(loc, '.claude-plugin', 'marketplace.json');
       var cat = JSON.parse(fs.readFileSync(catFile, 'utf-8'));
       var plugins = Array.isArray(cat.plugins) ? cat.plugins : [];
       for (var pI = 0; pI < plugins.length; pI++) {
-        state.catalog[plugins[pI].name + '@' + state.marketplaces[m].name] = plugins[pI];
+        state.catalog[plugins[pI].name + '@' + mkt.name] = plugins[pI];
       }
     } catch (e) { /* catalog unreadable → no provenance shown, still installable */ }
   }
