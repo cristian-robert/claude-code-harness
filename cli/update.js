@@ -7,7 +7,7 @@ const readline = require('readline');
 const { toProjectRelative } = require('./protected-files');
 const { copyClaudeMdWithBackup } = require('./claude-md-copy');
 const { backupAndCopy, preserveBeforeOverwrite } = require('./backup-copy');
-const { reconcileSettingsJson, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
+const { reconcileSettingsJson, settingsNotMergedWarning, capturePluginKeys, restorePluginKeys } = require('./merge-settings');
 const { readHarnessTargets, writeHarnessTargets } = require('./harness-targets');
 const { readHarnessConfig, installHarnessConfig } = require('./harness-config');
 const { emitCodexPayload, cleanupDroppedTargets } = require('./emit-codex');
@@ -273,6 +273,11 @@ async function main() {
       console.log('Merged your .claude/settings.json (hooks + permissions) with the updated framework version.');
     } else if (settingsReconcile.error) {
       console.warn('Could not merge your settings.json (' + settingsReconcile.error + '); the framework version is active and yours is at .claude/settings.json.backup.');
+    } else if (settingsReconcile.reason === 'not-user-origin') {
+      var settingsWarning = settingsNotMergedWarning();
+      for (var swi = 0; swi < settingsWarning.length; swi++) {
+        console.warn(settingsWarning[swi]);
+      }
     }
 
     // Restore the plugin keys captured before the copy (see the capturePluginKeys

@@ -444,6 +444,48 @@ test('restorePluginKeys fails soft when settings.json is a JSON array (no silent
   assert.strictEqual(fs.readFileSync(live, 'utf-8'), '[1, 2]', 'file left untouched');
 });
 
+// ─── Blocker 2: the silent decline gets loud ────────────────────────────────
+// A fresh-project adopter has no .settings-user-origin marker (init writes it
+// only when it backed up a PRE-existing settings.json). Their post-adoption
+// hooks and permissions are therefore clobbered by every update while
+// reconcileSettingsJson returned a bare {merged:false} and both callers printed
+// nothing (review F2). The decline now carries a reason, and both callers say so.
+
+test('decline with a backup present carries reason "not-user-origin"', () => {
+  const phe = { permissions: { deny: [] }, hooks: {} };
+  const userEdited = { permissions: { allow: ['Bash(pnpm test:*)'] }, hooks: { PostToolUse: [{ matcher: 'Edit', hooks: [{ type: 'command', command: 'node', args: ['./scripts/team-notify.mjs'] }] }] } };
+  const { root } = seedProject('recon-reason', phe, userEdited);
+  const res = reconcileSettingsJson(root, {});
+  assert.strictEqual(res.merged, false);
+  assert.strictEqual(res.reason, 'not-user-origin', 'the caller needs a reason to warn on');
+});
+
+test('a decline with NO backup carries no reason (nothing was dropped)', () => {
+  const { root } = seedProject('recon-reason-none', { hooks: {} } /* no backup */);
+  const res = reconcileSettingsJson(root, {});
+  assert.strictEqual(res.merged, false);
+  assert.strictEqual(res.reason, undefined, 'no backup → no user content to warn about');
+});
+
+test('a successful merge carries no reason', () => {
+  const { root } = seedProject('recon-reason-merged', { hooks: {} }, { hooks: {} });
+  const res = reconcileSettingsJson(root, { userBackupJustCreated: true });
+  assert.strictEqual(res.merged, true);
+  assert.strictEqual(res.reason, undefined);
+});
+
+test('settingsNotMergedWarning states what was lost, where it survives, and how to fix it', () => {
+  const { settingsNotMergedWarning } = require('./merge-settings.js');
+  assert.strictEqual(typeof settingsNotMergedWarning, 'function', 'both callers must share one warning text');
+  const text = settingsNotMergedWarning().join('\n');
+  assert.ok(/replaced|overwritt?en/i.test(text), 'says the live settings.json was replaced by the template');
+  assert.ok(/not .*re-?merged|NOT/.test(text), 'says hand-added hooks/permissions are NOT re-merged');
+  assert.ok(text.includes('.claude/settings.json.backup'), 'names the backup that still holds them');
+  assert.ok(text.includes('.backup-'), 'mentions the newest rotation backup');
+  assert.ok(text.includes('npx perfect-harness-engineering merge-settings'), 'gives the re-merge command');
+  assert.ok(text.includes('/harness-init'), 'says harness-init step 0 does not cover settings');
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });

@@ -228,7 +228,14 @@ function reconcileSettingsJson(projectRoot, opts) {
   const marker = path.join(projectRoot, '.claude', '.settings-user-origin');
   if (!fs.existsSync(live) || !fs.existsSync(backup)) return { merged: false };
   const userOrigin = opts.userBackupJustCreated === true || fs.existsSync(marker);
-  if (!userOrigin) return { merged: false };
+  // A backup EXISTS but we will not re-union it. For a fresh-project adopter
+  // (no marker was ever written, because init never backed up a pre-existing
+  // settings.json) this is the common path, and it used to be silent: the
+  // template's settings.json simply replaced theirs and their hand-added hooks
+  // stopped firing with no notice (review F2). Declining is still correct — the
+  // backup may be PHE's own previous file, and re-unioning that would resurrect
+  // hooks the framework intentionally removed — but the caller must SAY so.
+  if (!userOrigin) return { merged: false, reason: 'not-user-origin' };
   try {
     const user = readJson(backup);
     const framework = readJson(live);
@@ -244,6 +251,23 @@ function reconcileSettingsJson(projectRoot, opts) {
   } catch (e) {
     return { merged: false, error: e.message };
   }
+}
+
+// The warning both init.js and update.js print on a `not-user-origin` decline.
+// One text, one place: the two callers must not drift into saying different
+// things about the same loss.
+function settingsNotMergedWarning() {
+  return [
+    'WARNING: .claude/settings.json was replaced by the template version.',
+    '  Hooks and permissions you added by hand AFTER adopting the harness are NOT',
+    '  re-merged automatically — this project has no .settings-user-origin marker,',
+    '  which init writes only when it adopted a settings.json that already existed.',
+    '  They survive in .claude/settings.json.backup (or, if this run rotated one,',
+    '  the newest .claude/settings.json.backup-<timestamp>).',
+    '  /harness-init step 0 reconciles prose files (AGENTS.md, rules) — settings are',
+    '  not covered. Re-add them by hand, or re-union the backup with:',
+    '    npx perfect-harness-engineering merge-settings',
+  ];
 }
 
 // ─── Plugin keys survive the copy path ───────────────────────────────────────
@@ -351,6 +375,7 @@ module.exports = {
   mergePermissions,
   deepMergeUserWins,
   reconcileSettingsJson,
+  settingsNotMergedWarning,
   capturePluginKeys,
   restorePluginKeys,
 };

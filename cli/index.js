@@ -75,7 +75,7 @@ perfect-harness-engineering — the harness around Claude Code that makes it rel
 
 Usage:
   npx perfect-harness-engineering init             Install the harness payload into the current project
-  npx perfect-harness-engineering update           Update payload files, preserving customizations (three-way merge)
+  npx perfect-harness-engineering update           Update payload files (user config merged; customized files backed up — reconcile via /harness-init)
   npx perfect-harness-engineering emit             Re-derive .agents//.codex/ from the current .claude/ tree (codex targets only; no download/backup/prompt)
   npx perfect-harness-engineering merge-settings   Deep-merge a .claude/settings.json with the framework version (init/update do this automatically; use to re-run by hand)
   npx perfect-harness-engineering file-size-check  Lint always-loaded context (AGENTS.md/CLAUDE.md, rules, skills) against budgets

@@ -476,6 +476,65 @@ test('the real update sequence records targets AND preserves the user\'s existin
   assert.strictEqual(after.models.checkedAt, '2030-01-01', 'the user model refresh must survive the copy+merge');
 });
 
+// ─── Blocker 2: both callers must SAY the settings were not re-merged ───────
+// reconcileSettingsJson declining is the common case for a fresh-project
+// adopter (no .settings-user-origin marker), and it used to print nothing at
+// all — the user's hand-added hooks stopped firing silently (review F2).
+// Pinned structurally: the branch lives inside init/update main(), which cannot
+// be run in-process without installing a payload over the tester's cwd.
+
+['init.js', 'update.js'].forEach((file) => {
+  test(file + ' warns when the settings reconcile declines as not-user-origin', () => {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf-8');
+    const reconcileIdx = src.indexOf('reconcileSettingsJson(');
+    const reasonIdx = src.indexOf("settingsReconcile.reason === 'not-user-origin'");
+    assert.ok(reconcileIdx !== -1, 'the reconcile call was not found');
+    assert.ok(
+      reasonIdx > reconcileIdx,
+      file + ' must branch on the not-user-origin reason after reconciling — a bare ' +
+        '{merged:false} is the silent drop this pins'
+    );
+    assert.ok(
+      src.includes('settingsNotMergedWarning'),
+      file + ' must print the shared settingsNotMergedWarning text (not its own wording)'
+    );
+    const branch = src.slice(reasonIdx, reasonIdx + 400);
+    assert.ok(
+      /console\.warn/.test(branch),
+      file + ' must warn (console.warn) in the not-user-origin branch'
+    );
+  });
+});
+
+test('the settings warning is imported from merge-settings by both callers', () => {
+  ['init.js', 'update.js'].forEach((file) => {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf-8');
+    const req = src.match(/const \{[^}]*\} = require\('\.\/merge-settings'\);/);
+    assert.ok(req, file + ' must require merge-settings');
+    assert.ok(
+      req[0].includes('settingsNotMergedWarning'),
+      file + ' must import settingsNotMergedWarning from merge-settings'
+    );
+  });
+});
+
+// ─── Doc honesty: `update` never did a three-way merge ──────────────────────
+
+test('cli/index.js help does not claim update does a three-way merge', () => {
+  const help = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf-8');
+  assert.ok(
+    !/three-way merge/i.test(help),
+    'update is backup-then-clobber plus an LLM prose reconcile — claiming a three-way ' +
+      'merge sets expectations the code cannot meet (review F11)'
+  );
+  const updateLine = help.split('\n').filter((l) => /perfect-harness-engineering update/.test(l))[0];
+  assert.ok(updateLine, 'the update help line was not found');
+  assert.ok(
+    /backed up/i.test(updateLine) && /harness-init/.test(updateLine),
+    'the update help line must say customized files are backed up and point at /harness-init — got: ' + updateLine.trim()
+  );
+});
+
 // Cleanup
 try {
   fs.rmSync(TMP, { recursive: true, force: true });
