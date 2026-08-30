@@ -34,7 +34,8 @@ Apply `superpowers:receiving-code-review`:
 - Verify each finding against the code BEFORE implementing it. Reviewers prompted to find gaps will report some even when the work is sound.
 - Push back with evidence when the reviewer is wrong. Fix only what affects correctness or stated requirements.
 - Waiving a finding you verified false → TELL the reviewer to record the waiver in its memory (fingerprint, reason, decider) — in the next loop dispatch or a one-line follow-up. An unrecorded waiver is re-litigated next session.
-- Loop: fix → **re-run the full gate** (AGENTS.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch → until the first line is `PASS`. Append each round's verdict to the report.
+- Loop, **capped at 3 rounds**: fix → **re-run the full gate** (AGENTS.md Commands table — a fix that satisfies the reviewer can still break lint/types/tests) → re-dispatch. Append each round's verdict to the report. A cap, not a target: `PASS` on round 1 ends it.
+- **Round 3 still `REQUEST_CHANGES` → STOP and escalate**, blocker line: `review did not converge in 3 rounds — <the finding that survived>`. Do not open round 4. Three rounds on one branch means the plan was wrong, not the code: route it back to `/plan-work`, or hand the surviving finding to the user. Traces to: the only loop in the pipeline with no bound (audit, 2026-08-30) — every other loop caps (`/implement` 3 attempts, `00-core.md` 2 corrections, `loop.mjs --max-iter`).
 
 ## 5. Security lens (when the diff warrants)
 
@@ -62,6 +63,8 @@ OPTIONAL and external — skip it on a Claude-only / Max-subscription setup (the
 Dispatch code-reviewer with the contract inline. On findings: verify each against the code, fix the real ones, re-dispatch until PASS.
 
 ## Output
+
+Overwrite the `review:` line of the implementation report's `receipt:` block with `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)` — that ONE line only (`.claude/references/run-receipt.md`).
 
 Report on disk; do not recap it in the terminal. End the run with exactly one line:
 

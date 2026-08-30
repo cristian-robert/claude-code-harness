@@ -27,6 +27,7 @@ The invocation argument (the text typed after the command) if given, else the pl
 | AGENTS.md "Commands" table | lint, typecheck, unit tests — always |
 | Conditional (step 2) | build, integration/e2e — only when the diff warrants |
 | Always, when `knowledge-base/` exists | `npx perfect-harness-engineering kb-check` — index law, unfilled placeholders, secret shapes. Exit 1 is a FAIL row like any other |
+| Always, when an implementation report exists | the report ends in a `receipt:` block — `grep -q '^receipt:' reports/<slug>-implementation-report.md`. Missing → FAIL row: the run has no attribution and no rollback point (`.claude/references/run-receipt.md`) |
 | Ratcheted greps (below) | doctrine / dangling-reference checks — always, when the repo defines one |
 
 If the Commands table still has `<cmd>` placeholders, stop: blocker line, ask the user to fill it.
@@ -77,6 +78,8 @@ Plan discovery: the invocation argument if given; else the plan referenced by th
 Every FAIL: show the exact command and the tail of its real output (the failing assertion/error, not a paraphrase). GREEN needs the per-command table with real exit codes — "tests pass" without it is not evidence.
 
 ## Output contract
+
+Overwrite the `gate:` line of the implementation report's `receipt:` block with `GREEN` or `RED (N)` — that ONE line, never the whole block (`.claude/references/run-receipt.md`). No report found → say so in the blocker; never start a fresh receipt.
 
 The verdict and per-command table ARE this stage's artifact — no extra recap. End with exactly one line:
 

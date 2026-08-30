@@ -34,6 +34,8 @@ Dev hat: plan has `item:` → (1) confirm the item is `status: ready` (not still
 
 The plan must exist in THIS working copy before any code. The item file stays in the tracking root — never copy it into the worktree.
 
+Capture the rollback point NOW, before any code, and hold it for step 5's receipt: `git merge-base HEAD <base> | cut -c1-7` (`<base>` per `.claude/harness.json` `baseBranch`, else origin/HEAD, else main/master).
+
 ## 3 · Execute task-by-task
 
 | Plan shape | Skill |
@@ -50,14 +52,9 @@ Dispatcher rules for subagent-driven mode:
 
 Wave mode (plan marks `Wave: N`): tasks in a wave MAY run as parallel dispatches, each in an isolated worktree. Preflight: verify the wave's `Files:` lists are pairwise disjoint — any overlap collapses the wave to sequential. Waves run in order; run the full gate after each.
 
-Fallback (no superpowers), per task:
+Fallback (no superpowers), per task: failing test first (RED) → minimum to pass (GREEN) → refactor → run the task's own Validate command **immediately** and read the output.
 
-1. Write the failing test first (RED).
-2. Implement the minimum to pass (GREEN), then refactor.
-3. Run the task's own Validate command **immediately** and read the output.
-
-Never skip a task's validation to move faster: a skipped check is a hidden regression. A task is
-done when its Validate command passes, not when the code is written.
+A task is done when its Validate command passes, not when the code is written — a skipped check is a hidden regression. Record any task that took more than one attempt; step 5's receipt carries the counts.
 
 Ask when blocked: mid-task ambiguity, a conflicting plan step, or a failed assumption → stop
 and ask, do not guess. 3 failed attempts on one task → blocker (autonomous mode per `.claude/references/autonomous-mode.md`: log it under
@@ -81,14 +78,13 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Files changed | Paths, grouped by task |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |
 | Plan | `plans/<slug>-plan.md` — the contract this report answers (consumers discover the plan through this row) |
+| Receipt | A closing ```yaml `receipt:` block — harness version, tier, rollback point, deviations, retries; `gate:`/`review:` left `pending` for the later stages. Fields and resolution: `.claude/references/run-receipt.md`. Never invent a value; every field has a stated source |
 
 Plan has `item:` → report written means the item moves to `status: review` + Log line `<YYYY-MM-DD> implement: reports/<slug>-implementation-report.md`. Edit the TRACKING ROOT copy (resolve: first line of `git worktree list`; commit there as `track(<id>): review` — guard permits tracking-only commits on any branch), NOT the worktree copy (`backlog/` only exists at the root). Github mode: mirror per `.claude/references/work-tracking.md`, degrade rules apply.
 
 ## 6 · Scope discipline
 
-Implement the plan and nothing outside it. No preemptive fixes for anticipated review findings,
-no gold-plating, no drive-by refactors — `/review-branch` and `/evolve` exist for that. Off-plan work
-belongs in Follow-ups.
+Implement the plan and nothing outside it — no preemptive fixes for anticipated review findings, no gold-plating, no drive-by refactors (`/review-branch` and `/evolve` exist for that). Off-plan work belongs in Follow-ups.
 
 ## Output contract
 
