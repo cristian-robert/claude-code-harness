@@ -34,8 +34,6 @@ Dev hat: plan has `item:` → (1) confirm the item is `status: ready` (not still
 
 The plan must exist in THIS working copy before any code. The item file stays in the tracking root — never copy it into the worktree.
 
-Capture the rollback point NOW, before any code, and hold it for step 5's receipt: `git merge-base HEAD <base> | cut -c1-7`, resolving `<base>` as `.claude/harness.json` `baseBranch` → origin/HEAD → main/master. Use the exact snippet in `.claude/references/run-receipt.md` — the obvious one-liner form silently yields an empty base on any repo without `origin/HEAD`.
-
 ## 3 · Execute task-by-task
 
 | Plan shape | Skill |
@@ -78,7 +76,7 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Files changed | Paths, grouped by task |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |
 | Plan | `plans/<slug>-plan.md` — the contract this report answers (consumers discover the plan through this row) |
-| Receipt | A `receipt:` YAML block — harness version, tier, rollback point, deviations, retries; `gate:`/`review:` left `pending`. Goes AFTER this table as the file's last block, fenced, `receipt:` at column 0 (`/validate` greps `^receipt:` — indented or inside a table cell reads as absent and fails the gate). Fields and resolution: `.claude/references/run-receipt.md`. Never invent a value; every field has a stated source |
+| Receipt | A `receipt:` YAML block — harness version, branch, tier, deviations, retries; `gate:`/`review:` left `pending`. Goes AFTER this table as the file's last block, fenced, `receipt:` at column 0 (`/validate` greps `^receipt:` — indented or inside a table cell reads as absent and fails the gate). Every field resolves from disk or from what you already did — no computed git fields, nothing invented: `.claude/references/run-receipt.md` |
 
 Plan has `item:` → report written means the item moves to `status: review` + Log line `<YYYY-MM-DD> implement: reports/<slug>-implementation-report.md`. Edit the TRACKING ROOT copy (resolve: first line of `git worktree list`; commit there as `track(<id>): review` — guard permits tracking-only commits on any branch), NOT the worktree copy (`backlog/` only exists at the root). Github mode: mirror per `.claude/references/work-tracking.md`, degrade rules apply.
 

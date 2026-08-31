@@ -60,11 +60,11 @@ OPTIONAL and external — skip it on a Claude-only / Max-subscription setup (the
 
 ## Fallback (superpowers unavailable)
 
-Dispatch code-reviewer with the contract inline. On findings: verify each against the code, fix the real ones, re-dispatch until PASS.
+Dispatch code-reviewer with the contract inline. On findings: verify each against the code, fix the real ones, re-dispatch — under the SAME 3-round cap and escalation as step 4. The cap is a property of the loop, not of the plugin.
 
 ## Output
 
-Overwrite the `review:` line of the implementation report's `receipt:` block with `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)` — that ONE line only (`.claude/references/run-receipt.md`). Ran the gate in a step-4 round? Refresh `gate:` to that round's real result too — leaving a stale `gate: RED` under a `review: PASS` describes a tree that no longer exists.
+Write the `review:` line of the implementation report's `receipt:` block — `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)`. Re-ran the gate in a round? Refresh `gate:` to its latest real result in the same edit: `gate:` always holds the CURRENT result, and `gate: RED` under `review: PASS` describes a tree that no longer exists. Those lines only, never the whole block (`.claude/references/run-receipt.md`).
 
 Report on disk; do not recap it in the terminal. End the run with exactly one line:
 
