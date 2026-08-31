@@ -1,8 +1,10 @@
 # Run receipt
 
-One fenced `yaml` block as the LAST thing in `reports/<slug>-implementation-report.md` — after
-the report's section table, at column 0, not inside a table cell. `/validate` finds it with
-`grep -q '^receipt:'`, so an indented or table-nested block reads as absent and fails the gate.
+One fenced `yaml` block in `reports/<slug>-implementation-report.md`, after the report's section
+table, with `receipt:` at column 0 — never inside a table cell and never indented. `/validate`
+finds it with `grep -q '^receipt:'`, so a nested or indented block reads as absent and fails the
+gate. It need not be the last thing in the file: autonomous `/evolve` appends a `## Assumptions`
+section after it, which is expected and harmless — position never matters, column 0 does.
 
 It answers "how was this produced?" after the terminal is gone — the report says WHAT changed,
 the receipt says under WHICH harness and at WHICH tier, and which branch to undo.
@@ -33,7 +35,7 @@ receipt:
 |---|---|---|
 | `plan` | the invocation argument `/implement` ran on | never — no plan, no run |
 | `item` | the plan's `item:` frontmatter | `none` |
-| `harness_version` | `<tracking-root>/.claude/.init-meta.json` -> `newVersion`. **Resolve the tracking root first** (first line of `git worktree list`) — this file is CLI-written and usually untracked, so `git worktree add` does not materialize it and a worktree-relative read always misses. NOT `previousVersion` (that is the ADOPTER APP's own package version, not a harness version — `cli/update.js` reads it via `getVersion(projectRoot)`) and not `firstInstalledVersion` (the adoption point). No file → `unpinned`, which is honest and expected on a repo that never ran `init` | `unpinned` |
+| `harness_version` | `<tracking-root>/.claude/.init-meta.json` -> `newVersion`. **Resolve the tracking root first**, space-safely: `git worktree list --porcelain \| head -1 \| cut -d' ' -f2-` (the human-readable `git worktree list` is space-padded, so `awk '{print $1}'` truncates `/Dev/My Repo` to `/Dev/My` and the read then misses SILENTLY). This file is CLI-written and usually untracked, so `git worktree add` does not materialize it and a worktree-relative read always misses. NOT `previousVersion` (that is the ADOPTER APP's own package version, not a harness version — `cli/update.js` reads it via `getVersion(projectRoot)`) and not `firstInstalledVersion` (the adoption point). No file → `unpinned`, which is honest and expected on a repo that never ran `init` | `unpinned` |
 | `branch` | `git branch --show-current` in the worktree — the branch this increment lives on | never |
 | `tier` | the plan's `tier:` frontmatter | `deep` (the plan default) |
 | `knowledge` | the plan's `Knowledge to load first:` entries actually read | `[]` |
