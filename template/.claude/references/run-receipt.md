@@ -20,7 +20,7 @@ receipt:
   plan: plans/<slug>-plan.md
   item: backlog/<id>-<slug>.md      # or: none
   harness_version: 3.1.0            # or: unpinned
-  branch: feat/auth-refresh
+  branch: "feat/auth-refresh"       # ALWAYS quoted — see the branch row
   tier: deep
   knowledge: [knowledge-base/architecture.md, wiki/stack/fastapi/]   # or: []
   deviations: 2
@@ -35,8 +35,8 @@ receipt:
 |---|---|---|
 | `plan` | the invocation argument `/implement` ran on | never — no plan, no run |
 | `item` | the plan's `item:` frontmatter | `none` |
-| `harness_version` | `<tracking-root>/.claude/.init-meta.json` -> `newVersion`. **Resolve the tracking root first**, space-safely: `git worktree list --porcelain \| head -1 \| cut -d' ' -f2-` (the human-readable `git worktree list` is space-padded, so `awk '{print $1}'` truncates `/Dev/My Repo` to `/Dev/My` and the read then misses SILENTLY). This file is CLI-written and usually untracked, so `git worktree add` does not materialize it and a worktree-relative read always misses. NOT `previousVersion` (that is the ADOPTER APP's own package version, not a harness version — `cli/update.js` reads it via `getVersion(projectRoot)`) and not `firstInstalledVersion` (the adoption point). No file → `unpinned`, which is honest and expected on a repo that never ran `init` | `unpinned` |
-| `branch` | `git branch --show-current` in the worktree — the branch this increment lives on | never |
+| `harness_version` | `<tracking-root>/.claude/.init-meta.json` -> `newVersion`. **Resolve the tracking root first**, space-safely: `git worktree list --porcelain \| head -1 \| cut -d' ' -f2-` (the human-readable `git worktree list` is space-padded, so `awk '{print $1}'` truncates `/Dev/My Repo` to `/Dev/My` and the read then misses SILENTLY). This file is CLI-written and usually untracked, so `git worktree add` does not materialize it and a worktree-relative read always misses. NOT `previousVersion` (that is the ADOPTER APP's own package version, not a harness version — `cli/update.js` reads it via `getVersion(projectRoot)`) and not `firstInstalledVersion`, which is the OLDEST recorded `previousVersion` (`cli/backup-copy.js`) and so is the same adopter-app value, one adoption earlier — both wrong for the same reason. No file → `unpinned`, which is honest and expected on a repo that never ran `init` | `unpinned` |
+| `branch` | `git branch --show-current` in the worktree — the branch this increment lives on. **Quote it.** A legal branch name like `no`, `on`, `y` or `123` is a YAML 1.1 boolean or int unquoted, so the field silently changes type | never |
 | `tier` | the plan's `tier:` frontmatter | `deep` (the plan default) |
 | `knowledge` | the plan's `Knowledge to load first:` entries actually read | `[]` |
 | `deviations` | how many departures you recorded in the report's Deviations cell — you wrote them, so you know the count. Not a derived number: if the cell says `none`, this is `0` | `0` |
