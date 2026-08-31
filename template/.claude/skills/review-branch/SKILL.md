@@ -64,7 +64,7 @@ Dispatch code-reviewer with the contract inline. On findings: verify each agains
 
 ## Output
 
-Overwrite the `review:` line of the implementation report's `receipt:` block with `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)` — that ONE line only (`.claude/references/run-receipt.md`).
+Overwrite the `review:` line of the implementation report's `receipt:` block with `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)` — that ONE line only (`.claude/references/run-receipt.md`). Ran the gate in a step-4 round? Refresh `gate:` to that round's real result too — leaving a stale `gate: RED` under a `review: PASS` describes a tree that no longer exists.
 
 Report on disk; do not recap it in the terminal. End the run with exactly one line:
 
