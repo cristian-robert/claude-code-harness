@@ -6,7 +6,7 @@
 // - No gate configured => silent exit 0. The gate is meant to stay CHEAP
 //   (lint + unit tests); the full gate is the explicit /validate skill.
 // - Fails OPEN on internal errors: a broken gate script must not block work.
-import { execSync } from "node:child_process";
+import { execSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -20,7 +20,7 @@ const MAX_REASON = 2_500;
 // missing → the tamper layer silently stands down.
 function hashGated(cwd, patterns) {
   try {
-    const out = execSync("git ls-files -z", { cwd, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
+    const out = execFileSync("git", ["ls-files", "-z"], { cwd, encoding: "utf8", timeout: 5000, stdio: ["ignore", "pipe", "ignore"] });
     const match = (f) => patterns.some((p) => p.endsWith("/") ? f.startsWith(p) : p.startsWith("*.") ? f.endsWith(p.slice(1)) : f === p);
     const snap = {};
     for (const f of out.split("\0").filter(Boolean)) {
