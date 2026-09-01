@@ -25,7 +25,7 @@ allowed-tools: Bash(git diff *) Bash(git show *) Bash(git log *) Bash(git merge-
 
 Write to `reports/<slug>-review.md`: first a machine-readable pointer line `Plan: plans/<slug>-plan.md · Item: backlog/<id>-<slug>.md` (this is what lets a fresh `/accept` or `/evolve` session find the plan and item by content, not by guessing the slug convention), then the reviewer's output VERBATIM below it — no summarizing, no softening.
 
-- On `PASS` (first round or after the step-4 loop) with plan `item:` set → move that backlog item to `status: done` + append Log line `<YYYY-MM-DD> review: PASS reports/<slug>-review.md` — edit the item in the TRACKING ROOT (resolve: first line of `git worktree list`; commit there as `track(<id>): done`), NOT the worktree copy (`backlog/` only exists at the root). Github mode: mirror per `.claude/references/work-tracking.md`, degrade rules apply.
+- On `PASS` (first round or after the step-4 loop) with plan `item:` set → move that backlog item to `status: done` + append Log line `<YYYY-MM-DD> review: PASS reports/<slug>-review.md` — edit the item in the TRACKING ROOT (resolve: first `worktree ` line of `git worktree list --porcelain`; commit there as `track(<id>): done`), NOT the worktree copy (`backlog/` only exists at the root). Github mode: mirror per `.claude/references/work-tracking.md`, degrade rules apply.
 
 ## 4. On REQUEST_CHANGES
 
