@@ -56,6 +56,7 @@ Scan AGENTS.md + unscoped `.claude/rules/*.md` for lines no longer earning their
 - Rules the model now follows unprompted
 - Rules for retired code, tools, or workflows
 - Guidance duplicated elsewhere (a hook already enforces it; the code itself says it)
+- Rules now FALSE against this branch's diff — a moved path, a renamed module, a retired command: a wrong rule misleads every future session; propose the minimal one-line fix, never a catalog of the new layout
 
 Measure, don't estimate: run `node <PHE>/tools/context-ledger.mjs` (or the project's copy) and include the delta in the proposal list.
 
