@@ -107,6 +107,9 @@ engineeringexec.tech/posts/ai-scrum-can-proven-agile-principles-work-for-agent-t
 - "An AI agent cannot be a Product Owner" → Stakeholder and PO decisions stay human; role layering optional and scalable, never mandatory.
 - Role-tagged `SPRINT_N.md` files → `sprints/<n>.md`; independent frontmatter-kanban conventions converge on id/status/priority → the item schema.
 
+## 18 · coleam00/skills — github.com/coleam00/skills (audited 2026-09-01, latest commit 2026-08-26)
+The packaged "AI Layer" from Medin's course — 33 skills + 6 Python hooks. Audited per ADR-020; most at parity with or exceeded by `template/` (expected: PHE distilled sources 5–7 from the same author). What it contributed: the env-dump + quote-fold guard coverage and its measured split-quote bypass; the stop-gate tamper check with its documented escape (agent rewrote a failing `2+2==5` test to finish — "argued past, through a door the guarantee itself held open"); the drift axis (wrong rules mislead; pruning only catches rules that stopped earning); the denied-tool-in-headless silent failure. Declined with reasons in docs/00 anti-scope. Its hooks README cites arXiv 2604.25850 (a self-written 9KB system prompt swapped in ALONE scored below baseline; the measured gains came from enforcement layers) — corroborates ADR-005/006.
+
 ## Model policy (verified 2026-07-12)
 
 Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID,
