@@ -50,14 +50,9 @@ Dispatcher rules for subagent-driven mode:
 
 Wave mode (plan marks `Wave: N`): tasks in a wave MAY run as parallel dispatches, each in an isolated worktree. Preflight: verify the wave's `Files:` lists are pairwise disjoint — any overlap collapses the wave to sequential. Waves run in order; run the full gate after each.
 
-Fallback (no superpowers), per task:
+Fallback (no superpowers), per task: failing test first (RED) → minimum to pass (GREEN) → refactor → run the task's own Validate command **immediately** and read the output.
 
-1. Write the failing test first (RED).
-2. Implement the minimum to pass (GREEN), then refactor.
-3. Run the task's own Validate command **immediately** and read the output.
-
-Never skip a task's validation to move faster: a skipped check is a hidden regression. A task is
-done when its Validate command passes, not when the code is written.
+A task is done when its Validate command passes, not when the code is written — a skipped check is a hidden regression.
 
 Ask when blocked: mid-task ambiguity, a conflicting plan step, or a failed assumption → stop
 and ask, do not guess. 3 failed attempts on one task → blocker (autonomous mode per `.claude/references/autonomous-mode.md`: log it under
@@ -86,9 +81,7 @@ Plan has `item:` → report written means the item moves to `status: review` + L
 
 ## 6 · Scope discipline
 
-Implement the plan and nothing outside it. No preemptive fixes for anticipated review findings,
-no gold-plating, no drive-by refactors — `/review-branch` and `/evolve` exist for that. Off-plan work
-belongs in Follow-ups.
+Implement the plan and nothing outside it — no preemptive fixes for anticipated review findings, no gold-plating, no drive-by refactors (`/review-branch` and `/evolve` exist for that). Off-plan work belongs in Follow-ups.
 
 ## Output contract
 

@@ -21,6 +21,18 @@ In scrum mode this IS the retrospective (dispatched by `/sprint close`).
 
 ## 2. Choose a destination — decision ladder, first match wins
 
+Enter by symptom when you are holding an incident rather than a category:
+
+| What went wrong | Usually becomes |
+|---|---|
+| Missed context it needed | a pointer: KB entry, or a `Read first:` line in the plan |
+| Wrong tool — grep where a symbol lookup belonged | a sharper routing row in `00-core.md` Dispatch |
+| Output wrong although every check passed | a stronger acceptance criterion, or a new validator |
+| Same loop repeated | a retry cap + escalation line |
+| Unsafe or irreversible action attempted | hook or permission deny — never prose |
+| Decision lost between sessions | durable state: item `## Log`, KB decision, plan field |
+| Failure nobody could explain afterwards | evidence capture: a gate row, or a recorded artifact |
+
 | Candidate is... | Destination |
 |---|---|
 | Must never happen again AND mechanically checkable | Hook or permission deny (enforcement, not prose) |

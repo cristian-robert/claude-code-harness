@@ -18,6 +18,8 @@ identically-named locals — which is exactly what "prove this is wired" needs.
 
 Requires `uv` on PATH (it fetches the `mcp` package ephemerally). Not a Python project → this MCP is inert; rely on LSP + grep.
 
+**Declared failure state — an empty result is ambiguous and must never be read as an answer.** `where_is`/`find_references` returning nothing means EITHER the symbol is genuinely absent OR the server never came up (no `uv`, fetch failed, config not wired), and the two are indistinguishable from the result alone. So: an empty return on a symbol you have reason to believe exists → confirm the tool is live (does `where_is` on a symbol you KNOW exists return it?) before concluding anything. Server not live → say so once, fall back per the order below, and do not report "not found" as a finding. A silent inert tool that reads as "no callers" is how a used symbol gets deleted.
+
 **LSP** (`.lsp.json`) — language servers give the agent **type-aware diagnostics** (compile/type errors surfaced automatically) across whatever languages you enable (TS, Python, Go, …). Complementary: diagnostics tell you what's *broken*, the MCP tells you where things *are*.
 
 ## The order
