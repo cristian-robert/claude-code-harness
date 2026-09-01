@@ -19,9 +19,27 @@ import { join, resolve } from "node:path";
 
 const SECRET_FILE = /(^|[\\/])\.env(\.[^\\/]+)?$/i;
 const SECRET_OK = /\.(example|sample|template|dist|defaults)$/i;
-const SECRET_EXTRA = /(^|[\\/])(id_rsa|id_ed25519|.*\.pem|credentials\.json|\.npmrc)$/i;
+const SECRET_EXTRA = /(^|[\\/])(id_rsa|id_ed25519|.*\.pem|credentials\.json|\.npmrc|\.netrc)$|(^|[\\/])\.aws[\\/]credentials$|(^|[\\/])\.ssh[\\/]/i;
 const SECRET_DIR = /(^|[\\/])secrets[\\/]/i; // anything under a secrets/ dir
 const BASH_SECRET = /(^|[\s"'=/])\.env(\.(?!example|sample|template|dist|defaults)[\w.]+)?\b/;
+// Environment dumps ARE secret reads: blocking the .env FILE but not `printenv`
+// guards one door of two — the same values sit in the process environment
+// (coleam00/skills audit, 2026-09-01). `env FOO=1 cmd` stays allowed; only a
+// BARE env (piped/redirected/terminal) is a dump. Multiline edge: (^|[;&|]\s*)
+// anchors to command separators, not line starts — an `env` alone on a later
+// line of a multiline command is missed; accepted, same anti-adversary boundary.
+const ENV_DUMP = [
+  /(^|[;&|]\s*)printenv\b/,
+  /(^|[;&|]\s*)env\s*(\||>|$)/,
+  /\becho\b[^;&|]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL)\w*/i,
+  /\/proc\/(self|\d+)\/environ\b/,
+];
+// Inline-interpreter env dump: two independent conditions, because the code
+// argument may carry ; & | inside quotes (a single spanning regex misses
+// `python3 -c 'import os; print(os.environ)'`). A grep FOR these tokens has no
+// inline-interpreter flag and stays allowed. Fail-safe over precise.
+const INLINE_INTERP = /\b(node\s+(-e|-p|--eval|--print)|python3?\s+-c|ruby\s+-e|perl\s+-e)\b/;
+const ENV_TOKEN = /(process\.env|os\.environ|ENV\[)/;
 const RECURSIVE_RM = /\brm\s+(-[a-z]*[rR][a-z]*f?[a-z]*|--recursive)\b|\brm\s+-[a-z]*f[a-z]*[rR]\b|\bfind\b[^|;&]*(-delete|-exec\s+rm)\b|\bgit\s+clean\b[^|;&]*-[a-z]*d/;
 const PROTECTED = new Set(["main", "master"]);
 // knowledge-base/ is git-TRACKED, and a harnessed repo may be public: a credential written
@@ -222,10 +240,19 @@ async function main() {
     // ($VAR), eval, and base64 can't be resolved statically and remain the
     // documented anti-adversary boundary (use permissions.deny + OS sandboxing
     // for true isolation).
-    for (const frag of cmd.split(/[^\w./~\\-]+/)) {
-      if (frag && isSecretPath(frag)) {
-        deny(`This command references a secret/key file ('${frag}'), which is blocked. Use .env.example or a non-secret path; the user manages real secret values.`);
+    // Scanned twice: as written, and with quotes folded away — a shell resolves
+    // cat .e'nv' and cat .env to the same path, but the fragment split above
+    // breaks on the quote and reassembles nothing (measured bypass upstream).
+    const folded = cmd.replace(/["']/g, "").replace(/\s+/g, " ");
+    for (const source of [cmd, folded]) {
+      for (const frag of source.split(/[^\w./~\\-]+/)) {
+        if (frag && isSecretPath(frag)) {
+          deny(`This command references a secret/key file ('${frag}'), which is blocked. Use .env.example or a non-secret path; the user manages real secret values.`);
+        }
       }
+    }
+    if (ENV_DUMP.some((p) => p.test(cmd)) || (INLINE_INTERP.test(cmd) && ENV_TOKEN.test(cmd))) {
+      deny("This command dumps the process environment (printenv / bare env / echo of a secret-named variable / inline interpreter reading process.env, os.environ), which exposes the same values as reading .env. Use .env.example for structure; the user manages real secret values.");
     }
     if (RECURSIVE_RM.test(cmd)) {
       deny("Recursive/forced deletion is blocked by the harness guard. Delete specific files explicitly, or ask the user to run this themselves.");

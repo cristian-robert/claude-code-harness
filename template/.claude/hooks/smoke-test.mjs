@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
@@ -83,6 +83,23 @@ check("denies Bash secret via python -c wrapper", denies(runHook("guard.mjs", { 
 // Fail-safe: a secret FILENAME anywhere (even prose) is denied — we cannot tell a
 // real path from prose without shell semantics, and over-blocking is the safe side.
 check("denies secret filename in prose (fail-safe)", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "rotate server.pem now"' } })));
+// Environment dumps ARE secret reads (coleam00/skills audit, 2026-09-01): blocking
+// the .env file but not `printenv` guards one door of two. `env FOO=1 cmd` stays
+// allowed — only a BARE env (piped/redirected/terminal) is a dump.
+check("denies Bash printenv", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "printenv" } })));
+check("denies Bash bare env piped", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "env | sort" } })));
+check("allows Bash env-prefixed command", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "env FOO=1 npm test" } })));
+check("denies Bash echo of secret-named var", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo $OPENAI_API_KEY" } })));
+check("allows Bash echo of benign var", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo $PATH" } })));
+check("denies Bash node -p process.env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "node -p process.env" } })));
+check("denies Bash python -c os.environ", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "python3 -c 'import os; print(dict(os.environ))'" } })));
+check("allows Bash grep for process.env", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "grep -rn process.env src/" } })));
+check("denies Bash /proc/self/environ", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat /proc/self/environ" } })));
+// Quote-folding: a shell resolves cat .e'nv' and cat .env identically; a
+// fragment split on the quote does not — fold quotes, then re-scan.
+check("denies Bash quote-split .env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .e'nv'" } })));
+check("denies Read of .netrc", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/home/u/.netrc" } })));
+check("denies Read of .aws/credentials", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/home/u/.aws/credentials" } })));
 // Guard against over-blocking ordinary, non-secret commands.
 check("allows Bash cat package.json", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat package.json" } })));
 check("allows Bash normal echo", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo hello world" } })));
@@ -379,6 +396,72 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   let state = null; try { state = JSON.parse(readFileSync(join(tmp, ".claude", "state", "last-gate.json"), "utf8")); } catch { /* no/!JSON state file: the check below reports it */ }
   check("skipped check blocks as INCOMPLETE, never GREEN", res.code === 0 && blocked && reason.includes("INCOMPLETE"));
   check("last-gate.json records INCOMPLETE + skipped", state?.verdict === "INCOMPLETE" && state?.skipped?.length >= 1);
+}
+{
+  // Tamper check (opt-in, stopGateTamperPaths): a RED gate snapshots gated files
+  // ONCE; a later GREEN that required editing them is refused as dishonest —
+  // upstream escape (coleam00/skills): handed a failing `2+2==5` test, the agent
+  // rewrote the test and finished. An honest green clears the snapshot.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-"));
+  execFileSync("git", ["init", "-q", "-b", "main", tmp]);
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  mkdirSync(join(tmp, "tests"), { recursive: true });
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
+  execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
+  execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
+  const cfg = (exit) => JSON.stringify({ stopGate: [`node -e "process.exit(${exit})"`], stopGateTamperPaths: ["tests/"] });
+  const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json"); // session_id "smoke"
+
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(1));
+  const red = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let redBlocked = false; try { redBlocked = JSON.parse(red.out).decision === "block"; } catch { /* non-JSON stdout: not a block */ }
+  let snap = null; try { snap = JSON.parse(readFileSync(snapPath, "utf8")); } catch { /* no snapshot: the check reports it */ }
+  check("red gate writes tamper snapshot of gated files", redBlocked && typeof snap?.["tests/a.test.js"] === "string");
+
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 5)\n"); // the dishonest edit
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(0)); // suite "goes green"
+  const tampered = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let tBlocked = false, tReason = ""; try { const o = JSON.parse(tampered.out); tBlocked = o.decision === "block"; tReason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
+  check("green-after-gated-edit blocks and names the file", tBlocked && tReason.includes("tests/a.test.js") && existsSync(snapPath));
+
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n"); // revert the edit
+  const honest = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  check("honest green passes and clears the snapshot", honest.code === 0 && honest.out === "" && !existsSync(snapPath));
+}
+{
+  // Tamper check, deletion escape: REMOVING the gated file must block the same
+  // as editing it — a deleted check is a changed check, and `rm` is the cheapest
+  // way to make a suite "go green" (review round 1 finding, reproduced live).
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-del-"));
+  execFileSync("git", ["init", "-q", "-b", "main", tmp]);
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  mkdirSync(join(tmp, "tests"), { recursive: true });
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
+  execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
+  execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
+  const cfg = (exit) => JSON.stringify({ stopGate: [`node -e "process.exit(${exit})"`], stopGateTamperPaths: ["tests/"] });
+  const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json");
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(1));
+  runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  unlinkSync(join(tmp, "tests", "a.test.js")); // delete the check outright
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(0)); // suite "goes green"
+  const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let blocked = false, reason = ""; try { const o = JSON.parse(res.out); blocked = o.decision === "block"; reason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
+  check("green-after-gated-delete blocks and keeps the snapshot", blocked && reason.includes("tests/a.test.js") && existsSync(snapPath));
+}
+{
+  // Control: without stopGateTamperPaths the gate behaves exactly as before —
+  // RED then GREEN, and no tamper snapshot is ever created.
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-off-"));
+  execFileSync("git", ["init", "-q", "-b", "main", tmp]);
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(1)\""] }));
+  runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(0)\""] }));
+  const green = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  const stateDir = join(tmp, ".claude", "state");
+  const snaps = existsSync(stateDir) ? readdirSync(stateDir).filter((f) => f.startsWith("tamper-")) : [];
+  check("tamper check off by default (no snapshot, green passes)", green.code === 0 && green.out === "" && snaps.length === 0);
 }
 
 console.log("post-edit.mjs");

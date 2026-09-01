@@ -63,6 +63,9 @@ harness bug.
 | 12+ command role-per-agent suites | Five core stages (PIV+E) plus the evidence-gated delivery trio (/backlog, /accept, /sprint — docs/06) cover idea → accepted increment; every command traces to a failure or an evidence line. The rejected shape is persona rosters and parallel command sets |
 | DATA sensors (schema / range / freshness validators) | PHE's evidence lenses are code- and runtime-shaped: gate commands, `qa-evaluator` (WORKS/STUB/BROKEN/MISSING), research source-checks. A data-pipeline project genuinely needs schema/range/freshness checks and PHE supplies none — wire them as project gate commands in `harness.json` `stopGate`, where they are the adopter's, not the framework's |
 | Action-class permission table (network scope, deploy, destructive data ops) | `guard.mjs` denies what has actually gone wrong here: secrets, recursive deletes, protected-branch writes, worktree escape. The broader classes have no incident behind them and the ratchet forbids speculative hardening. Adopters needing them add `permissions.deny` entries plus OS sandboxing — the boundary `guard.mjs` already documents |
+| PostToolUse JSONL audit trail (coleam00/skills) | Attribution was attempted and withdrawn here (ADR-018) — revisit only with a real incident; `loop/loop.log` already records per-iteration evidence for autonomous runs and interactive transcripts live in `~/.claude/projects/` |
+| Declared-file-coupling guard (`dependencies.json` read-before-edit) | Genuinely novel primitive, zero PHE incidents — the ratchet forbids shipping it; recorded as `agent-kb/patterns/declared-file-coupling` for the day a contract-mismatch incident occurs |
+| Python hook authoring (`hooks-create` port) | Would fork ADR-007 (Node .mjs, exec form, smoke-tested); `/evolve`'s hook route + `smoke-test.mjs` own authored hooks here |
 
 Boundary rule: PHE adds a component only when a real failure recurs that no existing layer
 absorbs — and removes one when a model upgrade makes it dead weight.
@@ -73,6 +76,7 @@ absorbs — and removes one when a model upgrade makes it dead weight.
 - Anthropic — "Harness design for long-running application development" (Rajasekaran, 2026); "Effective context engineering for AI agents"; Claude Code docs (memory, hooks)
 - Addy Osmani — "Agent Harness Engineering"
 - rari (@0xwhrrari) — "Harness Engineering: How to Build AI Agents That Don't Fall Apart" (2026-08-29). Audited mechanism-by-mechanism against `template/` on 2026-08-30. Most were already covered or exceeded here; its GRAPH/coordination layer is rejected with reasons (see anti-scope), and it prices no coordination layer of its own. What it contributed: the proportionality principle, the symptom-keyed failure index, and the unbounded-loop gap in `/review-branch`. Its "change receipt" was **attempted and withdrawn** — three review rounds, 33 findings, the same exit-masking defect class recurring in each round's fix; it also failed the ratchet, having no incident behind it. The withdrawal taught more than the feature would have (see the principles table)
+- coleam00/skills (2026) — audited mechanism-by-mechanism 2026-09-01 per ADR-020; four adoptions (guard env-dump + quote-fold coverage, stop-gate tamper check, `/evolve` drift bullet, loop denial surfacing), three reasoned declines above. See docs/99 · 18 and vault ADR-022
 - HumanLayer — 12-Factor Agents; "A Brief History of Ralph"
 - Geoffrey Huntley — ghuntley.com/ralph; how-to-ralph-wiggum
 - obra/superpowers — the execution-discipline skills PIV+E stages invoke
