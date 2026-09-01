@@ -83,6 +83,23 @@ check("denies Bash secret via python -c wrapper", denies(runHook("guard.mjs", { 
 // Fail-safe: a secret FILENAME anywhere (even prose) is denied — we cannot tell a
 // real path from prose without shell semantics, and over-blocking is the safe side.
 check("denies secret filename in prose (fail-safe)", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: 'echo "rotate server.pem now"' } })));
+// Environment dumps ARE secret reads (coleam00/skills audit, 2026-09-01): blocking
+// the .env file but not `printenv` guards one door of two. `env FOO=1 cmd` stays
+// allowed — only a BARE env (piped/redirected/terminal) is a dump.
+check("denies Bash printenv", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "printenv" } })));
+check("denies Bash bare env piped", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "env | sort" } })));
+check("allows Bash env-prefixed command", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "env FOO=1 npm test" } })));
+check("denies Bash echo of secret-named var", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo $OPENAI_API_KEY" } })));
+check("allows Bash echo of benign var", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo $PATH" } })));
+check("denies Bash node -p process.env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "node -p process.env" } })));
+check("denies Bash python -c os.environ", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "python3 -c 'import os; print(dict(os.environ))'" } })));
+check("allows Bash grep for process.env", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "grep -rn process.env src/" } })));
+check("denies Bash /proc/self/environ", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat /proc/self/environ" } })));
+// Quote-folding: a shell resolves cat .e'nv' and cat .env identically; a
+// fragment split on the quote does not — fold quotes, then re-scan.
+check("denies Bash quote-split .env", denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat .e'nv'" } })));
+check("denies Read of .netrc", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/home/u/.netrc" } })));
+check("denies Read of .aws/credentials", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/home/u/.aws/credentials" } })));
 // Guard against over-blocking ordinary, non-secret commands.
 check("allows Bash cat package.json", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "cat package.json" } })));
 check("allows Bash normal echo", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo hello world" } })));
