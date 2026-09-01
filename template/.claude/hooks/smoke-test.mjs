@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
@@ -427,6 +427,27 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n"); // revert the edit
   const honest = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   check("honest green passes and clears the snapshot", honest.code === 0 && honest.out === "" && !existsSync(snapPath));
+}
+{
+  // Tamper check, deletion escape: REMOVING the gated file must block the same
+  // as editing it — a deleted check is a changed check, and `rm` is the cheapest
+  // way to make a suite "go green" (review round 1 finding, reproduced live).
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-del-"));
+  execFileSync("git", ["init", "-q", "-b", "main", tmp]);
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  mkdirSync(join(tmp, "tests"), { recursive: true });
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
+  execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
+  execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
+  const cfg = (exit) => JSON.stringify({ stopGate: [`node -e "process.exit(${exit})"`], stopGateTamperPaths: ["tests/"] });
+  const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json");
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(1));
+  runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  unlinkSync(join(tmp, "tests", "a.test.js")); // delete the check outright
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(0)); // suite "goes green"
+  const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let blocked = false, reason = ""; try { const o = JSON.parse(res.out); blocked = o.decision === "block"; reason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
+  check("green-after-gated-delete blocks and keeps the snapshot", blocked && reason.includes("tests/a.test.js") && existsSync(snapPath));
 }
 {
   // Control: without stopGateTamperPaths the gate behaves exactly as before —

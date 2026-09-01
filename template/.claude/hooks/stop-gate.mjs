@@ -96,10 +96,17 @@ async function main() {
         }
       } else if (verdict === "GREEN" && existsSync(snapPath)) {
         const before = JSON.parse(readFileSync(snapPath, "utf8"));
-        const now = hashGated(cwd, paths) || {};
-        tampered = Object.keys(before).filter((f) => f in now && now[f] !== before[f]).sort();
-        if (tampered.length) verdict = "TAMPER"; // snapshot kept for the next attempt
-        else unlinkSync(snapPath); // honest green: stand down
+        // A DELETED or renamed gated file is a changed gated file — `rm` is the
+        // cheapest way to make a suite "go green" (review round 1). But only
+        // inside a non-null `now`: hashGated returns null on git failure, and
+        // treating that as "everything missing" would fail CLOSED on a broken
+        // git — the tamper layer stands down instead (snapshot kept).
+        const now = hashGated(cwd, paths);
+        if (now) {
+          tampered = Object.keys(before).filter((f) => !(f in now) || now[f] !== before[f]).sort();
+          if (tampered.length) verdict = "TAMPER"; // snapshot kept for the next attempt
+          else unlinkSync(snapPath); // honest green: stand down
+        }
       }
     }
   } catch { /* tamper layer is advisory scaffolding around the gate — never break the gate */ }
