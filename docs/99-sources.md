@@ -137,6 +137,7 @@ row is stronger than unverified: we went looking for it in the primary sources a
 | Claim | Why it is soft |
 |---|---|
 | Context degrades noticeably at 40–50% fill (~400K effective of 1M) | Single self-reported GitHub issue thread (anthropics/claude-code #34685), not an Anthropic benchmark |
+| `permission_denials` (array of `{tool_name, tool_use_id, tool_input}`) at the top level of the `claude -p --output-format json` envelope | Observed in real envelopes (anthropics/claude-code #54850) but absent from the official headless/CLI docs (checked 2026-09-01) — may rename without notice. `loop/loop.mjs` parses it defensively and prints `denials=?` when absent, so a rename degrades to "unknown", never a fake zero |
 | "12 well-chosen rules cut error rate 41% → 3%" | Secondhand aggregation of an unspecified source; never traced to primary data |
 | ~6.7% bare-model vs ~70% harnessed PR acceptance (Stripe ~1,300 AI PRs/week) | Cole Medin's reported figures; not independently verified |
 | Codex bills 2× input / 1.5× output on the whole request past 272K input tokens | The `(<272K context length)` annotation appears on gpt-5.5/5.5-pro/5.4/5.4-pro rows and on NO gpt-5.6 row; 272K is the 5.4/5.5 *context window*, not a 5.6 billing threshold. No $45 output price exists in OpenAI's pricing payload. Widely repeated by third-party blogs; not in OpenAI's own data. Do not budget against it. |
