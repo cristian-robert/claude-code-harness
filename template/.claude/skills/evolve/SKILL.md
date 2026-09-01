@@ -31,7 +31,7 @@ Enter by symptom when you are holding an incident rather than a category:
 | Same loop repeated | a retry cap + escalation line |
 | Unsafe or irreversible action attempted | hook or permission deny — never prose |
 | Decision lost between sessions | durable state: item `## Log`, KB decision, plan field |
-| Failure nobody could explain afterwards | evidence capture: a gate row, or a `receipt:` field |
+| Failure nobody could explain afterwards | evidence capture: a gate row, or a recorded artifact |
 
 | Candidate is... | Destination |
 |---|---|

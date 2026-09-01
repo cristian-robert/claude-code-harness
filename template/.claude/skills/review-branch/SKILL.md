@@ -64,11 +64,6 @@ Dispatch code-reviewer with the contract inline. On findings: verify each agains
 
 ## Output
 
-Find the implementation report by CONTENT (the file in `reports/` whose `Plan:` pointer line names this plan — never by slug convention) and write its `receipt:` `review:` line: `PASS (N rounds)` or `REQUEST_CHANGES (N rounds)`. Re-ran the gate in a round? Refresh `gate:` in the same edit — `gate:` always holds the CURRENT result, and `gate: RED` under `review: PASS` describes a tree that no longer exists. Those lines only, never the whole block (`.claude/references/run-receipt.md`).
-
-- No report (ad-hoc branch, no `/implement` run) → nothing to write; not a blocker, the verdict line below still stands.
-- `gate:` still reads `pending` → `/validate` never ran on this branch. Say so in the report and run it before recording a PASS: a receipt asserting `review: PASS` over `gate: pending` claims a green branch nobody gated.
-
 Report on disk; do not recap it in the terminal. End the run with exactly one line:
 
 `Reviewed <slug>: <PASS|REQUEST_CHANGES> · Next: <command>` — `Next:` on PASS only: plan has `item:` set → `/accept backlog/<id>-<slug>.md` (the Stakeholder ceremony comes BEFORE /evolve); itemless → `/evolve`.

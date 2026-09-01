@@ -52,7 +52,7 @@ Wave mode (plan marks `Wave: N`): tasks in a wave MAY run as parallel dispatches
 
 Fallback (no superpowers), per task: failing test first (RED) → minimum to pass (GREEN) → refactor → run the task's own Validate command **immediately** and read the output.
 
-A task is done when its Validate command passes, not when the code is written — a skipped check is a hidden regression. Record any task that took more than one attempt; step 5's receipt carries the counts.
+A task is done when its Validate command passes, not when the code is written — a skipped check is a hidden regression.
 
 Ask when blocked: mid-task ambiguity, a conflicting plan step, or a failed assumption → stop
 and ask, do not guess. 3 failed attempts on one task → blocker (autonomous mode per `.claude/references/autonomous-mode.md`: log it under
@@ -76,7 +76,6 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Files changed | Paths, grouped by task |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |
 | Plan | `plans/<slug>-plan.md` — the contract this report answers (consumers discover the plan through this row) |
-| Receipt | A `receipt:` YAML block — harness version, branch, tier, deviations, retries; `gate:`/`review:` left `pending`. Goes AFTER this table as the file's last block, fenced, `receipt:` at column 0 (`/validate` greps `^receipt:` — indented or inside a table cell reads as absent and fails the gate). Every field resolves from disk or from what you already did — no computed git fields, nothing invented: `.claude/references/run-receipt.md` |
 
 Plan has `item:` → report written means the item moves to `status: review` + Log line `<YYYY-MM-DD> implement: reports/<slug>-implementation-report.md`. Edit the TRACKING ROOT copy (resolve: first line of `git worktree list`; commit there as `track(<id>): review` — guard permits tracking-only commits on any branch), NOT the worktree copy (`backlog/` only exists at the root). Github mode: mirror per `.claude/references/work-tracking.md`, degrade rules apply.
 

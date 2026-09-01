@@ -42,7 +42,7 @@ harness bug.
 | Resets over compaction | For long work, clear context and hand off via a disk artifact; compaction leaves "context anxiety" intact. Model-specific finding — retest per model | Anthropic, harness-design post |
 | Harness coupled to model generation | "Harnesses don't shrink, they move." On every model upgrade, re-ablate: strip what is no longer load-bearing, add what is newly possible | Osmani; Anthropic (sprint construct removed at Opus 4.6) |
 | Proportionate to the failure surface | The harness should be smaller than the failure surface it controls. A one-sentence diff skips the plan (`00-core.md` routing); a long autonomous run that edits files, reaches the network, and opens PRs earns every layer. Ceremony that exceeds the risk is pure tax | rari, "Harness Engineering" (2026) |
-| Attributable runs | Every run records the harness version it ran under, and the branch whose merge commit undoes it. Without the version the outer loop has no controlled variable: a regression cannot be pinned to the `/evolve` change that caused it | PHE audit (2026-08-30); `references/run-receipt.md` |
+| Executable logic is never guidance | Anything an agent must RUN — shell, jq, a regex — belongs in a tested file, never in a skill body or reference. Prose that looks like code is untested by construction and fails silently. Extends ADR-007 (hooks) to every layer | PHE, withdrawn run-receipt attempt (2026-08-31) |
 
 ## Vocabulary map — the community and Anthropic converge
 
@@ -72,7 +72,7 @@ absorbs — and removes one when a model upgrade makes it dead weight.
 - Cole Medin — harness-engineering-demo, Archon, "The Next Evolution of AI Coding Is Harnesses" (PR-acceptance and Stripe figures as reported by Medin)
 - Anthropic — "Harness design for long-running application development" (Rajasekaran, 2026); "Effective context engineering for AI agents"; Claude Code docs (memory, hooks)
 - Addy Osmani — "Agent Harness Engineering"
-- rari (@0xwhrrari) — "Harness Engineering: How to Build AI Agents That Don't Fall Apart" (2026-08-29). Audited mechanism-by-mechanism against `template/` on 2026-08-30. Most were already covered or exceeded here; its GRAPH/coordination layer is rejected with reasons (see anti-scope), and it prices no coordination layer of its own. Four things it did contribute: the run receipt, the proportionality principle, the symptom-keyed failure index, and the unbounded-loop gap in `/review-branch`
+- rari (@0xwhrrari) — "Harness Engineering: How to Build AI Agents That Don't Fall Apart" (2026-08-29). Audited mechanism-by-mechanism against `template/` on 2026-08-30. Most were already covered or exceeded here; its GRAPH/coordination layer is rejected with reasons (see anti-scope), and it prices no coordination layer of its own. What it contributed: the proportionality principle, the symptom-keyed failure index, and the unbounded-loop gap in `/review-branch`. Its "change receipt" was **attempted and withdrawn** — three review rounds, 33 findings, the same exit-masking defect class recurring in each round's fix; it also failed the ratchet, having no incident behind it. The withdrawal taught more than the feature would have (see the principles table)
 - HumanLayer — 12-Factor Agents; "A Brief History of Ralph"
 - Geoffrey Huntley — ghuntley.com/ralph; how-to-ralph-wiggum
 - obra/superpowers — the execution-discipline skills PIV+E stages invoke
