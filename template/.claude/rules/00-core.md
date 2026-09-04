@@ -1,6 +1,4 @@
-# Core discipline
-
-Always-on rules beyond AGENTS.md. Each traces to a real failure.
+# Core discipline — always-on rules beyond AGENTS.md; each traces to a real failure
 
 ## Context economy
 
@@ -32,9 +30,10 @@ Every brief has four elements — objective · output format + size cap · tool 
 
 - Returns are summaries — ≤30 lines, paths not contents. File-mutating subagents run sequentially unless the plan marks disjoint `Wave:` groups; parallel is for read-only work.
 
-## Evidence
+## Answers to the user
 
-Never claim done/fixed/passing without the command and its real output. Applies to subagent reports too — re-run, don't relay.
+- Never claim done/fixed/passing without the command and its real output. Applies to subagent reports too — re-run, don't relay.
+- Concise by default: outcome first, each fact once, no narration of your own process or of paths not taken. Concise is NOT lossy — every decision, result, evidence line, and open question stays in; the walkthrough lives in the artifact (plan/report) and expands only when the user asks for detail. (traces to: 2026-09-05, a ~40-line fix recap — the operator asked for the short form)
 
 ## Memory
 
