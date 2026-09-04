@@ -29,6 +29,8 @@ Full chooser and doctrine: `docs/03-loops.md`.
 
 1. Copy `loop/PROMPT.template.md` → `loop/PROMPT.md`; fill every placeholder.
    Spec items must be independently verifiable — they are the termination contract.
+   The declaration line under the template's header makes the run autonomous, in YOUR
+   words; nothing in `harness.json` does (`.claude/references/autonomous-mode.md`).
 2. `node loop/loop.mjs` (in-place: commits on the current branch — sandbox only), or
    `node loop/loop.mjs --worktree` (fresh branch `loop/run-<epoch>` in an in-repo
    `.worktrees/` worktree, auto-excluded from status — required for parallel runs).

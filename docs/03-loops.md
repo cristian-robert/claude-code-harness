@@ -21,8 +21,7 @@ Three loops at three timescales. All of them keep state on disk, never in a cont
 | OUTER | after every shipped item or failure | `/evolve`: mine the session for lessons; rules added WITH incident provenance, rules pruned when no longer earning their lines | rule/vault deltas |
 | AUTONOMOUS | per iteration until sentinel | `loop/loop.mjs` re-feeds `PROMPT.md` to a fresh headless process | commits, `fix_plan.md`, `DONE.txt` |
 
-Agile-ceremony overlap: standup, retro, and DoD already live here (session-start, `/evolve`,
-Stop gate + `/validate`) — the delivery layer (`docs/06-delivery-org.md`) adds only refine/scope/accept, never re-encoding these loops.
+Agile-ceremony overlap: standup, retro, and DoD already live here (session-start, `/evolve`, Stop gate + `/validate`) — the delivery layer (`docs/06-delivery-org.md`) adds only refine/scope/accept, never re-encoding these loops.
 
 Superpowers mapping inside INNER stages (invoke via Skill tool; condensed inline fallback if the plugin is unavailable; on conflict, repo rules win):
 
@@ -104,6 +103,7 @@ Full mechanics: `loop/README.md`. Doctrine:
 
 - **Qualifies:** numbered spec items, each mechanically verifiable (command exits 0, behavior observable). Design-ambiguous work does not — `/plan-work` it first, or don't loop it.
 - **Sentinel stop authority.** The driver stops on the EXISTENCE of `loop/DONE.txt` — model output text is never parsed. The loop, not the model, decides when work is finished.
+- **Autonomy is declared, not configured.** `PROMPT.md` carries the operator's own "this session is autonomous" line; that line — never a `harness.json` key — is what lets the iteration skip human gates (`template/.claude/references/autonomous-mode.md`).
 - **ONE change per iteration**, journaled in `fix_plan.md` (Did / Validation / Next). The next fresh iteration reads code + journal, not chat.
 
 | Failure mode | Symptom | Guardrail line in PROMPT.md |

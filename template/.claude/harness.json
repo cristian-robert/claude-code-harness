@@ -5,7 +5,6 @@
   "localCi": false,
   "requireEvolveBeforePush": false,
   "baseBranch": null,
-  "autonomous": false,
   "stopGateTimeoutSec": 30,
   "stopGateTotalSec": 75,
   "stopGateTamperPaths": [],
