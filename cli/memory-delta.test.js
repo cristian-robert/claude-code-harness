@@ -66,4 +66,19 @@ test('an unknown subcommand is a usage error, exit 64', () => {
   assert.strictEqual(run(['bogus'], { PHE_MEMORY_FILE: MEM }).code, 64);
 });
 
+// `--root` as the last argument used to reach resolve(undefined) and throw a stack trace, exit 1.
+test('--root without a value is a usage error, exit 64, nothing written', () => {
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-delta-bare-'));
+  const call = (args) => {
+    try { execFileSync('node', [SCRIPT].concat(args), { cwd: fresh, encoding: 'utf-8', env: Object.assign({}, process.env, { PHE_MEMORY_FILE: MEM }), stdio: ['ignore', 'pipe', 'pipe'] }); return { code: 0, out: '' }; }
+    catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
+  };
+  const bare = call(['snapshot', '--root']);
+  assert.strictEqual(bare.code, 64, bare.out);
+  assert.ok(/usage: memory-delta\.mjs snapshot\|diff/.test(bare.out), bare.out);
+  const dashed = call(['diff', '--root', '--verbose']);
+  assert.strictEqual(dashed.code, 64, dashed.out);
+  assert.ok(!fs.existsSync(path.join(fresh, '.claude')), 'a usage error writes nothing');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

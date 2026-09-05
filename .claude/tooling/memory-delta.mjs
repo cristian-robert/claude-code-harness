@@ -16,9 +16,13 @@ import { join, resolve } from "node:path";
 const argv = process.argv.slice(2);
 const sub = argv[0];
 const rootIdx = argv.indexOf("--root");
-let root = resolve(rootIdx !== -1 ? argv[rootIdx + 1] : process.cwd());
+const rootArg = rootIdx === -1 ? null : argv[rootIdx + 1];
+// Usage FIRST: a bare `--root` (or one swallowing the next flag) reached resolve(undefined) and
+// threw a stack trace with exit 1 — the contract is exit 64, and no git call, before any work.
+const badRoot = rootIdx !== -1 && (!rootArg || rootArg.startsWith("-"));
+if (badRoot || (sub !== "snapshot" && sub !== "diff")) { console.error("usage: memory-delta.mjs snapshot|diff [--root <dir>]"); process.exit(64); }
+let root = resolve(rootArg || process.cwd());
 if (rootIdx === -1) { try { root = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5000 }).trim() || root; } catch { /* not a git repo: cwd is the root */ } }
-if (sub !== "snapshot" && sub !== "diff") { console.error("usage: memory-delta.mjs snapshot|diff [--root <dir>]"); process.exit(64); }
 
 const configDir = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
 const memory = process.env.PHE_MEMORY_FILE || join(configDir, "projects", root.replace(/[\\/]/g, "-"), "memory", "MEMORY.md");
