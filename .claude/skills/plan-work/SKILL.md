@@ -73,6 +73,7 @@ Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`,
 ## 7. Self-assess
 
 Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step; `routine` only for text-only or trivially easy one-file tasks). Every tier is reviewed at `deep`, so an honest tier decides who builds, not who reviews.
+`confidence` is capped at 6 unless ALL three hold — every `Read first:` file was read THIS session and `plan-anchors.mjs` exits 0; every external tool the plan builds against is cached at `wiki/stack/<tool>/` or was `/research`ed this session; open questions are zero. A self-score above 6 without the three is a planning failure, not optimism. (traces to: 2026-09-05 — agents skew positive grading their own work; a felt 7 never asks)
 
 - Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan-work` run when its turn comes.
 - Tasks provably independent (pairwise-disjoint `Files:` lists, no ordering) → mark them with the same `Wave: N` per the template rule; otherwise omit Wave — sequential is the default. One judgment, made NOW by the planner, not re-litigated at implement time.

@@ -64,7 +64,7 @@ and ask, do not guess. 3 failed attempts on one task → blocker (autonomous mod
 
 1. Run the plan's End-to-end verification section — plan has `item:` → read that item's `## Acceptance criteria` (tracking root) and confirm each is met; the plan references them by path, it does not restate them.
 2. Invoke `superpowers:verification-before-completion`. Fallback: re-run every gate command and
-   read the real output. Evidence means command output on record — never "looks done".
+   read the real output. Evidence means command output on record from the consumer of the change (hook, CLI, test) — never a read-back of the declaring file, never "looks done".
 
 ## 5 · Report (mandatory, to disk)
 
@@ -75,6 +75,7 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Task status | Per task: done/failed + one-line validation output summary |
 | Knowledge | `knowledge-base/` files read before Task 1 (the plan's `Knowledge to load first:`) and every KB file this run changed. `none` is a valid value; an empty cell is not |
 | Deviations | Every departure from the plan, with why |
+| Decisions taken unasked | Numbered, each with its cost if wrong — or "none" |
 | Files changed | Paths, grouped by task |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |
 | Plan | `plans/<slug>-plan.md` — the contract this report answers (consumers discover the plan through this row) |
