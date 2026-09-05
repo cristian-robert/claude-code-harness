@@ -54,6 +54,11 @@ const CHECKS = [
     name: 'evolve->push gate described as "opt-in" (it is default on)',
     hit: (l) => /opt-?in\b[^\n]{0,40}evolve|evolve[^\n]{0,40}\bopt-?in\b/i.test(l),
   },
+  {
+    // traces to: 2026-09-05 — the INCOMPLETE reason invited the edit the exact-string gate refuses
+    name: 'retired stop-gate advice "make the checks faster"',
+    hit: (l) => /make the checks faster/i.test(l),
+  },
 ];
 
 function walk(abs, out) {

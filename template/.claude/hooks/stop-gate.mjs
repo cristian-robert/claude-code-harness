@@ -53,8 +53,8 @@ async function main() {
   let gateBefore = null;
   try { if (existsSync(gateSnapPath)) gateBefore = JSON.parse(readFileSync(gateSnapPath, "utf8")).stopGate; } catch { gateBefore = null; }
   const snapped = Array.isArray(gateBefore) ? gateBefore : [];
-  // A refused GREEN persists a TAMPER verdict first, so the statusline and the
-  // pre-compact snapshot never show the stale verdict of the last real run.
+  // A refused GREEN persists a TAMPER verdict first, so the pre-compact snapshot (the one
+  // reader of last-gate.json) never carries the stale verdict of the last real run.
   const refuse = (reason, removed) => {
     try {
       mkdirSync(join(cwd, ".claude", "state"), { recursive: true });
@@ -74,7 +74,9 @@ async function main() {
     if (snapped.length) refuse(`Stop gate config was removed since the gate last went RED or INCOMPLETE — .claude/harness.json is ${existsSync(cfgPath) ? "unreadable" : "missing"}; removed: ${snapped.join(" · ")}. Restore the file and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, snapped);
     process.exit(0);
   }
-  const gate = Array.isArray(cfg.stopGate) ? cfg.stopGate : [];
+  // Entries that are not non-empty strings are ignored, never run: a typo'd number reached
+  // execSync, threw, and pinned the gate RED on every turn end for the session (M1 review).
+  const gate = (Array.isArray(cfg.stopGate) ? cfg.stopGate : []).filter((c) => typeof c === "string" && c.trim());
   const removed = snapped.filter((c) => !gate.includes(c));
   if (removed.length) refuse(`Stop gate config shrank since the gate last went RED or INCOMPLETE — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, removed);
   if (gate.length === 0) process.exit(0);
@@ -117,11 +119,11 @@ async function main() {
     }
   } catch { /* advisory scaffolding — never break the gate */ }
 
-  // Tamper check (opt-in via harness.json stopGateTamperPaths): on RED, snapshot
-  // the gated files ONCE — re-snapshotting per block would let them be edited one
-  // turn at a time. On GREEN with a snapshot present, a changed gated file means
-  // the suite went green BECAUSE the check changed, not because the code was
-  // fixed — refuse it. Traces to a documented upstream escape (coleam00/skills):
+  // Tamper check (opt-in via harness.json stopGateTamperPaths): on RED — or INCOMPLETE, a
+  // partial gate being the same opening — snapshot the gated files ONCE; re-snapshotting
+  // per block would let them be edited one turn at a time. On GREEN with a snapshot
+  // present, a changed gated file means the suite went green BECAUSE the check changed,
+  // not because the code was fixed — refuse it. Traces to a documented upstream escape (coleam00/skills):
   // handed a failing `2+2==5` test, the agent rewrote the test and finished.
   // Best-effort like all state here: any error behaves as feature-off.
   let tampered = [];
@@ -131,7 +133,7 @@ async function main() {
     if (paths.length) {
       const sid = String(event.session_id || "nosession").slice(0, 8);
       const snapPath = join(cwd, ".claude", "state", `tamper-${sid}.json`);
-      if (verdict === "RED" && !existsSync(snapPath)) {
+      if ((verdict === "RED" || verdict === "INCOMPLETE") && !existsSync(snapPath)) {
         const snap = hashGated(cwd, paths);
         if (snap && Object.keys(snap).length) {
           mkdirSync(join(cwd, ".claude", "state"), { recursive: true });
@@ -154,8 +156,8 @@ async function main() {
     }
   } catch { /* tamper layer is advisory scaffolding around the gate — never break the gate */ }
 
-  // Persist the verdict for the PreCompact snapshot / statusline (.claude/state/
-  // is gitignored by adopters). Best-effort: this write must never break the gate.
+  // Persist the verdict for the PreCompact snapshot (.claude/state/ is gitignored by
+  // adopters). Best-effort: this write must never break the gate.
   try {
     const stateDir = join(cwd, ".claude", "state");
     mkdirSync(stateDir, { recursive: true });
@@ -172,7 +174,7 @@ async function main() {
   } else if (verdict === "INCOMPLETE") {
     process.stdout.write(JSON.stringify({
       decision: "block",
-      reason: `Stop gate INCOMPLETE — ${skipped.length}/${gate.length} check(s) never ran (time budget ${cfg.stopGateTotalSec || 75}s exhausted): ${skipped.join(", ")}. A partial gate is not a pass, and the gate list is now snapshotted: removing a command to finish is refused. Raise stopGateTotalSec / stopGateTimeoutSec, make the checks faster, or run /validate manually before finishing.`.slice(0, MAX_REASON),
+      reason: `Stop gate INCOMPLETE — ${skipped.length}/${gate.length} check(s) never ran (time budget ${cfg.stopGateTotalSec || 75}s exhausted): ${skipped.join(", ")}. A partial gate is not a pass, and the gate list is now snapshotted: removing a command to finish is refused. Raise stopGateTotalSec / stopGateTimeoutSec, or run /validate manually before finishing. Editing a command's text counts as removing it (the gate compares exact strings) — change one only with the user's confirmation.`.slice(0, MAX_REASON),
     }));
   } else if (verdict === "TAMPER") {
     process.stdout.write(JSON.stringify({
