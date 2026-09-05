@@ -52,6 +52,19 @@ test('a label is sanitized to a safe filename', () => {
   assert.ok(fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'npm-test-x.log')), 'label not sanitized');
 });
 
+test('a wedged command is killed after --timeout-sec and reports exit 124', () => {
+  const r = run(['slow', '--timeout-sec', '1', '--', 'node -e "setTimeout(() => {}, 5000)"']);
+  assert.strictEqual(r.code, 124, 'a timeout is exit 124');
+  const header = r.out.trimEnd().split('\n')[0];
+  assert.ok(/^exit=124 · log=\.claude\/state\/checks\/slow\.log · \d+ lines · timed out after 1s$/.test(header), 'header names the timeout, got: ' + header);
+});
+
+test('a command the shell cannot find still exits non-zero and writes a log', () => {
+  const r = run(['missing', '--', 'definitely-not-a-command-xyz']);
+  assert.notStrictEqual(r.code, 0, 'a missing command must not report success');
+  assert.ok(fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'missing.log')), 'log must exist');
+});
+
 test('missing -- separator is a usage error, exit 64', () => {
   const r = run(['nolabel']);
   assert.strictEqual(r.code, 64);

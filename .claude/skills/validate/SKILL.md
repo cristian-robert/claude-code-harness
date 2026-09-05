@@ -46,7 +46,7 @@ Start from the injected "Changed files" list plus uncommitted changes (`git stat
 
 ## 3 · Run every command
 
-Run each gate command to completion THROUGH the runner — `node .claude/tooling/run-check.mjs <label> -- <cmd>` — which keeps the whole output at `.claude/state/checks/<label>.log` and prints only `exit=<n>` plus the last 40 lines. Read the exit status from that line — no inference from output text. Never `cat` a log into the window: a FAIL row cites the log path and the failing tail. One row per command:
+Run each gate command to completion THROUGH the runner — `node .claude/tooling/run-check.mjs <label> [--timeout-sec N] -- <cmd>` — which keeps the whole output at `.claude/state/checks/<label>.log` and prints only `exit=<n>` plus the last 40 lines. Read the exit status from that line — no inference from output text. Never `cat` a log into the window: a FAIL row cites the log path and the failing tail. One row per command:
 
 | Command | Exit | Verdict |
 |---|---|---|
