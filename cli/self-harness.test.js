@@ -155,4 +155,17 @@ test('a top-level dir the template no longer ships is swept from the root (retir
   assert.ok(fs.existsSync(path.join(root2, '.claude', 'state', 'keep.json')) && fs.existsSync(path.join(root2, '.claude', 'agent-memory', 'keep.md')), 'machine state untouched');
 });
 
+test('--check against a root with no .claude/ reports the missing payload instead of throwing', () => {
+  // A repo that has never been synced. drift() already names every payload file; sweeping a
+  // root directory that does not exist must not turn that report into a stack trace.
+  const root3 = path.join(TMP, 'root-unsynced');
+  fs.mkdirSync(root3, { recursive: true });
+  const tpl3 = path.join(TMP, 'template-unsynced', '.claude'); makeTemplate(tpl3);
+  const chk = run(['--root', root3, '--template', tpl3, '--check'], root3);
+  assert.strictEqual(chk.code, 1, 'an unsynced root must fail the check: ' + chk.out);
+  assert.ok(!/ENOENT|at Object\.readdirSync/.test(chk.out), 'threw instead of reporting: ' + chk.out);
+  assert.ok(/missing\s+hooks\/guard\.mjs/.test(chk.out), 'must name the missing payload files: ' + chk.out);
+  assert.ok(/Run: node tools\/self-harness\.mjs/.test(chk.out), 'must print the remedy: ' + chk.out);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

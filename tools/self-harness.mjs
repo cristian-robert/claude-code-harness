@@ -60,6 +60,7 @@ function drift() {
 function extras() {
   const shipped = new Set(files(TEMPLATE));
   const out = [];
+  if (!existsSync(DEST)) return out; // never synced — drift() already names every payload file as missing
   // Every top-level dir under the root .claude/ is swept — the template's own dirs for files it
   // stopped shipping, and dirs the template no longer ships AT ALL (a retired top-level dir was
   // invisible to a sweep that only walked the template's dirs, M1 review). Machine state is exempt.
