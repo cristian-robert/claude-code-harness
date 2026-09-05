@@ -157,7 +157,7 @@ Three, all benign, none a defect.
 
 ## Decisions taken without asking
 
-23 numbered rulings, taken by the controller during execution and recorded here in order with the cost of being wrong. Rulings 8, 9 and 16 are operator directives, quoted verbatim, not controller judgment.
+25 numbered rulings, taken by the controller during execution and recorded here in order with the cost of being wrong. Rulings 8, 9 and 16 are operator directives, quoted verbatim, not controller judgment.
 
 1. **Ruling 1** — work in the primary checkout on the existing feature branch, no worktree; Task 1 installs the root harness, which must live where the user's sessions run, and the branch is already isolated from main. *Costs nothing if wrong (a worktree can be added later).*
 2. **Ruling 2** — Task 6's label sanitizer excludes dots from the allowed set, so `npm test/../x` → `npm-test-x` as the test expects. *Costs one dash in a log filename if wrong.*
@@ -182,6 +182,8 @@ Three, all benign, none a defect.
 21. **Ruling 21** — fix two surviving stale three-role lists (`template/.claude/references/harness-maintenance.md:15`, `docs/01-context-engineering.md:131`) and re-sync. *Costs nothing.*
 22. **Ruling 22** — Task 8 (this report and the vault ADRs) has no separate task review; its completeness is checked by the final whole-branch review against the ledger extract, where every ruling and every deferred minor must appear here. *Costs one missed line if that reviewer skims.*
 23. **Ruling 23** — the gate-config snapshot arms on RED and INCOMPLETE, and the INCOMPLETE message no longer suggests trimming the gate (final-review finding; absorbs deferred minor L59). *Costs a block when an INCOMPLETE gate is legitimately trimmed mid-session, resolvable through the same confirm path.*
+24. **Ruling 24** — the fix wave reworded both refusal messages to "since the gate last went RED or INCOMPLETE"; the Task 3 evidence cell above still quotes the earlier text as the state Task 3 shipped, left as historical evidence. *Costs one stale quote in a per-task cell.*
+25. **Ruling 25** — the fix-wave re-review's three residual observations (fixture timing margin, INCOMPLETE not arming the opt-in file-tamper layer, one message wording) are parked as follow-ups, not fixed: none is load-bearing and there is no second fix wave. *Costs one follow-up task later.*
 
 **Cost note carried from Task 9:** reviews on Claude now run opus at `xhigh` for every tier, per Ruling 9 and the retired inversion. Per-review cost rises accordingly.
 
