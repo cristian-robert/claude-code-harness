@@ -88,11 +88,11 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 - Knowledge writes follow the Index Law: update that folder's `_index.md` in the same change — `knowledge-base/` locally, and the shared store when a promotion MOVED something there.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.
   A hook change without a green smoke test is not applied.
-- LAST, after every commit above — even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, default true); written before the `docs(kb):` commit it is stale the moment that commit lands. `.claude/state/` is gitignored by adopters.
+- LAST — after the `docs(kb):` commit and after committing every other change this run made on the feature branch (rule/AGENTS.md edits, hook fixes: `chore(evolve): <what>`), even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, default true), so any commit made after the marker re-blocks the push until `/evolve` runs again. `.claude/state/` is gitignored by adopters.
 
 ## 7. Output contract
 
-Changes go to disk; no terminal recap of file contents. The push gate is open once the marker is written. End with exactly one line:
+Changes go to disk; no terminal recap of file contents. The push gate is open once the marker is written after the last commit. End with exactly one line:
 
 `Evolved harness: +N -M · Next: superpowers:finishing-a-development-branch`
 
