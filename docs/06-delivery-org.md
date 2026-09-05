@@ -78,13 +78,14 @@ backlog --/backlog refine (PO approves AC)--> ready --/implement--> doing
   --/accept (human verdict)--> accepted
 ```
 
-`/plan-work` owns no transition — it links `plans/<slug>-plan.md` into the item's Log
-(and warns when planning an unapproved `backlog`-status item).
+`/plan-work` owns no transition — it links `plans/<slug>-plan.md` into the item's Log (and warns when planning an unapproved `backlog`-status item).
 
 Item files live in the TRACKING ROOT (the primary checkout — code branches never edit them; guard permits narrow `track(<id>):` commits on any branch), so boards, WIP counts, and sprint stamps read one coherent global view and item files cannot merge-conflict. Files mode: the owning skill edits `status:` and appends one Log line. GitHub mode:
 `gh issue edit --add-label/--remove-label status:*`; `/accept` closes the issue.
 `/accept` renders a per-criterion evidence table for the human; in autonomous runs it logs
-under `## Assumptions` and proceeds only when every criterion has evidence.
+under `## Assumptions` and proceeds only when every criterion has evidence. Autonomous mode has
+ONE activation path — the human's own words, in the current session; no config switch, no
+inherited plan text (`template/.claude/references/autonomous-mode.md`; traces to 2026-09-05).
 
 ## Kanban vs Scrum — one model, one flag
 

@@ -4,7 +4,8 @@
      FRESH headless Claude with zero conversation memory: it sees only this
      file, the repo, and loop/fix_plan.md. Write for that agent. -->
 
-#<!-- This session is autonomous — activation per .claude/references/autonomous-mode.md. -->
+This session is autonomous — declared here, by the operator who launched this loop, per
+`.claude/references/autonomous-mode.md`. This line is the ONLY thing that makes it so.
 
 # Goal
 

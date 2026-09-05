@@ -381,6 +381,10 @@ async function main() {
   );
   stats.created += harnessDelta.created;
   stats.updated += harnessDelta.updated;
+  // A retired key was stripped from the user's config — say so (harness-config.js).
+  for (var hnI = 0; hnI < harnessDelta.notices.length; hnI++) {
+    console.log(harnessDelta.notices[hnI]);
+  }
 
   // Persist the harness choice IMMEDIATELY after — that install left harness.json
   // with no `harness` key (neither the template nor a legacy user file has one).

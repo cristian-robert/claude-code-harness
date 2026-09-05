@@ -25,7 +25,7 @@ Synthesized from 17 sources across three research rounds: Anthropic's harness-de
 
 1. **Session context** (advisory, tiered — Tier 0 always → Tier 3 explicit, per `docs/01`): root `CLAUDE.md` ≤60 lines; unscoped rules; two model-invoked knowledge skills; `paths:`-scoped rules and subdirectory `CLAUDE.md` load lazily; references load only when cited.
 2. **Enforcement** (deterministic): PreToolUse guard (secrets, recursive deletes, protected branches — survives `--dangerously-skip-permissions`); advisory post-edit lint that also self-tests hook edits; a Stop gate that blocks a turn from ending red and persists its verdict; a PreCompact snapshot so plan/gate state survives compaction; a SubagentStop verdict gate on the reviewer; `statusline.mjs` shows branch, context pressure, and gate state at a glance.
-3. **Loops** (state on disk): PIV+E pipeline — `/plan-work → /implement → /validate → /review-branch → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work, and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
+3. **Loops** (state on disk): PIV+E pipeline — `/plan-work → /implement → /validate → /review-branch → /evolve` — with the superpowers plugin as the execution discipline inside each stage, `/handoff` for mid-task resets, an autonomous loop for well-specified mechanical work (autonomy is declared by you, per session — never by config), and an optional agile delivery layer (`/backlog`, `/sprint`, `/accept`) with roles as hats and a files-or-GitHub backend.
 4. **Knowledge** (cross-project): a git-tracked project-local `knowledge-base/` plus an optional shared Obsidian vault for evergreen knowledge; doc-grounded work via `/research` (tool docs cached once at `wiki/stack/<tool>/`, reused everywhere, always current for your pinned version); `/evolve` harvests session lessons and prunes.
 
 ## Install
@@ -61,7 +61,7 @@ Codex support in this release is **guidance-only**: instructions, skills, and su
 
 **Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx perfect-harness-engineering merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
 
-Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
+Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18 and Claude Code ≥2.1.246 (below it a subagent that hits its `maxTurns` cap returns output that looks finished — the partial marker and resume hint need 2.1.246).
 
 ## Workflow
 
@@ -78,9 +78,10 @@ Per work item — the PIV+E loop. Every stage's state lives on disk, never in th
 | 4 · Validate | `/validate` | GATE GREEN/RED verdict |
 | 5 · Review | `/review-branch` | `reports/<slug>-review.md` — PASS / REQUEST_CHANGES |
 | 6 · Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence; the human verdict |
-| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns |
+| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns BEFORE the work ships; writes the marker the push gate reads |
+| 8 · Ship | `superpowers:finishing-a-development-branch` | push / PR — `guard.mjs` denies a push until `/evolve` has run since the last commit (`requireEvolveBeforePush`, default on for new installs; existing adopters flip it in `.claude/harness.json`) |
 
-Merge/PR happens after review PASS (superpowers `finishing-a-development-branch` owns the mechanics). Scrum mode adds `/sprint plan` / `/sprint close` around the loop. The superpowers plugin is the execution discipline inside each stage; skills degrade to inline fallbacks without it.
+Merge/PR happens after review PASS and `/evolve` — the guard denies the push until `/evolve` has run (superpowers `finishing-a-development-branch` owns the mechanics). Scrum mode adds `/sprint plan` / `/sprint close` around the loop. The superpowers plugin is the execution discipline inside each stage; skills degrade to inline fallbacks without it.
 
 Anytime:
 

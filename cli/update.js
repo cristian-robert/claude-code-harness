@@ -160,8 +160,8 @@ async function main() {
     // user does not have yet (a newly-shipped key arrives with its default). backupAndCopy
     // above deliberately skipped it. This replaces the old snapshot-and-restore of
     // `harness`, `vault` and `models` — three keys added reactively, one per incident,
-    // while stopGate, baseBranch, workTracking, requireEvolveBeforePush, autonomous and the
-    // two gate timeouts were silently reset to the shipped defaults on every update.
+    // while stopGate, baseBranch, workTracking, requireEvolveBeforePush and the two gate
+    // timeouts were silently reset to the shipped defaults on every update.
     //
     // Must run BEFORE the Codex emit below: emit-codex.js reads `models` from this file and
     // BAKES the resolved IDs into .codex/agents/*.toml, so merging afterwards would leave
@@ -172,6 +172,10 @@ async function main() {
     );
     stats.created += harnessDelta.created;
     stats.updated += harnessDelta.updated;
+    // A retired key was stripped from the user's config — say so (harness-config.js).
+    for (var hn = 0; hn < harnessDelta.notices.length; hn++) {
+      console.log(harnessDelta.notices[hn]);
+    }
 
     // Retire framework skills the payload has renamed (copy above is additive —
     // it cannot remove the old dirs, and a leftover `plan` skill keeps shadowing

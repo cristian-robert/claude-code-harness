@@ -1,0 +1,33 @@
+{
+  "$comment": "Template-owned (overwritten on update, like settings.json). Declares what the payload assumes exists. Read by cli/capabilities.js; decisions land in harness.json `capabilities`, never here.",
+  "marketplaces": {
+    "claude-plugins-official": { "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }, "trust": "official" },
+    "claude-community":        { "source": { "source": "github", "repo": "anthropics/claude-plugins-community" }, "trust": "community" },
+    "openai-codex":            { "source": { "source": "github", "repo": "openai/codex-plugin-cc" }, "trust": "third-party" }
+  },
+  "capabilities": [
+    { "id": "superpowers@claude-plugins-official", "class": "plugin", "tier": "required",
+      "skills": ["brainstorming","writing-plans","using-git-worktrees","subagent-driven-development","executing-plans",
+                 "test-driven-development","verification-before-completion","requesting-code-review",
+                 "receiving-code-review","finishing-a-development-branch","systematic-debugging"],
+      "usedBy": ["plan-work","implement","validate","review-branch","evolve","debugging-this-repo"],
+      "why": "ADR-008 — execution discipline inside every PIV stage; inline fallbacks are condensed, not equivalent" },
+    { "id": "codex@openai-codex", "class": "plugin", "tier": "optional", "skills": ["rescue"], "usedBy": ["review-branch"],
+      "requiresBinary": "codex", "why": "second-opinion rescue pass; needs the Codex CLI" },
+    { "id": "typescript-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended",
+      "when": { "files": ["tsconfig.json"] },
+      "requiresBinary": "typescript-language-server", "supersedes": { "lsp": "typescript" },
+      "why": "official LSP plugin replaces the hand-rolled .lsp.json typescript entry; files-trigger because detectTechStack() has no plain-TS signal" },
+    { "id": "pyright-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Python"] },
+      "requiresBinary": "pyright-langserver", "supersedes": { "lsp": "python" },
+      "why": "official LSP plugin replaces the hand-rolled .lsp.json python entry AND the codebase-search MCP's Python-AST niche" },
+    { "id": "gopls-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Go"] },
+      "requiresBinary": "gopls", "why": "Go has no .lsp.json entry today — closes a diagnostics gap the hand-rolled file never covered" },
+    { "id": "rust-analyzer-lsp@claude-plugins-official", "class": "plugin", "tier": "recommended", "when": { "stack": ["Rust"] },
+      "requiresBinary": "rust-analyzer", "why": "Rust has no .lsp.json entry today — same gap" },
+    { "id": "architect-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
+      "path": "~/.claude/agents/architect-agent/AGENT.md", "why": "harness-init degraded-roles notice" },
+    { "id": "tester-agent", "class": "global-agent", "tier": "recommended", "provision": "manual",
+      "path": "~/.claude/agents/tester-agent/AGENT.md", "why": "harness-init degraded-roles notice" }
+  ]
+}

@@ -90,6 +90,39 @@ var buildMd = ['---', 'name: b', 'description: "d"', 'tier: build', '---', 'b'].
 assert('a build-tier agent resolves to terra',
   agentMdToToml(buildMd, 'b', DEFAULT_MODELS).indexOf('model = "gpt-5.6-terra"') !== -1);
 
+var routineMd = ['---', 'name: r', 'description: "d"', 'tier: routine', '---', 'b'].join('\n');
+assert('a routine-tier agent resolves to luna',
+  agentMdToToml(routineMd, 'r', DEFAULT_MODELS).indexOf('model = "gpt-5.6-luna"') !== -1);
+
+// A role the PACKAGE knows but the user's map does not. `update` keeps an adopter's `models`
+// verbatim (harness-config.js merges top-level keys only, by design), so a role added in a
+// release — `routine`, 2026-09-05 — never arrives in an existing harness.json. Throwing here
+// made `npx phe update` BRICK the Codex re-emit for every existing Codex adopter. Same shape
+// as unrecorded ceilings: WARN and emit the shipped default; the user's own IDs are untouched.
+var PRE_ROUTINE = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+delete PRE_ROUTINE.claude.routine;
+delete PRE_ROUTINE.codex.routine;
+PRE_ROUTINE.codex.scout = 'gpt-5.6-terra'; // a re-pointed role, to prove it is never overridden
+var preRoutineWarnings = [];
+var preRoutineToml = agentMdToToml(routineMd, 'r', PRE_ROUTINE, function (m) { preRoutineWarnings.push(m); });
+assert('a routine-tier agent still emits against a map that predates the role (shipped default)',
+  preRoutineToml.indexOf('model = "gpt-5.6-luna"') !== -1);
+assert('...and warns, naming the role, the agent file, the package default it fell back to, and the fix',
+  preRoutineWarnings.length === 1 && /models\.codex has no "routine" role/.test(preRoutineWarnings[0]) &&
+  /r\.md/.test(preRoutineWarnings[0]) && /package default "gpt-5\.6-luna"/.test(preRoutineWarnings[0]) &&
+  /run \/models/.test(preRoutineWarnings[0]));
+assert('...without overriding a role the map DOES have',
+  agentMdToToml(scoutMd, 'scout', PRE_ROUTINE, function () {}).indexOf('model = "gpt-5.6-terra"') !== -1);
+var turboMd = ['---', 'name: t', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
+var turboErr = null;
+try { agentMdToToml(turboMd, 't', PRE_ROUTINE, function () {}); } catch (e) { turboErr = e; }
+assert('a tier unknown to the package too still throws (a typo is not a new role)',
+  turboErr instanceof Error && /unknown role/i.test(turboErr.message));
+var noCodexErr = null;
+try { agentMdToToml(routineMd, 'r', { claude: PRE_ROUTINE.claude }, function () {}); } catch (e) { noCodexErr = e; }
+assert('a map with no codex half at all still throws (a deleted half is not a new role)',
+  noCodexErr instanceof Error && /no model mapped/i.test(noCodexErr.message));
+
 // luna is the ONE 5.6 model without `ultra` (models.json, verified 2026-07-12). Emitting it
 // would fail at dispatch time, far from the file that caused it — so fail at emit instead.
 // This protection predates the ceilings move and MUST survive it: the levels now come from
@@ -176,8 +209,8 @@ var badTierErr = null;
 try { agentMdToToml(badTierMd, 'x', DEFAULT_MODELS); } catch (e) { badTierErr = e; }
 assert('an unknown tier throws rather than silently emitting no model', badTierErr instanceof Error);
 
-// code-reviewer has no tier: its model is chosen per dispatch (the sibling of the
-// implementer). Emitting a fixed model here would reintroduce exactly the bug we removed.
+// code-reviewer has no tier: its model is pinned per dispatch by /review-branch (always the
+// `deep` tier, a fresh context). Emitting a fixed model here would reintroduce exactly the bug we removed.
 var noTierMd = ['---', 'name: code-reviewer', 'description: "d"', '---', 'b'].join('\n');
 assert('an agent with no tier: emits no model key rather than guessing one',
   agentMdToToml(noTierMd, 'code-reviewer', DEFAULT_MODELS).indexOf('model = ') === -1);
@@ -657,7 +690,7 @@ fs.rmSync(REAL_TEST_DIR, { recursive: true, force: true });
 // ─── REGRESSION GUARD: no Claude model name in Codex DISPATCH prose ───────────
 // The defect this phase fixed: skill bodies said "pin `model: sonnet`" / "default
 // opus", and the dual-emit copied that verbatim into .agents/skills/ where those
-// names mean NOTHING to Codex. Roles (scout|build|deep) replaced them.
+// names mean NOTHING to Codex. Roles (scout|routine|build|deep) replaced them.
 //
 // ONE documented exception: skills/models/ is the /models refresh command — naming
 // model IDs is its literal subject matter, and it is harness-aware prose, not a
@@ -954,6 +987,36 @@ console.log('\neffort ceilings live in .claude/harness.json -> models.efforts:')
       Object.keys(snapshot(path.join(proj, '.codex'))).every(function (f) {
         return fs.readFileSync(path.join(proj, '.codex', f), 'utf-8').indexOf('gpt-5.7-nova') === -1;
       }));
+  })();
+
+  // (5) A map that PREDATES a role. scout.md and research-gatherer.md both pin `tier: routine`
+  // (added 2026-09-05); an adopter's map from before that day has no such role, and `update`
+  // keeps the map verbatim. The emit must complete, fall back to the package default, and say
+  // so ONCE per role per run — one line, not one per agent — naming the role, the model it
+  // fell back to, and the fix.
+  (function () {
+    var proj = refreshedProj('predates-routine', function (models) {
+      delete models.claude.routine;
+      delete models.codex.routine;
+    });
+    var warnings = [];
+    var err = null;
+    var counts = null;
+    try { counts = emitCodexPayload(proj, function (m) { warnings.push(m); }); } catch (e) { err = e; }
+    assert('a map that predates the routine role does NOT brick the emit', err === null);
+    var missing = warnings.filter(function (w) { return /has no "routine" role/.test(w); });
+    assert('...the missing-role warning is printed ONCE per run, though two agents pin the tier',
+      missing.length === 1);
+    assert('...it names the role, the package default it fell back to, and the fix',
+      missing.length === 1 && /models\.codex has no "routine" role/.test(missing[0]) &&
+      /package default "gpt-5\.6-luna"/.test(missing[0]) && /run \/models/.test(missing[0]));
+    assert('...the deduped list is what the caller gets back too',
+      counts !== null && counts.warnings.filter(function (w) { return /has no "routine" role/.test(w); }).length === 1);
+    assert('...both routine-tier agents are emitted at the package default',
+      tomlFor(proj, 'scout').indexOf('model = "gpt-5.6-luna"') !== -1 &&
+      tomlFor(proj, 'research-gatherer').indexOf('model = "gpt-5.6-luna"') !== -1);
+    assert("...a role the map DOES have keeps the adopter's own ID",
+      tomlFor(proj, 'qa-evaluator').indexOf('model = "gpt-5.6-sol"') !== -1);
   })();
 
   fs.rmSync(CEIL_DIR, { recursive: true, force: true });

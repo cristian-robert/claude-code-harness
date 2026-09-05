@@ -18,7 +18,8 @@ Anthropic Applied AI on curating the whole token budget, not one prompt.
 The platform contract every PHE mechanism is built against.
 - Exact hook I/O: stdin JSON, `permissionDecision: deny`, `stop_hook_active`, 8-consecutive-block Stop ceiling → guard.mjs, stop-gate.mjs.
 - Rule frontmatter is `paths:` (never `globs:`); memory load order; real skill frontmatter fields only.
-- **Subagent model resolution** (verified 2026-07-12, `/en/sub-agents#choose-a-model`): `CLAUDE_CODE_SUBAGENT_MODEL` → per-invocation `model` → frontmatter `model:` → the main conversation's model. `/en/model-config#environment-variables` on that env var: *"The model to use for all subagents and agent teams. Overrides the per-invocation `model` parameter and the subagent definition's `model` frontmatter."* It therefore silently defeats the sibling-reviewer rule → the warning in `template/.claude/references/dispatch-protocol.md`.
+- **Subagent model resolution** (verified 2026-07-12; re-verified 2026-09-05 against `/en/sub-agents.md` and CHANGELOG 2.1.251/2.1.257): per-invocation `model` → agent `model:` → `CLAUDE_CODE_SUBAGENT_MODEL` (a default since 2.1.251) → session model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (2.1.257) overrides everything and therefore defeats the reviewer's `deep` pin → the warning in `template/.claude/references/dispatch-protocol.md` and the `session-start.mjs` check. Before 2.1.251 the plain variable was the override; that older claim is superseded, not wrong for its date.
+- **Minimum version:** `maxTurns` is enforced on every version; from 2.1.246 a capped subagent's output is marked partial with a resume hint (`/en/sub-agents.md` frontmatter table, read raw 2026-09-05). Below it a truncated scout return reads as a complete answer — the silent-failure class the dispatch protocol guards against. Stated in README and checked at `/harness-init` step 4.
 - **Drift warning:** the docs are versioned and change — re-verify hook schemas and frontmatter keys on every Claude Code upgrade.
 
 ## 4 · Anthropic engineering quartet — claude-code-best-practices · building-effective-agents · writing-tools-for-agents · multi-agent-research-system
@@ -107,6 +108,9 @@ engineeringexec.tech/posts/ai-scrum-can-proven-agile-principles-work-for-agent-t
 - "An AI agent cannot be a Product Owner" → Stakeholder and PO decisions stay human; role layering optional and scalable, never mandatory.
 - Role-tagged `SPRINT_N.md` files → `sprints/<n>.md`; independent frontmatter-kanban conventions converge on id/status/priority → the item schema.
 
+## 18 · coleam00/skills — github.com/coleam00/skills (audited 2026-09-01, latest commit 2026-08-26)
+The packaged "AI Layer" from Medin's course — 33 skills + 6 Python hooks. Audited per ADR-020; most at parity with or exceeded by `template/` (expected: PHE distilled sources 5–7 from the same author). What it contributed: the env-dump + quote-fold guard coverage and its measured split-quote bypass; the stop-gate tamper check with its documented escape (agent rewrote a failing `2+2==5` test to finish — "argued past, through a door the guarantee itself held open"); the drift axis (wrong rules mislead; pruning only catches rules that stopped earning); the denied-tool-in-headless silent failure. Declined with reasons in docs/00 anti-scope. Its hooks README cites arXiv 2604.25850 (a self-written 9KB system prompt swapped in ALONE scored below baseline; the measured gains came from enforcement layers) — corroborates ADR-005/006.
+
 ## Model policy (verified 2026-07-12)
 
 Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID,
@@ -134,6 +138,7 @@ row is stronger than unverified: we went looking for it in the primary sources a
 | Claim | Why it is soft |
 |---|---|
 | Context degrades noticeably at 40–50% fill (~400K effective of 1M) | Single self-reported GitHub issue thread (anthropics/claude-code #34685), not an Anthropic benchmark |
+| `permission_denials` (array of `{tool_name, tool_use_id, tool_input}`) at the top level of the `claude -p --output-format json` envelope | Observed in real envelopes (anthropics/claude-code #54850) but absent from the official headless/CLI docs (checked 2026-09-01) — may rename without notice. `loop/loop.mjs` parses it defensively and prints `denials=?` when absent, so a rename degrades to "unknown", never a fake zero |
 | "12 well-chosen rules cut error rate 41% → 3%" | Secondhand aggregation of an unspecified source; never traced to primary data |
 | ~6.7% bare-model vs ~70% harnessed PR acceptance (Stripe ~1,300 AI PRs/week) | Cole Medin's reported figures; not independently verified |
 | Codex bills 2× input / 1.5× output on the whole request past 272K input tokens | The `(<272K context length)` annotation appears on gpt-5.5/5.5-pro/5.4/5.4-pro rows and on NO gpt-5.6 row; 272K is the 5.4/5.5 *context window*, not a 5.6 billing threshold. No $45 output price exists in OpenAI's pricing payload. Widely repeated by third-party blogs; not in OpenAI's own data. Do not budget against it. |

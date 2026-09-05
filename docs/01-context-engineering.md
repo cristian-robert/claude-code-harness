@@ -115,7 +115,7 @@ without a measuring tool is a wish.
 | Compaction | Summarize the near-full window, reinit with summary + 5 most recently accessed files. Steerable: put "when compacting, preserve X" in CLAUDE.md. Tune recall first, then precision | Extensive back-and-forth where conversational flow matters |
 | Structured note-taking | Agent persists notes outside the window, re-reads later. The PIV artifacts ARE the notes: `plans/<slug>-plan.md`, `reports/*`, loop `fix_plan.md` | Iterative development with clear milestones |
 | Subagents | Explore in their own window; return a 1–2k-token distilled summary to the lead | Breadth-first exploration you want out of the main window |
-| Full reset + handoff artifact | `/handoff` writes `reports/<slug>-handoff.md`; `/clear`; next session cold-starts from the artifact | Long autonomous work. Resets beat compaction — compaction leaves "context anxiety" (premature wrap-up) intact |
+| Full reset + handoff artifact | `/handoff` writes `reports/<slug>-handoff.md`; `/clear`; next session cold-starts from the artifact | Long autonomous work, and any stage past ~120k tokens (statusline `ctx`): resets beat compaction — compaction leaves "context anxiety" intact, and degradation is measured far below any window's limit (Chroma 2025: a 200K model degrades from ~50K), so the trigger is absolute tokens, never a percentage |
 
 PHE default: notes + resets — that is what PIV+E is. Compaction is the fallback when a
 session must continue, not the plan.
@@ -128,7 +128,7 @@ out — multi-agent "struggles with tasks requiring shared context", i.e. most c
 Effort bands, the 4-element brief, and the per-stage fan-out map ship in the template:
 `.claude/rules/00-core.md` + `.claude/references/dispatch-protocol.md`. Embed the numbers
 in dispatch prompts ("agents struggle to judge appropriate effort"); every dispatch is
-self-contained and pins `tier:` + `effort:` — a ROLE (`scout`/`build`/`deep`), never a model
+self-contained and pins `tier:` + `effort:` — a ROLE (`scout`/`routine`/`build`/`deep`), never a model
 name. `.claude/harness.json` → `models` resolves the role, and is the one file that names a model.
 
 ## Sources

@@ -19,7 +19,7 @@ const { writeJsonAtomic } = require('./harness-config');
 
 // Implementer roles, weakest to strongest. `review` is deliberately NOT here — it is
 // derived from who implemented (see reviewerRoleFor).
-const ROLES = ['scout', 'build', 'deep'];
+const ROLES = ['scout', 'routine', 'build', 'deep'];
 
 const HARNESSES = ['claude', 'codex'];
 
@@ -40,8 +40,8 @@ const HARNESSES = ['claude', 'codex'];
 const DEFAULT_MODELS = {
   checkedAt: '2026-07-12',
   staleDays: 30,
-  claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
-  codex: { scout: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-5.6-sol' },
+  claude: { scout: 'haiku', routine: 'sonnet', build: 'opus', deep: 'opus' },
+  codex: { scout: 'gpt-5.6-luna', routine: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-5.6-sol' },
   efforts: {
     'gpt-5.6-luna': ['low', 'medium', 'high', 'xhigh', 'max'],
     'gpt-5.6-terra': ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'],
@@ -49,20 +49,17 @@ const DEFAULT_MODELS = {
   },
 };
 
-// THE RULE: the reviewer is the SIBLING of whoever implemented, same harness.
-// deep wrote it -> build reviews it. build wrote it -> deep reviews it.
-// Different weights catch different bugs; a model does not find the bug it just wrote.
-//
-// scout never implements. If a plan somehow pins it on an implementation task we fail
-// SAFE (deep reviews) rather than fail cheap — a scout-grade reviewer is not a reviewer.
+// THE RULE: the reviewer is a FRESH `deep` context, whoever implemented. It never shares the
+// implementer's session, sees only diff + plan + protocol, and runs at effort xhigh. (The
+// earlier sibling inversion — deep-written reviewed at build and vice versa — bought weight
+// diversity; it was retired on 2026-09-05 when `build` moved to opus by PO directive: build
+// and deep now share a model on Claude, and a sonnet reviewer is not wanted.)
 //
 // Anything that is not a role is a BUG at the call site, and must not be absorbed: a
 // bare `else return 'deep'` answered undefined, null, 'review' and 42 with a plausible
 // role, so a typo'd tier in a plan silently got a reviewer and nobody ever learned.
 function reviewerRoleFor(implementerRole) {
-  if (implementerRole === 'deep') return 'build';
-  if (implementerRole === 'build') return 'deep';
-  if (implementerRole === 'scout') return 'deep'; // scout never implements — fail safe
+  if (ROLES.indexOf(implementerRole) !== -1) return 'deep';
   throw new Error(
     'unknown implementer role: ' + JSON.stringify(implementerRole) +
     ' (expected one of ' + ROLES.join(', ') + '). ' +

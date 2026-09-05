@@ -18,7 +18,7 @@
 //   baseBranch  — .claude/hooks/guard.mjs protects this branch from direct commits. Reset to
 //                 null, the guard silently falls back to main/master and commits straight to
 //                 a project's `develop` become allowed.
-//   ...plus workTracking, requireEvolveBeforePush, autonomous and the two gate timeouts.
+//   ...plus workTracking, requireEvolveBeforePush and the two gate timeouts.
 //
 // Inverting it fails CLOSED: a key the user has is never touched, and the next key the
 // template introduces still arrives with its default instead of needing a fourth band-aid.
@@ -31,6 +31,45 @@ const crypto = require('crypto');
 // means and which hook reads it — so it must track the SHIPPED version or a long-lived
 // project ends up reading stale docs about its own config. Every other key is the user's.
 const TEMPLATE_OWNED_KEYS = ['$comment'];
+
+// Keys the template USED to ship and has since retired. The merge below is additive by
+// design (a key the user has is never touched), so a retired key would otherwise outlive
+// the release that removed it — still sitting in the file, still looking like live config.
+// Stripped on every install/update, each with a one-line notice: a SILENT removal is the
+// exact failure mode the first entry exists to fix.
+//
+//   autonomous — retired in 3.3.0. It was one of two activation paths for autonomous mode,
+//                the single highest-authority grant in the harness (it removes the human
+//                from PO priority, sprint scope and acceptance decisions). A value in a
+//                config file is not a decision a human made in the session where the
+//                decisions get taken: once set it stayed set, silently, across every future
+//                session and topic. Traced to an adopter incident (2026-09-05): with the
+//                key true, `/backlog refine` resolved ~14 product forks — subscription quota
+//                semantics among them — without asking once. No hook ever read the key; it
+//                was prose-facing only. Autonomy is now declared per session, in the
+//                human's own words: template/.claude/references/autonomous-mode.md.
+var RETIRED_KEYS = [
+  {
+    key: 'autonomous',
+    notice:
+      'harness.json: removed inert "autonomous" key — autonomy is declared per session, ' +
+      'in your own words (.claude/references/autonomous-mode.md).',
+  },
+];
+
+// Drop retired keys from a config object IN PLACE. Returns the notices to print — one per
+// key actually removed, none when there was nothing to remove — so a clean file stays quiet.
+function stripRetiredKeys(config) {
+  var notices = [];
+  for (var i = 0; i < RETIRED_KEYS.length; i++) {
+    var entry = RETIRED_KEYS[i];
+    if (Object.prototype.hasOwnProperty.call(config, entry.key)) {
+      delete config[entry.key];
+      notices.push(entry.notice);
+    }
+  }
+  return notices;
+}
 
 function harnessJsonPath(projectRoot) {
   return path.join(projectRoot, '.claude', 'harness.json');
@@ -153,8 +192,9 @@ function mergeHarnessConfig(userConfig, templateConfig) {
 }
 
 // Install harness.json for an install/update: a project without one gets the template's file
-// verbatim; a project with one keeps ITS file, gaining only the template keys it lacks.
-// Returns { created, updated } so the caller's file counts stay honest.
+// verbatim; a project with one keeps ITS file, gaining only the template keys it lacks and
+// losing only RETIRED_KEYS. Returns { created, updated, notices } — the counts keep the
+// caller's file totals honest; the notices are the retired-key lines the caller must print.
 function installHarnessConfig(projectRoot, templateHarnessPath) {
   var p = harnessJsonPath(projectRoot);
   var userConfig = readHarnessConfig(projectRoot); // throws on malformed — never clobber
@@ -163,16 +203,20 @@ function installHarnessConfig(projectRoot, templateHarnessPath) {
 
   if (userConfig === null) {
     fs.copyFileSync(templateHarnessPath, p);
-    return { created: 1, updated: 0 };
+    return { created: 1, updated: 0, notices: [] };
   }
 
   var merged = mergeHarnessConfig(userConfig, parseHarnessObject(templateHarnessPath));
+  // After the merge, so a retired key is gone whichever side carried it.
+  var notices = stripRetiredKeys(merged);
   writeJsonAtomic(p, merged);
-  return { created: 0, updated: 1 };
+  return { created: 0, updated: 1, notices: notices };
 }
 
 module.exports = {
   TEMPLATE_OWNED_KEYS: TEMPLATE_OWNED_KEYS,
+  RETIRED_KEYS: RETIRED_KEYS,
+  stripRetiredKeys: stripRetiredKeys,
   harnessJsonPath: harnessJsonPath,
   writeJsonAtomic: writeJsonAtomic,
   readHarnessConfig: readHarnessConfig,

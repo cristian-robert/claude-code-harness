@@ -140,14 +140,22 @@ async function main() {
     const t0 = Date.now();
     const r = await runClaude(prompt, runDir, cfg["iter-timeout-sec"]);
     const parsed = parseClaudeJson(r.out);
+    // A denied tool does not fail the iteration — the agent "completes" having
+    // done nothing (guard.mjs denials still fire here by design), so denials are
+    // surfaced per iteration: a nonzero count is the first place to look when an
+    // iteration made no progress. The field is UNDOCUMENTED (observed in real
+    // envelopes, anthropics/claude-code#54850; docs/99 "unverified" table) —
+    // parsed defensively, `?` when absent so a rename never fakes a zero.
+    const denials = Array.isArray(parsed?.permission_denials) ? parsed.permission_denials : null;
     const entry = {
       iter, started, duration_s: Math.round((Date.now() - t0) / 1000), exit: r.exit,
       ...(parsed?.num_turns != null && { num_turns: parsed.num_turns }),
       ...(parsed?.total_cost_usd != null && { cost_usd: parsed.total_cost_usd }),
+      ...(denials && denials.length > 0 && { denials: denials.map((d) => d?.tool_name || String(d)).slice(0, 10) }),
       result_tail: String(parsed?.result ?? (r.err || r.out)).trim().slice(-200),
     };
     appendFileSync(logPath, JSON.stringify(entry) + "\n");
-    console.log(`exit=${entry.exit} turns=${entry.num_turns ?? "?"} cost_usd=${entry.cost_usd ?? "?"} duration=${entry.duration_s}s`);
+    console.log(`exit=${entry.exit} turns=${entry.num_turns ?? "?"} cost_usd=${entry.cost_usd ?? "?"} denials=${denials ? denials.length : "?"} duration=${entry.duration_s}s`);
     if (r.exit === "spawn-error") fail(`could not run \`claude\` (${entry.result_tail}). Is the CLI on PATH?`);
     if (commitIfChanged(iter, runDir)) console.log(`committed: loop: iteration ${iter}`);
     if (existsSync(donePath)) {

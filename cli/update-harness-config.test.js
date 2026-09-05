@@ -113,7 +113,6 @@ const USER_CONFIG = {
   stopGate: ['npm test', 'npm run lint'],
   requireEvolveBeforePush: true,
   baseBranch: 'develop',
-  autonomous: true,
   stopGateTimeoutSec: 99,
   stopGateTotalSec: 199,
   workTracking: { backend: 'github', method: 'scrum', wipLimit: 5 },
@@ -160,14 +159,18 @@ test('update ADDS template keys the user does not have', () => {
   const shipped = JSON.parse(fs.readFileSync(TEMPLATE_HARNESS, 'utf-8'));
 
   const trimmed = Object.assign({}, USER_CONFIG);
-  delete trimmed.autonomous;
+  delete trimmed.requireEvolveBeforePush;
   delete trimmed.stopGateTotalSec;
   writeHarness(adds, trimmed);
 
   assertLocalFallback(runCli(['update'], adds, ''));
   const merged = readHarness(adds);
 
-  assert.deepStrictEqual(merged.autonomous, shipped.autonomous, 'missing `autonomous` not restored');
+  assert.deepStrictEqual(
+    merged.requireEvolveBeforePush,
+    shipped.requireEvolveBeforePush,
+    'missing `requireEvolveBeforePush` not restored'
+  );
   assert.deepStrictEqual(
     merged.stopGateTotalSec,
     shipped.stopGateTotalSec,
@@ -176,6 +179,90 @@ test('update ADDS template keys the user does not have', () => {
   // ...without collateral damage to the keys that WERE there.
   assert.deepStrictEqual(merged.stopGate, USER_CONFIG.stopGate, 'adding a key clobbered stopGate');
   assert.deepStrictEqual(merged.baseBranch, USER_CONFIG.baseBranch, 'adding a key clobbered baseBranch');
+});
+
+// ─── Half 3: a RETIRED key is stripped, with a one-line notice ──────────────
+//
+// `autonomous` was one of two activation paths for autonomous mode — the single
+// highest-authority grant in the harness. A value in a config file is not a decision a human
+// made in the session where the decisions get taken: once set it stayed set, silently, across
+// every future session and topic (adopter incident 2026-09-05: `/backlog refine` resolved
+// ~14 product forks without asking once). The key is gone from the template; a user file that
+// still carries it must lose it — half 1's additive merge would otherwise carry a retired key
+// forever — and the user must be TOLD: a silent removal is the very failure the key caused.
+
+const RETIRED_NOTICE = /removed inert "autonomous" key/;
+
+// Relative paths of every JSON file under `dir` (skipping .git) whose top-level object has
+// `key`. A config key can only live in JSON — the reference and the migration notice
+// legitimately spell the old key in prose, so a text grep would flag the very lines that
+// explain its retirement. Unparseable JSON is skipped: this checks keys, not validity.
+function jsonFilesWithKey(dir, key) {
+  const hits = [];
+  (function walk(d) {
+    fs.readdirSync(d, { withFileTypes: true }).forEach((ent) => {
+      if (ent.name === '.git') return;
+      const full = path.join(d, ent.name);
+      if (ent.isDirectory()) return walk(full);
+      if (!ent.isFile() || !ent.name.endsWith('.json')) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(fs.readFileSync(full, 'utf-8'));
+      } catch (_) {
+        return;
+      }
+      if (parsed && typeof parsed === 'object' && Object.prototype.hasOwnProperty.call(parsed, key)) {
+        hits.push(path.relative(dir, full));
+      }
+    });
+  })(dir);
+  return hits;
+}
+
+test('update strips a retired `autonomous` key and prints the migration notice', () => {
+  const retired = installProject('retired-key');
+  writeHarness(retired, Object.assign({}, USER_CONFIG, { autonomous: true }));
+
+  const out = runCli(['update'], retired, '');
+  assertLocalFallback(out);
+  const merged = readHarness(retired);
+
+  assert.ok(!Object.prototype.hasOwnProperty.call(merged, 'autonomous'), '`autonomous` survived the update');
+  assert.ok(RETIRED_NOTICE.test(out), 'no migration notice printed, got:\n' + out);
+  assert.ok(/declared per session/.test(out), 'the notice must say autonomy is declared per session, got:\n' + out);
+  assert.strictEqual(out.split('removed inert').length - 1, 1, 'the notice must be printed exactly once');
+  // ...without collateral damage to the keys that stay.
+  assert.deepStrictEqual(merged.stopGate, USER_CONFIG.stopGate, 'stripping a key clobbered stopGate');
+  assert.deepStrictEqual(merged.baseBranch, USER_CONFIG.baseBranch, 'stripping a key clobbered baseBranch');
+});
+
+test('re-init over an existing harness strips the retired key too', () => {
+  const reinit = installProject('retired-key-reinit');
+  writeHarness(reinit, Object.assign({}, USER_CONFIG, { autonomous: false }));
+
+  const out = runCli(['init'], reinit, 'both\nskip\n');
+  assertLocalFallback(out);
+
+  assert.ok(!Object.prototype.hasOwnProperty.call(readHarness(reinit), 'autonomous'), '`autonomous` survived re-init');
+  assert.ok(RETIRED_NOTICE.test(out), 'no migration notice printed on re-init, got:\n' + out);
+});
+
+test('a harness.json without the retired key gets NO notice', () => {
+  const quiet = installProject('retired-key-absent');
+  writeHarness(quiet, USER_CONFIG);
+  const out = runCli(['update'], quiet, '');
+  assertLocalFallback(out);
+  assert.ok(!RETIRED_NOTICE.test(out), 'notice printed for a key that was not there:\n' + out);
+});
+
+test('a fresh scaffold carries no `autonomous` key anywhere', () => {
+  const fresh = installProject('fresh-scaffold');
+  assert.ok(
+    !Object.prototype.hasOwnProperty.call(readHarness(fresh), 'autonomous'),
+    'the template harness.json still ships `autonomous`'
+  );
+  const hits = jsonFilesWithKey(fresh, 'autonomous');
+  assert.deepStrictEqual(hits, [], 'scaffold JSON files still carry the key: ' + hits.join(', '));
 });
 
 // ─── A malformed harness.json fails LOUDLY, never silently replaced ─────────

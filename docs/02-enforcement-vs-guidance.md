@@ -24,9 +24,9 @@ Wiring: `template/.claude/settings.json`. Scripts: `template/.claude/hooks/`.
 | Layer | Event · matcher | Does | Mode | Traces to |
 |---|---|---|---|---|
 | `permissions.deny` | — | Denies `Read(./.env)`, `Read(./.env.*)`, `Read(./secrets/**)`, `Read(**/*.pem)` | Blocking | Agent read `.env`, echoed keys into a transcript |
-| `guard.mjs` | PreToolUse · `Bash\|Read\|Edit\|Write\|NotebookEdit\|Glob\|Grep` | Denies secret-file access (incl. Bash indirection), recursive deletes (`rm -rf`, `find -delete`, `git clean -d`), commit/push on `main`/`master` (sole exception: tracking-only commits staging just `backlog/`/`sprints/`) + opt-in evolve→push gate | Blocking — JSON deny, exit 0 | Same secrets incident; deleted working tree; direct commit to main |
+| `guard.mjs` | PreToolUse · `Bash\|Read\|Edit\|Write\|NotebookEdit\|Glob\|Grep` | Denies secret-file access (incl. Bash indirection), recursive deletes (`rm -rf`, `find -delete`, `git clean -d`), commit/push on `main`/`master` (sole exception: tracking-only commits staging just `backlog/`/`sprints/`) + evolve→push gate (default on: a push needs a `/evolve` newer than HEAD) | Blocking — JSON deny, exit 0 | Same secrets incident; deleted working tree; direct commit to main |
 | `post-edit.mjs` | PostToolUse · `Edit\|Write\|NotebookEdit` | Cheapest available checker for the touched file type; an edit under `.claude/hooks/` additionally runs `smoke-test.mjs` (advisory-but-automatic — the "hooks change → smoke test" rule as mechanism, not prose); findings return via `additionalContext` | Advisory — always exit 0 | Lint drift surfacing only at gate time; hook edits shipped untested despite the prose rule |
-| `stop-gate.mjs` | Stop · (no matcher) | Runs `stopGate` commands from `.claude/harness.json`; blocks turn end until green; honors `stop_hook_active`; persists the verdict to `.claude/state/last-gate.json` for the pre-compact snapshot | Blocking — `decision: "block"` | "Done" claimed with failing tests |
+| `stop-gate.mjs` | Stop · (no matcher) | Runs `stopGate` commands from `.claude/harness.json`; blocks turn end until green; honors `stop_hook_active`; persists the verdict to `.claude/state/last-gate.json` for the pre-compact snapshot; opt-in tamper check (`stopGateTamperPaths`) refuses a green that required editing or deleting gated files; always-on gate-config check refuses a GREEN reached by changing or removing a `stopGate` command, or by deleting `harness.json`, after a RED or INCOMPLETE in the same session | Blocking — `decision: "block"` | "Done" claimed with failing tests; upstream escape: a failing test rewritten to force green (docs/99 · 18) |
 | `session-start.mjs` | SessionStart | Injects branch/dirty state, latest plan, gate config; on `source=compact` re-injects the compact snapshot + a Tier-1-loss warning | Advisory context | Every fresh session re-explored repo state |
 | `pre-compact.mjs` | PreCompact · (no matcher — fires on `manual` and `auto`) | Snapshots branch, dirty files, active plan, latest report, last gate verdict → `.claude/state/compact-snapshot.md` | Advisory — side-effect only, NEVER blocks compaction (a failed snapshot must not strand a full window) | Compaction laundered a RED gate verdict and dropped the active-plan pointer |
 | `verdict-gate.mjs` | SubagentStop · `code-reviewer` | Requires the reviewer's first line to be exactly `PASS` or `REQUEST_CHANGES`; on violation, stderr re-prompts the reviewer to re-emit its verdict | Blocking — exit 2 + stderr | Reviewer ignored the verdict contract; a prose first line broke `/review-branch`'s parser |
@@ -44,6 +44,11 @@ it (`/harness-init` does this during setup).
 
 Neither layer can override the other's deny. Each covers the other's blind spot — a
 misfiring hook `allow` can't expose secrets, and mode escalation can't either. Keep both.
+
+`guard.mjs` matches the Bash command's **text**, so it denies any command that merely mentions a
+secret filename — a probe that never reads one included. Working as designed: a text match cannot
+know a `.env` mention is harmless, and guessing would reopen the Bash-indirection hole. Build such
+payloads programmatically instead of naming the file (two implementers hit this in one session).
 
 ## Hook engineering rules (each learned the hard way)
 
