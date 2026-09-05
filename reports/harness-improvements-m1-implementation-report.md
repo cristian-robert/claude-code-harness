@@ -142,7 +142,7 @@ Three, all benign, none a defect.
 
 ## Decisions taken without asking
 
-21 numbered rulings, taken by the controller during execution and recorded here in order with the cost of being wrong. Rulings 8, 9 and 16 are operator directives, quoted verbatim, not controller judgment.
+22 numbered rulings, taken by the controller during execution and recorded here in order with the cost of being wrong. Rulings 8, 9 and 16 are operator directives, quoted verbatim, not controller judgment.
 
 1. **Ruling 1** — work in the primary checkout on the existing feature branch, no worktree; Task 1 installs the root harness, which must live where the user's sessions run, and the branch is already isolated from main. *Costs nothing if wrong (a worktree can be added later).*
 2. **Ruling 2** — Task 6's label sanitizer excludes dots from the allowed set, so `npm test/../x` → `npm-test-x` as the test expects. *Costs one dash in a log filename if wrong.*
@@ -165,9 +165,9 @@ Three, all benign, none a defect.
 19. **Ruling 19** — the new `routine` tier broke `npx phe update` for every existing Codex adopter (their `models` map lacks the role; emit threw). Warn-and-fallback in `cli/emit-codex.js`: a tier missing from the adopter's map but present in the package `DEFAULT_MODELS` emits with the default and prints ONE warning per role naming the role, the fallback model and `/models`; absent from both still throws. NOT a nested-key migration — the top-level-only merge is by design and `/models` is the documented path. Also approved: harness-neutral rewording of the three Codex-emitted placements, because an existing emit regression guard forbids Claude model names in emitted skills, rules and references, so the brief's verbatim text would have failed that guard. *Costs slightly less explicit prose.*
 20. **Ruling 20** — fix stale mentions found outside the brief rather than leave a second source of truth: `research/SKILL.md:29,34` (`build` gathers → `routine`); the FORCE cluster (`session-start.mjs` warning, its smoke fixture, `dispatch-protocol.md:48`, `docs/99:21`: "defeats sibling review" → "defeats the reviewer's `deep` pin"); `docs/04:44-45` ("no fixed model" → "always `deep`"); one sentence in `models/SKILL.md` section 3. *Costs nothing beyond the round.*
 21. **Ruling 21** — fix two surviving stale three-role lists (`template/.claude/references/harness-maintenance.md:15`, `docs/01-context-engineering.md:131`) and re-sync. *Costs nothing.*
+22. **Ruling 22** — Task 8 (this report and the vault ADRs) has no separate task review; its completeness is checked by the final whole-branch review against the ledger extract, where every ruling and every deferred minor must appear here. *Costs one missed line if that reviewer skims.*
 
 **Cost note carried from Task 9:** reviews on Claude now run opus at `xhigh` for every tier, per Ruling 9 and the retired inversion. Per-review cost rises accordingly.
-- Ruling 22: Task 8 (this report and the vault ADRs) has no separate task review; its completeness is checked by the final whole-branch review against the ledger extract (every ruling and every deferred minor must appear here) — costs one missed line if that reviewer skims.
 
 ## Manual — pending the operator
 
