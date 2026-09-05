@@ -22,7 +22,7 @@ Read this BEFORE modifying anything under `.claude/` or `CLAUDE.md`. The harness
 
 Guidance (advisory) lives in CLAUDE.md/rules; enforcement (deterministic) lives in hooks + permission rules. Never encode a hard rule as prose only.
 
-## 2. Platform contract (exact — violations fail silently)
+## 2. Platform contract (exact — violations fail silently; verify against the RAW docs page, `<url>.md`, never a summarized fetch)
 
 | Contract | Detail |
 |---|---|

@@ -28,6 +28,9 @@ Missing tool, version, or questions → `GATHER-BLOCKED: <what is missing>`. Nev
 - Read the parts that answer the questions, not whole sites. Batch independent fetches.
 - Read-only: never install, write, or mutate; no code changes.
 - Distinguish "documented" from "inferred" — flag anything not stated directly in a source.
+- Contract claims (field names, frontmatter keys, flags, exit semantics, version floors) are quoted
+  from the RAW page (`<page>.md` or the source file), grepped, never from a summarized fetch — the
+  summarizer invents plausible names with no error signal. Say `raw:` or `summary:` per claim.
 
 ## Return contract (max ~45 lines)
 

@@ -42,7 +42,7 @@ Work tracking is off here (`workTracking.backend: none`): plans and reports are 
 ## Hard rules
 
 - **Hooks change → smoke test runs**: any edit under `template/.claude/hooks/` (or to installed copies in `~/.claude/hooks/`) requires `node template/.claude/hooks/smoke-test.mjs` green, with a new fixture for any new behavior.
-- **Platform claims get verified**: anything asserting Claude Code behavior (hook schemas, frontmatter keys, load order) must match the current official docs — they version and drift. `paths:` not `globs:`; stdin JSON not argv.
+- **Platform claims get verified — from the raw page**: anything asserting Claude Code behavior (hook schemas, frontmatter keys, load order) must match the current official docs, read as raw markdown (`https://code.claude.com/docs/en/<page>.md`) and grepped — a summarized fetch invented a hook field name on 2026-09-05. They version and drift. `paths:` not `globs:`; stdin JSON not argv.
 - **Budgets are enforced content design**: template CLAUDE.md ≤60 lines, rules ≤45, skill bodies ≤100 (measured by `tools/context-ledger.mjs`); docs ≤130 as a review guideline. Adding means cutting.
 - **Ratchet + prune**: every rule added to `template/` needs a traceable incident; every change considers what to remove.
 - **Dogfood the pipeline**: non-trivial changes to this repo go through `/plan-work → /implement → /validate → /review-branch → /evolve` with superpowers discipline, like any harnessed project. Template edits end with `node tools/self-harness.mjs`.

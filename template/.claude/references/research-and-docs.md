@@ -23,6 +23,20 @@ official docs + web, and stamp the note `context7: uncovered` so it is not mista
 context7 is preferred, never required. (Its `.mcp.json` entry is added at `/harness-init`, Phase 2:
 `"context7": { "command": "npx", "args": ["-y", "@upstash/context7-mcp"] }`.)
 
+## Contract claims come from raw text
+
+A summarized fetch (WebFetch answering a prompt over a page with a small model) is fine for
+"how does X work" and is NOT a source for a contract claim — a field name, a frontmatter key, a
+flag, an exit-code rule, a version floor. The summarizer invents plausible names with no error
+signal: on 2026-09-05 it reported the SessionStart hook field as `start_reason`; the raw page says
+`source`. For any claim that ends up in a hook, a rule, or a reference:
+
+1. Fetch the raw page — Claude Code docs serve markdown at `https://code.claude.com/docs/en/<page>.md`;
+   most doc sites have an equivalent (`.md`, `?raw`, the GitHub source).
+2. `grep` the exact token in that text and quote the line, with the URL and the date read.
+3. No raw form available → mark the claim `unverified (summary only)` in the note and in docs/99's
+   unverified table; never let it into a hook or a rule.
+
 ## Tool key normalization
 
 Lowercase canonical package/service name: `supabase` (not `Supabase`, `supabase-js`, or
