@@ -31,7 +31,7 @@ For each harness, check that every role still maps to a live model, and whether 
 the same family** has shipped:
 
 - `scout` — cheapest reading tier. Never a model that has to decide anything.
-- `routine` — sonnet-grade: read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes. Never a build task: a `routine` implementer takes text-only or trivially easy one-file edits only.
+- `routine` — sonnet-grade: read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes. Never a build task.
 - `build` — implementation the planner specified step by step; hard but doable. Opus, never sonnet.
 - `deep` — hard logic, architecture, planning, debugging, and every review.
 
