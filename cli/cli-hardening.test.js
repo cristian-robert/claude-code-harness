@@ -309,7 +309,7 @@ test('harness-init names an npx package + subcommand the CLI actually provides',
 // survive into the two knowledge skills the agent consults before placing code or
 // debugging. Pinned as a LITERAL — the skill and this test must be edited together.
 const GATE_PATTERN = /<[A-Za-z][^<>]*>/;
-const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog', 'page'];
+const GATE_ALLOW = ['a', 'n', 'id', 'div', 'slug', 'tool', 'button', 'dialog'];
 const GATE_CMD =
   "grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ knowledge-base/ \\| grep -vE " +
   "'<(" + GATE_ALLOW.join('\\|') + ")>$'";
