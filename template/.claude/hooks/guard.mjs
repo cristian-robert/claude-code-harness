@@ -308,7 +308,7 @@ async function main() {
           deny(`git ${gm.isPush ? "push" : "commit"} on '${branch}' is blocked (code never lands on ${branch} directly). Create a feature branch first ({type}/{description}). Exception: commits staging ONLY backlog/ or sprints/ files (tracking state) are allowed.`);
         }
       }
-      // Opt-in evolve->push gate (harness.json: "requireEvolveBeforePush": true):
+      // Evolve->push gate (harness.json: "requireEvolveBeforePush", default true; false opts out):
       // push is denied until /evolve has run since the last commit — the marker
       // .claude/state/.evolve-ran must be newer than HEAD's commit time.
       if (gm.isPush) {
