@@ -45,6 +45,7 @@ Guidance (advisory) lives in CLAUDE.md/rules; enforcement (deterministic) lives 
 | CLAUDE.md / rules | Ratchet: every new line cites a real incident. No speculative rules |
 | Adding a rule | Check budgets below; over budget → cut a weaker line to make room |
 | harness.json stopGate | Commands must be fast (<30s) and deterministic; a flaky gate risks a block loop |
+| A retired or renamed key, skill, or path | The migration is CLI code — `cli/migrations.js` (`RENAMED_SKILLS`), `cli/harness-config.js` (`RETIRED_KEYS`) — pinned by a test and applied on `init`/`update`. A skill may CALL a subcommand or catch a hand-copied survivor; it never carries the logic, because prose cannot be verified headlessly (traces to: 2026-09-05 — a `/harness-init` migration line could not be checked by effect; the real one went into the CLI) |
 
 After any change to always-loaded content: `node tools/context-ledger.mjs` (framework repo) to re-check the always-loaded token tax.
 

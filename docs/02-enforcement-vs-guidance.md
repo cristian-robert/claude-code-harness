@@ -16,6 +16,7 @@ shapes behavior; enforcement bounds it. Pick the mechanism by consequence:
 | Workflow with steps | Skill |
 | Place-specific | Subdirectory CLAUDE.md (loads on file access there) |
 | File-type-specific | `paths:`-scoped rule |
+| A retired or renamed key, skill, or path (a migration) | `cli/` code with a test (`RETIRED_KEYS`, `RENAMED_SKILLS`), applied on `init`/`update` — never a skill body, which no headless check can verify (ADR-021, one step wider) |
 
 ## The PHE enforcement set
 
