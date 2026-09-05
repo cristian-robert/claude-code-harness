@@ -21,11 +21,11 @@ Every brief has four elements — objective · output format + size cap · tool 
 |---|---|
 | Locate/trace a SYMBOL (def, callers, module API) | `codebase-search` MCP (`where_is`/`find_references`/`outline`) if wired; LSP diagnostics for type errors — NOT grep (see `.claude/references/symbol-navigation.md`) |
 | Locate files / text / patterns | built-in Explore (`scout` tier; skips CLAUDE.md) |
-| Understand / synthesize | `scout` agent (`build` tier) |
+| Understand / synthesize | `scout` agent (`routine` tier) |
 | Architecture — where new code goes / what a change touches, before a new module/route/table/endpoint | `architect-agent` (`deep`); reads `knowledge-base/architecture.md`, /evolve RECORDs back |
 | External tool/library docs & how-to | `/research <tool>[@version]` — cache-first at `wiki/stack/<tool>/`, then context7 + official docs (dispatches `research-gatherer`); never code an external API from memory |
 | Implement | general-purpose — the plan's `tier:` |
-| Code review | `code-reviewer` at the SIBLING tier (deep↔build) — never the model that wrote the code |
+| Code review | `code-reviewer` at `deep`, fresh context — never the session that wrote the code |
 | Runtime check (drive the app) | `qa-evaluator` |
 
 - Returns are summaries — ≤30 lines, paths not contents. File-mutating subagents run sequentially unless the plan marks disjoint `Wave:` groups; parallel is for read-only work.

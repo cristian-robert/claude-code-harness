@@ -1,6 +1,6 @@
 // cli/model-tiers.test.js
 //
-// Tests the role->model resolver and the reviewer-is-the-sibling rule.
+// Tests the role->model resolver and the reviewer-is-a-fresh-deep-context rule.
 
 const fs = require('fs');
 const path = require('path');
@@ -21,10 +21,11 @@ function threw(fn) {
   try { fn(); return null; } catch (e) { return e; }
 }
 
-// --- the reviewer inversion: the rule this whole phase exists to encode ---
-assert('deep-written code is reviewed by build', reviewerRoleFor('deep') === 'build');
-assert('build-written code is reviewed by deep', reviewerRoleFor('build') === 'deep');
-assert('scout never implements — its reviewer fails SAFE, to deep', reviewerRoleFor('scout') === 'deep');
+// --- the reviewer rule: always a fresh deep context, whoever implemented ---
+assert('deep-written code is reviewed at deep — a fresh context, not a sibling model', reviewerRoleFor('deep') === 'deep');
+assert('build-written code is reviewed at deep', reviewerRoleFor('build') === 'deep');
+assert('routine-written code is reviewed at deep', reviewerRoleFor('routine') === 'deep');
+assert('scout never implements — its reviewer is deep', reviewerRoleFor('scout') === 'deep');
 
 // Anything that is not an implementer role is a BUG at the call site, not a role to
 // fail safe on. The shipped `if deep -> build; else deep` swallowed undefined, null,
@@ -35,7 +36,7 @@ for (var gi = 0; gi < GARBAGE_ROLES.length; gi++) {
   (function (bad) {
     var err = threw(function () { reviewerRoleFor(bad); });
     assert('reviewerRoleFor(' + JSON.stringify(bad === undefined ? 'undefined' : bad) + ') THROWS rather than silently answering deep',
-      err instanceof Error && /scout, build, deep/.test(err.message));
+      err instanceof Error && /scout, routine, build, deep/.test(err.message));
   })(GARBAGE_ROLES[gi]);
 }
 assert('the throw names the offending value',
@@ -43,20 +44,14 @@ assert('the throw names the offending value',
 assert('resolveReviewer inherits the validation (a bad implementer role never resolves)',
   threw(function () { resolveReviewer(DEFAULT_MODELS, 'claude', 'review'); }) instanceof Error);
 
-assert('opus-written code is reviewed by sonnet',
-  resolveReviewer(DEFAULT_MODELS, 'claude', 'deep') === 'sonnet');
-assert('sol-written code is reviewed by terra',
-  resolveReviewer(DEFAULT_MODELS, 'codex', 'deep') === 'gpt-5.6-terra');
-assert('sonnet-written code is reviewed by opus',
-  resolveReviewer(DEFAULT_MODELS, 'claude', 'build') === 'opus');
-assert('terra-written code is reviewed by sol',
-  resolveReviewer(DEFAULT_MODELS, 'codex', 'build') === 'gpt-5.6-sol');
-
-// The invariant behind the rule: a reviewer is NEVER the model that wrote the code.
-assert('reviewer never equals the implementer, claude',
-  resolveReviewer(DEFAULT_MODELS, 'claude', 'deep') !== resolveModel(DEFAULT_MODELS, 'claude', 'deep'));
-assert('reviewer never equals the implementer, codex',
-  resolveReviewer(DEFAULT_MODELS, 'codex', 'build') !== resolveModel(DEFAULT_MODELS, 'codex', 'build'));
+assert('claude reviewer for deep-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'deep') === 'opus');
+assert('codex reviewer for deep-written code is sol', resolveReviewer(DEFAULT_MODELS, 'codex', 'deep') === 'gpt-5.6-sol');
+assert('claude reviewer for build-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'build') === 'opus');
+assert('codex reviewer for build-written code is sol', resolveReviewer(DEFAULT_MODELS, 'codex', 'build') === 'gpt-5.6-sol');
+assert('claude reviewer for routine-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'routine') === 'opus');
+assert('build resolves to opus on claude — never sonnet', resolveModel(DEFAULT_MODELS, 'claude', 'build') === 'opus');
+assert('routine resolves to sonnet on claude', resolveModel(DEFAULT_MODELS, 'claude', 'routine') === 'sonnet');
+assert('routine resolves to luna on codex', resolveModel(DEFAULT_MODELS, 'codex', 'routine') === 'gpt-5.6-luna');
 
 // --- resolution ---
 assert('scout resolves to haiku on claude', resolveModel(DEFAULT_MODELS, 'claude', 'scout') === 'haiku');
@@ -89,7 +84,7 @@ assert('a ceiling with a numeric element degrades to null',
 assert('an all-strings ceiling is honored',
   JSON.stringify(supportedEfforts({ efforts: { 'gpt-x': ['low', 'high'] } }, 'gpt-x')) === '["low","high"]');
 assert('every codex role in the shipped map has recorded ceilings',
-  ['scout', 'build', 'deep'].every(function (r) {
+  ['scout', 'routine', 'build', 'deep'].every(function (r) {
     return supportedEfforts(DEFAULT_MODELS, DEFAULT_MODELS.codex[r]) !== null;
   }));
 
@@ -254,7 +249,7 @@ assert('a 2020 map with no staleDays is STALE in the hook (not silently fresh)',
 var REFRESHED = {
   checkedAt: '2030-01-01',
   staleDays: 7,
-  claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' },
+  claude: { scout: 'haiku', routine: 'sonnet', build: 'opus', deep: 'opus' },
   codex: { scout: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-9-refreshed' },
 };
 

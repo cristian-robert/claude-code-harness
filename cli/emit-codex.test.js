@@ -90,6 +90,38 @@ var buildMd = ['---', 'name: b', 'description: "d"', 'tier: build', '---', 'b'].
 assert('a build-tier agent resolves to terra',
   agentMdToToml(buildMd, 'b', DEFAULT_MODELS).indexOf('model = "gpt-5.6-terra"') !== -1);
 
+var routineMd = ['---', 'name: r', 'description: "d"', 'tier: routine', '---', 'b'].join('\n');
+assert('a routine-tier agent resolves to luna',
+  agentMdToToml(routineMd, 'r', DEFAULT_MODELS).indexOf('model = "gpt-5.6-luna"') !== -1);
+
+// A role the PACKAGE knows but the user's map does not. `update` keeps an adopter's `models`
+// verbatim (harness-config.js merges top-level keys only, by design), so a role added in a
+// release — `routine`, 2026-09-05 — never arrives in an existing harness.json. Throwing here
+// made `npx phe update` BRICK the Codex re-emit for every existing Codex adopter. Same shape
+// as unrecorded ceilings: WARN and emit the shipped default; the user's own IDs are untouched.
+var PRE_ROUTINE = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+delete PRE_ROUTINE.claude.routine;
+delete PRE_ROUTINE.codex.routine;
+PRE_ROUTINE.codex.scout = 'gpt-5.6-terra'; // a re-pointed role, to prove it is never overridden
+var preRoutineWarnings = [];
+var preRoutineToml = agentMdToToml(routineMd, 'r', PRE_ROUTINE, function (m) { preRoutineWarnings.push(m); });
+assert('a routine-tier agent still emits against a map that predates the role (shipped default)',
+  preRoutineToml.indexOf('model = "gpt-5.6-luna"') !== -1);
+assert('...and warns exactly once, naming the role, the agent file and /models',
+  preRoutineWarnings.length === 1 && /"routine"/.test(preRoutineWarnings[0]) &&
+  /r\.md/.test(preRoutineWarnings[0]) && /\/models/.test(preRoutineWarnings[0]));
+assert('...without overriding a role the map DOES have',
+  agentMdToToml(scoutMd, 'scout', PRE_ROUTINE, function () {}).indexOf('model = "gpt-5.6-terra"') !== -1);
+var turboMd = ['---', 'name: t', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
+var turboErr = null;
+try { agentMdToToml(turboMd, 't', PRE_ROUTINE, function () {}); } catch (e) { turboErr = e; }
+assert('a tier unknown to the package too still throws (a typo is not a new role)',
+  turboErr instanceof Error && /unknown role/i.test(turboErr.message));
+var noCodexErr = null;
+try { agentMdToToml(routineMd, 'r', { claude: PRE_ROUTINE.claude }, function () {}); } catch (e) { noCodexErr = e; }
+assert('a map with no codex half at all still throws (a deleted half is not a new role)',
+  noCodexErr instanceof Error && /no model mapped/i.test(noCodexErr.message));
+
 // luna is the ONE 5.6 model without `ultra` (models.json, verified 2026-07-12). Emitting it
 // would fail at dispatch time, far from the file that caused it — so fail at emit instead.
 // This protection predates the ceilings move and MUST survive it: the levels now come from
@@ -176,8 +208,8 @@ var badTierErr = null;
 try { agentMdToToml(badTierMd, 'x', DEFAULT_MODELS); } catch (e) { badTierErr = e; }
 assert('an unknown tier throws rather than silently emitting no model', badTierErr instanceof Error);
 
-// code-reviewer has no tier: its model is chosen per dispatch (the sibling of the
-// implementer). Emitting a fixed model here would reintroduce exactly the bug we removed.
+// code-reviewer has no tier: its model is pinned per dispatch by /review-branch (always the
+// `deep` tier, a fresh context). Emitting a fixed model here would reintroduce exactly the bug we removed.
 var noTierMd = ['---', 'name: code-reviewer', 'description: "d"', '---', 'b'].join('\n');
 assert('an agent with no tier: emits no model key rather than guessing one',
   agentMdToToml(noTierMd, 'code-reviewer', DEFAULT_MODELS).indexOf('model = ') === -1);

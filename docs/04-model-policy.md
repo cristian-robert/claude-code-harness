@@ -12,7 +12,8 @@ task need," never by "how big is the diff."
 | Role | Route here | Never here |
 |---|---|---|
 | `scout` | Pure retrieval: find files, fetch, list, extract into a given schema | Anything needing a decision the prompt did not pre-make. **Never planning.** |
-| `build` | Implementation the planner already specified step by step; mechanical transforms; read-only verification | Work whose design is still open |
+| `routine` | Read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes | Anything that builds — `build` is opus, never sonnet (PO directive 2026-09-05) |
+| `build` | Implementation the planner already specified step by step — hard but doable. Opus | Work whose design is still open |
 | `deep` | Hard code, logic, architecture, planning, debugging | — |
 
 The map lives in `.claude/harness.json` → `models`, with a `checkedAt`. `/models` re-verifies it
@@ -30,16 +31,17 @@ Plans, rules, skills, and dispatch prose therefore name a **role**, never a mode
 `tier:` per plan task and `/implement` executes that hint instead of re-judging it — one judgment,
 made once, by the strongest model, at plan time.
 
-## The reviewer is the sibling, never the author
+## The reviewer is a fresh `deep` context, never the author's session
 
-`deep`-written code is reviewed at `build`. `build`-written code is reviewed at `deep`. Always at
-`effort: xhigh`. **A model does not find the bug it just wrote** — different weights fail differently,
-and that difference is the entire value of a review.
+Every review runs at `deep`, `effort: xhigh`, in a fresh context that sees only diff + plan +
+protocol. Independence is context isolation, not weight diversity.
 
-> **This supersedes the old "never downgrade a reviewer" rule.** That rule optimized for reviewer
-> *capability*; this one optimizes for reviewer *independence*. Sonnet reviewing Opus is a downgrade
-> in raw capability and we are taking it on purpose, buying back the gap with `xhigh` effort. The
-> failure it prevents — a model rubber-stamping its own reasoning — is the one we actually kept hitting.
+> **This supersedes the sibling rule (2026-07-12), which superseded "never downgrade a reviewer".**
+> The sibling inversion reviewed opus-written code at sonnet to buy different weights. On 2026-09-05
+> the PO moved `build` to opus and ruled reviews run on opus, so `build` and `deep` share a model on
+> Claude and a sonnet reviewer is not wanted. What the inversion protected against — a model
+> rubber-stamping its own reasoning — is still covered: the reviewer never inherits the
+> implementer's session, and the harness's `code-reviewer` sees the diff, the plan, and nothing else.
 
 `review` is not a role for exactly this reason: it has no fixed model. It is derived per dispatch
 from whoever implemented.

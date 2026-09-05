@@ -8,7 +8,7 @@ allowed-tools: Read, Edit, WebFetch, Bash
 # /models — refresh the tier map
 
 The map in `.claude/harness.json` → `models` is the ONE place a model is named. Everything else pins
-a role (`scout` | `build` | `deep`). This command re-verifies the map and **proposes** a diff. It
+a role (`scout` | `routine` | `build` | `deep`). This command re-verifies the map and **proposes** a diff. It
 never writes without a yes.
 
 ## 1 · Read the current map
@@ -31,8 +31,9 @@ For each harness, check that every role still maps to a live model, and whether 
 the same family** has shipped:
 
 - `scout` — cheapest reading tier. Never a model that has to decide anything.
-- `build` — spec-following implementation. The planner already made the judgment calls.
-- `deep` — hard logic, architecture, planning.
+- `routine` — sonnet-grade: read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes. Never builds.
+- `build` — implementation the planner specified step by step; hard but doable. Opus, never sonnet.
+- `deep` — hard logic, architecture, planning, debugging, and every review.
 
 On Claude, prefer the **family alias** (`opus`, `sonnet`, `haiku`) over a pinned ID: aliases float to
 the newest family member on their own, so they need no maintenance. Only pin an ID if the alias is
@@ -72,7 +73,7 @@ stale until the user accepts the check.
 
 ## 5 · Reviewer rule (unchanged by any refresh)
 
-The reviewer is the **sibling** of whoever implemented — `deep`-written code is reviewed at `build`,
-`build`-written at `deep`, always `effort: xhigh`. A refresh may change *which model* a tier names; it
-never changes this inversion. If a proposed map would make `build` and `deep` the same model, REFUSE
-it — the reviewer would then be the model that wrote the code.
+The reviewer is a fresh `deep` context at `effort: xhigh`, whoever implemented — never the session
+that wrote the code. A refresh may change *which model* `deep` names; it never changes this. `build`
+and `deep` MAY name the same model on Claude (they do by default); on Codex keep `deep` at least as
+capable as `build`. `routine` must never name a model stronger than `build`.

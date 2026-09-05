@@ -30,15 +30,16 @@ Roles, never model names. `.claude/harness.json` → `models` maps them per harn
 |---|---|---|---|
 | Locate/trace a symbol | `codebase-search` MCP (where_is/find_references/outline) if wired, else targeted grep — see symbol-navigation.md | — | — |
 | Locate files / text | built-in Explore | `scout` | — |
-| Understand / synthesize | `scout` agent | `build` | medium |
-| Implement | general-purpose | per the plan's `tier:` hint | high |
-| Code review | `code-reviewer` | **sibling of the implementer's tier** | xhigh |
+| Understand / synthesize | `scout` agent | `routine` | medium |
+| Implement | general-purpose | per the plan's `tier:` — `build` never runs on the `routine`-grade model; `routine` only for text-only or trivially easy tasks | high |
+| Code review | `code-reviewer` | **`deep`, fresh context** | xhigh |
 | Runtime check | `qa-evaluator` | `deep` | high |
 | Acceptance evidence pass | `qa-evaluator`; browser flows → global `tester-agent` | `deep` | high |
 
-**The reviewer is never the model that wrote the code.** `deep`-written code is reviewed at `build`;
-`build`-written code is reviewed at `deep`. Different weights find different bugs — a model does not
-catch the mistake it just made. `/review-branch` reads the plan's `tier:` and inverts it.
+**The reviewer never shares the session that wrote the code.** Every review runs at `deep`,
+`effort: xhigh`, in a fresh context that sees only diff + plan + protocol. The sibling inversion
+(deep↔build) was retired 2026-09-05 when `build` moved up a model class: weight diversity is gone, context
+isolation is the independence.
 
 Model resolution, in order (verified 2026-09-05 against code.claude.com/docs/en/sub-agents.md and the
 2.1.251 / 2.1.257 changelog entries): the per-invocation `model` → the agent's `model:` frontmatter →

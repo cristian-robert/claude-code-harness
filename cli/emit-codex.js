@@ -92,7 +92,28 @@ function agentMdToToml(mdText, fallbackName, models, onWarn) {
   var tier = parsed.fm.tier;
   if (tier) {
     var resolved = models || DEFAULT_MODELS;
-    var model = resolveModel(resolved, 'codex', tier);
+    var model;
+    // A role the PACKAGE knows but the user's map does not is a map that predates the role,
+    // not a typo. `update` keeps the user's `models` verbatim (harness-config.js merges
+    // top-level keys only, by design), so a role added in a release — `routine`, 2026-09-05 —
+    // never arrives in an existing harness.json, and a throw here made `npx phe update` BRICK
+    // the Codex re-emit for every existing Codex adopter: the unrecorded-ceilings trap below,
+    // one level up. Emit the shipped default and WARN, naming the role and /models; a role the
+    // user's map DOES have is never overridden. Two cases stay hard errors, unchanged: a tier
+    // the package does not know either (a typo), and a map with no codex half at all (a
+    // deleted half is a different problem from a new role) — resolveModel throws for both.
+    var codexHalf = resolved.codex;
+    if (codexHalf && typeof codexHalf === 'object' && !codexHalf[tier] && DEFAULT_MODELS.codex[tier]) {
+      model = DEFAULT_MODELS.codex[tier];
+      warn(
+        '.claude/agents/' + name + '.md pins tier "' + tier + '", but .claude/harness.json -> ' +
+        'models.codex has no "' + tier + '" role (it was added in a release after that map was ' +
+        'written). Emitting it with the shipped default ' + model + '. Run /models to record "' +
+        tier + '" in your map — until then every emit repeats this warning.'
+      );
+    } else {
+      model = resolveModel(resolved, 'codex', tier);
+    }
     lines.push('model = ' + tomlBasic(model));
 
     // An effort the model does not support fails at DISPATCH time, far from the file that
