@@ -7,6 +7,7 @@
 // plus each skill's SKILL.md frontmatter description (the only skill part that always
 // loads — EXCEPT skills with disable-model-invocation: true, which cost nothing).
 // --docs <dir>: every *.md in <dir> is listed with its line count; >130 is a hard violation.
+// <dir> is relative to the CWD, like [projectDir] — the gate measures template/ and budgets docs/.
 // Exit 0 = OK/WARN, 1 = OVER budget.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -123,7 +124,7 @@ if (skillRows.length) {
 }
 if (docsDir) {
   const DOC_LINES = 130; // AGENTS.md "docs ≤130" — measured here so the rule stops being decorative
-  const abs = resolve(dir, docsDir);
+  const abs = resolve(docsDir); // cwd-relative, exactly like the positional project dir
   if (!existsSync(abs)) hardViolations.push(`${docsDir}/: directory not found — a docs budget nobody can measure is not a budget`);
   else {
     const docs = readdirSync(abs).filter((n) => n.endsWith(".md")).sort();

@@ -15,8 +15,8 @@ function test(name, fn) {
   try { fn(); console.log('  PASS  ' + name); passed++; }
   catch (e) { console.error('  FAIL  ' + name + '\n        ' + e.message.split('\n')[0]); failed++; process.exitCode = 1; }
 }
-function run(args) {
-  try { return { code: 0, out: execFileSync('node', [SCRIPT].concat(args), { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
+function run(args, opts) {
+  try { return { code: 0, out: execFileSync('node', [SCRIPT].concat(args), { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'], ...opts }) }; }
   catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
 }
 function project(opts) {
@@ -69,19 +69,28 @@ test('a skill body between 4000 and 5000 est. tokens is a soft warn, exit 0', ()
   assert.ok(/WARN .*skills\/big.*tokens/.test(r.out), r.out);
 });
 
+// --docs is CWD-relative, like the positional project dir. The root gate depends on it:
+// it measures template/ while the docs it budgets live beside it, under the cwd. So each
+// case below runs from the temp dir's PARENT and points --docs at a path from there —
+// resolving it against the measured dir instead would look for <project>/<project>/docs.
 test('--docs lists every doc with its line count; 130 passes, 131 is a hard violation', () => {
-  const ok = run([project({ bigWords: 100, docs: { 'a.md': 130 } }), '--docs', 'docs']);
+  const dir = project({ bigWords: 100, docs: { 'a.md': 130 } });
+  const rel = path.basename(dir);
+  const ok = run([dir, '--docs', `${rel}/docs`], { cwd: path.dirname(dir) });
   assert.strictEqual(ok.code, 0, ok.out);
-  assert.ok(/^docs\/a\.md\s+130/m.test(ok.out), ok.out);
-  const over = run([project({ bigWords: 100, docs: { 'a.md': 130, 'b.md': 131 } }), '--docs', 'docs']);
+  assert.ok(new RegExp(`^${rel}/docs/a\\.md\\s+130`, 'm').test(ok.out), ok.out);
+  const dir2 = project({ bigWords: 100, docs: { 'a.md': 130, 'b.md': 131 } });
+  const rel2 = path.basename(dir2);
+  const over = run([dir2, '--docs', `${rel2}/docs`], { cwd: path.dirname(dir2) });
   assert.strictEqual(over.code, 1, over.out);
-  assert.ok(/HARD docs\/b\.md: 131 lines > 130/.test(over.out), over.out);
+  assert.ok(new RegExp(`HARD ${rel2}/docs/b\\.md: 131 lines > 130`).test(over.out), over.out);
 });
 
 test('--docs on a missing directory is a hard violation, never a silent pass', () => {
   const r = run([project({ bigWords: 100 }), '--docs', 'nope']);
   assert.strictEqual(r.code, 1, r.out);
   assert.ok(/HARD .*nope/.test(r.out), r.out);
+  assert.ok(/HARD nope\/: directory not found/.test(r.out), r.out);
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
