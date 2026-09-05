@@ -98,18 +98,20 @@ function agentMdToToml(mdText, fallbackName, models, onWarn) {
     // top-level keys only, by design), so a role added in a release — `routine`, 2026-09-05 —
     // never arrives in an existing harness.json, and a throw here made `npx phe update` BRICK
     // the Codex re-emit for every existing Codex adopter: the unrecorded-ceilings trap below,
-    // one level up. Emit the shipped default and WARN, naming the role and /models; a role the
-    // user's map DOES have is never overridden. Two cases stay hard errors, unchanged: a tier
-    // the package does not know either (a typo), and a map with no codex half at all (a
-    // deleted half is a different problem from a new role) — resolveModel throws for both.
+    // one level up. Emit the package default and WARN — the role, the model it fell back to,
+    // and the fix, once per role per run (the dedupe key; emitCodexPayload's warn honours it,
+    // so two agents pinning the tier print one line). A role the user's map DOES have is never
+    // overridden. Two cases stay hard errors, unchanged: a tier the package does not know
+    // either (a typo), and a map with no codex half at all (a deleted half is a different
+    // problem from a new role) — resolveModel throws for both.
     var codexHalf = resolved.codex;
     if (codexHalf && typeof codexHalf === 'object' && !codexHalf[tier] && DEFAULT_MODELS.codex[tier]) {
       model = DEFAULT_MODELS.codex[tier];
       warn(
-        '.claude/agents/' + name + '.md pins tier "' + tier + '", but .claude/harness.json -> ' +
-        'models.codex has no "' + tier + '" role (it was added in a release after that map was ' +
-        'written). Emitting it with the shipped default ' + model + '. Run /models to record "' +
-        tier + '" in your map — until then every emit repeats this warning.'
+        'harness.json models.codex has no "' + tier + '" role — emitting ' + name + '.md (and ' +
+        'every other agent pinning that tier) with the package default "' + model + '"; ' +
+        'run /models to record it.',
+        'missing-role:' + tier
       );
     } else {
       model = resolveModel(resolved, 'codex', tier);
@@ -307,7 +309,9 @@ function assertNoSymlinkChildren(dirPath) {
 // Generated files are overwritten, never backed up — they are not user content.
 //
 // `onWarn` receives every non-fatal problem (see agentMdToToml). Defaults to stderr; the
-// warnings are also returned on `counts.warnings` so a caller can re-report them.
+// warnings are also returned on `counts.warnings` so a caller can re-report them. A warning
+// that carries a dedupe key (a map missing a role that several agents pin) is printed — and
+// returned — once per run: the fix is one /models run, so one line says it.
 function emitCodexPayload(projectRoot, onWarn) {
   var claudeSkills = path.join(projectRoot, '.claude', 'skills');
   var claudeAgents = path.join(projectRoot, '.claude', 'agents');
@@ -319,7 +323,15 @@ function emitCodexPayload(projectRoot, onWarn) {
   var models = readModels(projectRoot) || DEFAULT_MODELS;
   var registered = [];
   var emitWarning = onWarn || function (msg) { console.warn('WARNING: ' + msg); };
-  var warn = function (msg) { counts.warnings.push(msg); emitWarning(msg); };
+  var seenKeys = {};
+  var warn = function (msg, key) {
+    if (key) {
+      if (seenKeys[key]) return;
+      seenKeys[key] = true;
+    }
+    counts.warnings.push(msg);
+    emitWarning(msg);
+  };
 
   // F1: guard every level of the generated tree BEFORE any rm/mkdir/write
   // touches it (see assertRealDir/assertNoSymlinkChildren above). Parent

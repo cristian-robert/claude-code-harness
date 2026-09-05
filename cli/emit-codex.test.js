@@ -107,9 +107,10 @@ var preRoutineWarnings = [];
 var preRoutineToml = agentMdToToml(routineMd, 'r', PRE_ROUTINE, function (m) { preRoutineWarnings.push(m); });
 assert('a routine-tier agent still emits against a map that predates the role (shipped default)',
   preRoutineToml.indexOf('model = "gpt-5.6-luna"') !== -1);
-assert('...and warns exactly once, naming the role, the agent file and /models',
-  preRoutineWarnings.length === 1 && /"routine"/.test(preRoutineWarnings[0]) &&
-  /r\.md/.test(preRoutineWarnings[0]) && /\/models/.test(preRoutineWarnings[0]));
+assert('...and warns, naming the role, the agent file, the package default it fell back to, and the fix',
+  preRoutineWarnings.length === 1 && /models\.codex has no "routine" role/.test(preRoutineWarnings[0]) &&
+  /r\.md/.test(preRoutineWarnings[0]) && /package default "gpt-5\.6-luna"/.test(preRoutineWarnings[0]) &&
+  /run \/models/.test(preRoutineWarnings[0]));
 assert('...without overriding a role the map DOES have',
   agentMdToToml(scoutMd, 'scout', PRE_ROUTINE, function () {}).indexOf('model = "gpt-5.6-terra"') !== -1);
 var turboMd = ['---', 'name: t', 'description: "d"', 'tier: turbo', '---', 'b'].join('\n');
@@ -986,6 +987,36 @@ console.log('\neffort ceilings live in .claude/harness.json -> models.efforts:')
       Object.keys(snapshot(path.join(proj, '.codex'))).every(function (f) {
         return fs.readFileSync(path.join(proj, '.codex', f), 'utf-8').indexOf('gpt-5.7-nova') === -1;
       }));
+  })();
+
+  // (5) A map that PREDATES a role. scout.md and research-gatherer.md both pin `tier: routine`
+  // (added 2026-09-05); an adopter's map from before that day has no such role, and `update`
+  // keeps the map verbatim. The emit must complete, fall back to the package default, and say
+  // so ONCE per role per run — one line, not one per agent — naming the role, the model it
+  // fell back to, and the fix.
+  (function () {
+    var proj = refreshedProj('predates-routine', function (models) {
+      delete models.claude.routine;
+      delete models.codex.routine;
+    });
+    var warnings = [];
+    var err = null;
+    var counts = null;
+    try { counts = emitCodexPayload(proj, function (m) { warnings.push(m); }); } catch (e) { err = e; }
+    assert('a map that predates the routine role does NOT brick the emit', err === null);
+    var missing = warnings.filter(function (w) { return /has no "routine" role/.test(w); });
+    assert('...the missing-role warning is printed ONCE per run, though two agents pin the tier',
+      missing.length === 1);
+    assert('...it names the role, the package default it fell back to, and the fix',
+      missing.length === 1 && /models\.codex has no "routine" role/.test(missing[0]) &&
+      /package default "gpt-5\.6-luna"/.test(missing[0]) && /run \/models/.test(missing[0]));
+    assert('...the deduped list is what the caller gets back too',
+      counts !== null && counts.warnings.filter(function (w) { return /has no "routine" role/.test(w); }).length === 1);
+    assert('...both routine-tier agents are emitted at the package default',
+      tomlFor(proj, 'scout').indexOf('model = "gpt-5.6-luna"') !== -1 &&
+      tomlFor(proj, 'research-gatherer').indexOf('model = "gpt-5.6-luna"') !== -1);
+    assert("...a role the map DOES have keeps the adopter's own ID",
+      tomlFor(proj, 'qa-evaluator').indexOf('model = "gpt-5.6-sol"') !== -1);
   })();
 
   fs.rmSync(CEIL_DIR, { recursive: true, force: true });

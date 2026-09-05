@@ -35,6 +35,11 @@ the same family** has shipped:
 - `build` — implementation the planner specified step by step; hard but doable. Opus, never sonnet.
 - `deep` — hard logic, architecture, planning, debugging, and every review.
 
+A role listed above but **missing from the map** — a release added it after the map was written
+(`routine`, 2026-09-05) — gets a proposed row at the package defaults (Claude `sonnet`, Codex
+`gpt-5.6-luna`, the model the emit warning names); until it is recorded, every Codex emit warns and
+falls back to that default.
+
 On Claude, prefer the **family alias** (`opus`, `sonnet`, `haiku`) over a pinned ID: aliases float to
 the newest family member on their own, so they need no maintenance. Only pin an ID if the alias is
 gone. On Codex there are no aliases — its IDs are pinned and are the real reason this command exists.
