@@ -39,7 +39,7 @@ Missing tool, version, or questions → `GATHER-BLOCKED: <what is missing>`. Nev
     ## Findings
     <answers grouped by question; call out version-specific behavior>
     ## Sources
-    <url — one line each on what it backs; exact, with version>
+    <url — one line each on what it backs; exact, with version; `raw:` or `summary:` per claim, as above>
     ## Confidence
     <low|med|high — and why>
     ## Gaps / not covered

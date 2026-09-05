@@ -66,6 +66,7 @@ Fallback (plugin unavailable), condensed:
 ## 6. Write to disk
 
 MUST use the Write tool to create `plans/<slug>-plan.md` (slug: kebab-case from ticket or title). This is a required deliverable, not optional — `/implement` reads it from disk, so the file must exist. Do NOT print the plan body to the terminal.
+Then run `node .claude/tooling/plan-anchors.mjs plans/<slug>-plan.md` — fix every MISS before step 7; its exit code feeds the confidence rubric.
 
 Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`, append to the item's `## Log` (in the tracking root): `<YYYY-MM-DD> plan: plans/<slug>-plan.md`, and commit that item edit there as `track(<id>): plan linked` (guard permits tracking-only commits on any branch; github mode: mirror per work-tracking.md, degrade rules apply). Status stays untouched — /plan-work owns no status transition. Item still `status: backlog` → its AC are not PO-approved: the ONLY unblock is `/backlog refine <id>` (refine owns backlog→ready; an in-chat "approved" would never land on disk). Autonomous mode: run the refine transition yourself and log under `## Assumptions`.
 

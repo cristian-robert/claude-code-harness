@@ -22,6 +22,8 @@ Never implement from memory of a conversation. The plan on disk is the contract 
 your recollection disagree, the plan wins; if the plan is wrong, record a deviation (step 4).
 Then load the plan's **Knowledge to load first** entries NOW — invoke the listed knowledge
 skills, read the listed files — the planner's context does not survive `/clear`.
+Then `node .claude/tooling/plan-anchors.mjs <plan>`: every `MISS` is anchor rot — locate the passage by its phrase, read it anyway, and log `anchor rot: <path> "<phrase>"` under the report's Deviations row.
+A plan with no parsable anchors (exit 1, "no anchors found") is read by path and reported the same way.
 Dev hat: plan has `item:` → (1) confirm the item is `status: ready` (not still `backlog` — refine skipped, AC unapproved); `backlog` → blocker `item <id> not PO-approved — /backlog refine <id> first`. (2) Kanban WIP check FIRST: count existing `doing` items in the tracking root — at/over `workTracking.wipLimit` → surface `WIP <n>/<limit> — finish in-flight work first` and confirm with the user before proceeding. (3) THEN set `status: doing` + Log line `implement: started` in the TRACKING ROOT copy of the item (resolve: first `worktree ` line of `git worktree list --porcelain`; commit there as `track(<id>): doing`; Log line format `<YYYY-MM-DD> implement: started` — guard permits tracking-only commits on any branch). Items live outside code branches; plans/ and reports/ travel WITH this branch. Details: `.claude/references/work-tracking.md`.
 
 ## 2 · Isolation
