@@ -86,6 +86,7 @@ Why: context rot — recall degrades as context grows; every always-loaded token
 | Subdir conventions forgotten mid-session | Compaction dropped subdir CLAUDE.md; reloads on next read there — promote critical lines to a scoped rule |
 | Knowledge skill never fires | Description not pushy, or delisted by the ~1%-of-window listing budget trim (least-used dropped first) — sharpen the description; check `skillOverrides` + the skill listing budget |
 | Reviewer verdict malformed | `verdict-gate.mjs` SubagentStop hook re-prompts via exit 2 — if verdicts still slip through, check its matcher and smoke fixtures |
+| Timing fixture asserts the wrong verdict | A command killed by the per-check timeout is a FAILURE (RED), never a skip (INCOMPLETE) — a timing-based fixture states which verdict its elapsed time produces, sizes the sleep to the budget, and pins the margin (traces to: 2026-09-05 — a 3000 ms "INCOMPLETE" fixture recipe produced RED) |
 
 ## 7. Load conditions
 

@@ -54,3 +54,5 @@ tier: deep                # implementer hint: `deep` (hard logic/architecture, d
 - Out of scope is mandatory — scope creep is a planning failure, not an implementation choice.
 - Context carries pattern files + pinned versions so `/implement` never re-researches.
 - Wave is opt-in and provable: tasks share a wave ONLY if their Files lists are pairwise disjoint — the planner decides once, `/implement` re-checks the intersection mechanically before dispatching.
+- A task that RETIRES or RENAMES a config key, role, or vocabulary term carries a repo-wide **enumeration grep** in its `Validate:` command — never an enumerated file list, which always misses one. (traces to: 2026-09-05 — four stale three-role lists survived enumerated briefs across three fix rounds)
+- A task adding a config key, model role, or required field states its **adopter-migration behaviour on `npx perfect-harness-engineering update`**: existing configs are kept verbatim, so a newly-required key throws for every current adopter. (traces to: 2026-09-05 — the `routine` role broke `update` for every existing Codex adopter until `cli/emit-codex.js` gained warn-and-fallback)

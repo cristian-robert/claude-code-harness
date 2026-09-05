@@ -27,7 +27,7 @@
 | Ship | `superpowers:finishing-a-development-branch`, after `/evolve` | push / PR — `guard.mjs` denies a push until `/evolve` has run since the last commit (`requireEvolveBeforePush`, default on) |
 | Sprint (scrum mode) | `/sprint` plan·close | `sprints/<n>.md` |
 
-**Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); BA/PM draft, refine, and PROPOSE backlog order (the PO decides priority and order), the Architect hat designs in `/plan-work`, Dev owns `/implement`, QA owns `/validate` + runtime checks, the reviewer agent brings fresh eyes (with a security lens on sensitive diffs — `/review-branch` invokes the global `security-audit` skill when available, else the reviewer's security checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.
+**Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); every other hat is a pipeline phase or checker agent, and `/review-branch` adds a security lens on sensitive diffs (global `security-audit` skill when available, else the reviewer's checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.
 
 Plan and Implement run in **separate sessions** (`/clear` between): a fresh context executing a written plan beats a long session's accumulated bias. Plans must pass the no-prior-knowledge test — executable by an agent that never saw this conversation.
 
@@ -39,15 +39,12 @@ Plan and Implement run in **separate sessions** (`/clear` between): a fresh cont
 - **No recursive deletes** (`rm -rf`, `find -delete`, `git clean -d`) — enforced by `guard.mjs`. Delete specific files explicitly.
 - **Never commit/push code on `main`/`master`** — enforced by `guard.mjs`. Branch first: `{type}/{description}`. Sole exception it permits: `track(<id>)` commits staging only `backlog/`/`sprints/` (item state lives on the tracking root).
 - **A turn cannot end with the stop gate red** — enforced by `.claude/hooks/stop-gate.mjs` running the checks in `.claude/harness.json`.
-- **Done = evidence**: show the command run and its real output. "Looks done" is not a state.
 
 ## Context tiers (don't preload — lazy context loads itself)
 
 - Path-scoped rules and subdirectory `AGENTS.md` auto-load on matching file reads (native on Claude Code; injected by a hook on Codex).
 - Knowledge lives in `knowledge-base/`: `architecture.md` BEFORE placing code, `runbook.md` BEFORE diagnosing a bug. **architecture-map** / **debugging-this-repo** are thin pointers to it.
-- Touching the harness itself (hooks/rules/skills)? Read `.claude/references/harness-maintenance.md` FIRST.
-- **Navigate by symbol, not grep**: the `codebase-search` MCP (`where_is`/`find_references`/`outline`, Python — if wired) + LSP diagnostics (`.lsp.json`) come before text search — `.claude/references/symbol-navigation.md`.
-- **Doc-grounded work**: building against an external tool/library? Consult its docs for your pinned version — `wiki/stack/<tool>/` first, else `/research` (context7 + official docs). Never code an API from memory. Knowledge protocol (two stores, retrieve/capture/promote): `.claude/references/knowledge-protocol.md`.
+- **Knowledge protocol** (two stores, retrieve/capture/promote): `.claude/references/knowledge-protocol.md`.
 
 ## Compact instructions
 

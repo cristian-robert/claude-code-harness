@@ -45,6 +45,11 @@ it (`/harness-init` does this during setup).
 Neither layer can override the other's deny. Each covers the other's blind spot — a
 misfiring hook `allow` can't expose secrets, and mode escalation can't either. Keep both.
 
+`guard.mjs` matches the Bash command's **text**, so it denies any command that merely mentions a
+secret filename — a probe that never reads one included. Working as designed: a text match cannot
+know a `.env` mention is harmless, and guessing would reopen the Bash-indirection hole. Build such
+payloads programmatically instead of naming the file (two implementers hit this in one session).
+
 ## Hook engineering rules (each learned the hard way)
 
 | Rule | Contract | Incident |
