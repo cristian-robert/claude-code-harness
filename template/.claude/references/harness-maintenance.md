@@ -59,6 +59,7 @@ Verified against code.claude.com/docs/en/skills §6.10: SPACE-separated, `Bash(<
 | `CLAUDE.md` | ~60 lines |
 | Each rule | <=45 lines |
 | Skill body | <=100 lines |
+| Skill body (tokens) | <=4000 est. soft, 5000 hard — the per-skill re-attach cap after compaction |
 | Context/knowledge skill body | <=70 lines |
 | Reference | <=160 lines |
 | Subdirectory CLAUDE.md | <=30 lines |

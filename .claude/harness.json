@@ -3,7 +3,8 @@
     "node tools/self-harness.mjs --check",
     "node template/.claude/hooks/smoke-test.mjs",
     "node cli/skill-preview-guards.test.js",
-    "node tools/ratchet-greps.mjs"
+    "node tools/ratchet-greps.mjs",
+    "node tools/context-ledger.mjs template --docs ../docs"
   ],
   "stopGateTimeoutSec": 30,
   "stopGateTotalSec": 75,

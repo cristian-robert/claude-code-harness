@@ -5,9 +5,8 @@
 Attention is quadratic: n tokens create n² pairwise relationships. As context grows,
 recall degrades — a gradient, not a cliff, "across all models" (Anthropic). North star:
 **"the smallest possible set of high-signal tokens that maximize the likelihood of some
-desired outcome."** Fill guidance — single-source anecdote, NOT a benchmark (claude-code
-issue #34685): degradation noticeable from ~40–50% window fill. Directional only, but the
-operational rule holds: a fresh session executing a disk artifact beats a degraded one.
+desired outcome."** The ~40–50%-fill anecdote (claude-code issue #34685) is ledgered as
+unverified in docs/99 — see "Long-horizon techniques" for the trigger actually used.
 
 ## The tier model (normative)
 
@@ -80,24 +79,17 @@ snapshots state to `.claude/state/` and `session-start.mjs` (source=compact) re-
 
 ## Right altitude
 
-CLAUDE.md is advisory prose ("context, not enforced configuration"). Two failure modes
-bracket the target:
-
 | Too low | Too high | Right |
 |---|---|---|
 | Hardcoded if-else pseudologic — brittle, high-maintenance | Vague platitudes ("write good code") — assumes shared context | Strong heuristics: specific enough to steer, flexible enough to generalize |
 
 - Minimal ≠ short. Supply the full set of information the behavior needs — then nothing more.
 - Structure with headers and labeled sections; the model navigates blocks better than prose.
-- Add instructions only for OBSERVED failures — the ratchet. No speculative hardening.
 - Few-shot = a few diverse canonical examples. Never a laundry list of edge cases.
-- Per-line test: would removing this cause mistakes? If not, cut.
-
-| CLAUDE.md: include | Exclude |
-|---|---|
-| Commands Claude can't guess (custom build/test invocations) | Anything derivable from the code itself |
-| Deviations from ecosystem defaults | API documentation (reference file, load on cite) |
-| Gotchas — practices NOT self-evident from code | File-by-file codebase maps (glob/grep is fresher) |
+- Include what the code cannot reveal: commands Claude can't guess (custom build/test
+  invocations), deviations from ecosystem defaults, gotchas not self-evident from code.
+- Exclude what it can: anything derivable from the code itself, API documentation (a
+  reference file, loaded on cite), file-by-file codebase maps (glob/grep is fresher).
 
 ## Budgets (enforced, measured)
 
@@ -127,9 +119,7 @@ systems burn ~15x the tokens of single-agent chat (Anthropic). Coupled coding ne
 out — multi-agent "struggles with tasks requiring shared context", i.e. most coding.
 Effort bands, the 4-element brief, and the per-stage fan-out map ship in the template:
 `.claude/rules/00-core.md` + `.claude/references/dispatch-protocol.md`. Embed the numbers
-in dispatch prompts ("agents struggle to judge appropriate effort"); every dispatch is
-self-contained and pins `tier:` + `effort:` — a ROLE (`scout`/`routine`/`build`/`deep`), never a model
-name. `.claude/harness.json` → `models` resolves the role, and is the one file that names a model.
+in dispatch prompts ("agents struggle to judge appropriate effort").
 
 ## Sources
 

@@ -20,7 +20,6 @@ The platform contract every PHE mechanism is built against.
 - Rule frontmatter is `paths:` (never `globs:`); memory load order; real skill frontmatter fields only.
 - **Subagent model resolution** (verified 2026-07-12; re-verified 2026-09-05 against `/en/sub-agents.md` and CHANGELOG 2.1.251/2.1.257): per-invocation `model` → agent `model:` → `CLAUDE_CODE_SUBAGENT_MODEL` (a default since 2.1.251) → session model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (2.1.257) overrides everything and therefore defeats the reviewer's `deep` pin → the warning in `template/.claude/references/dispatch-protocol.md` and the `session-start.mjs` check. Before 2.1.251 the plain variable was the override; that older claim is superseded, not wrong for its date.
 - **Minimum version:** `maxTurns` is enforced on every version; from 2.1.246 a capped subagent's output is marked partial with a resume hint (`/en/sub-agents.md` frontmatter table, read raw 2026-09-05). Below it a truncated scout return reads as a complete answer — the silent-failure class the dispatch protocol guards against. Stated in README and checked at `/harness-init` step 4.
-- **Drift warning:** the docs are versioned and change — re-verify hook schemas and frontmatter keys on every Claude Code upgrade.
 
 ## 4 · Anthropic engineering quartet — claude-code-best-practices · building-effective-agents · writing-tools-for-agents · multi-agent-research-system
 Four anthropic.com/engineering posts on agent, tool, and multi-agent design. (best-practices now redirects to code.claude.com/docs/en/best-practices — rewritten; re-check quotes against the live page.)
@@ -73,9 +72,7 @@ ghuntley.com/ralph + github.com/ghuntley/how-to-ralph-wiggum · github.com/human
 - Observed skill duplication (brainstorming, skill-creator, frontend-design ×2) → PHE's one-canonical-owner-per-capability rule.
 
 ## v0.3 pass — agile delivery-org layer (2026-07-08)
-
-Evidence base for `docs/06-delivery-org.md` and the `/backlog` · `/sprint` · `/accept` surface.
-Full brief in the vault: `inbox/research/phe-harness/v3-agile-layer.md`.
+Evidence base for `docs/06-delivery-org.md` and the `/backlog` · `/sprint` · `/accept` surface. Full brief in the vault: `inbox/research/phe-harness/v3-agile-layer.md`.
 
 ## 12 · BMAD-METHOD — github.com/bmad-code-org/BMAD-METHOD (tag v4.44.1 + main/v6)
 The role-roster reference implementation AND the over-engineering cautionary tale, both.
@@ -112,23 +109,10 @@ engineeringexec.tech/posts/ai-scrum-can-proven-agile-principles-work-for-agent-t
 The packaged "AI Layer" from Medin's course — 33 skills + 6 Python hooks. Audited per ADR-020; most at parity with or exceeded by `template/` (expected: PHE distilled sources 5–7 from the same author). What it contributed: the env-dump + quote-fold guard coverage and its measured split-quote bypass; the stop-gate tamper check with its documented escape (agent rewrote a failing `2+2==5` test to finish — "argued past, through a door the guarantee itself held open"); the drift axis (wrong rules mislead; pruning only catches rules that stopped earning); the denied-tool-in-headless silent failure. Declined with reasons in docs/00 anti-scope. Its hooks README cites arXiv 2604.25850 (a self-written 9KB system prompt swapped in ALONE scored below baseline; the measured gains came from enforcement layers) — corroborates ADR-005/006.
 
 ## Model policy (verified 2026-07-12)
-
-Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID,
-price, window, and effort level in those two files was read from a primary source on this date — none
-of it from model memory, which predates the gpt-5.6 family (shipped 2026-07-09).
-
-- **`openai/codex`** → `codex-rs/models-manager/models.json` — the shipping catalog: the three
-  gpt-5.6 IDs (`-sol` / `-terra` / `-luna`), `context_window: 372000`, and `supported_reasoning_levels`
-  (luna is the one 5.6 model without `ultra`). Also the source of the effort-default contradiction:
-  `gpt-5.6-sol` defaults to `low` here while the docs say `medium` → PHE never inherits effort.
-- **`openai/codex`** → `codex-rs/model-provider/src/models_endpoint.rs` — the catalog endpoint
-  `/models` re-verifies against.
-- **developers.openai.com/api/docs/pricing** — per-1M in/cached-in/out: sol $5/$0.50/$30 ·
-  terra $2.50/$0.25/$15 · luna $1/$0.10/$6.
-- **Installed `codex-cli 0.144.0`** — cross-check that the catalog above is what the local binary ships.
-- **Anthropic model reference** — Claude per-1M in/out (opus-4-8 $5/$25 · sonnet-5 $3/$15 · haiku-4-5
-  $1/$5 · fable-5 $10/$50); the ~30%-denser tokenizer on Opus 4.7+/Sonnet 5/Fable 5; Haiku 4.5 rejects
-  the `effort` parameter.
+Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID, price, window, and effort level in those two files was read from a primary source on this date — none of it from model memory, which predates the gpt-5.6 family (shipped 2026-07-09). The doctrine those numbers produced lives in docs/04; only the provenance is kept here.
+- **`openai/codex`** → `codex-rs/models-manager/models.json` — the shipping catalog: the three gpt-5.6 IDs (`-sol` / `-terra` / `-luna`), `context_window: 372000`, `supported_reasoning_levels`, and the effort-default contradiction docs/04 pins "never inherit effort" against. `codex-rs/model-provider/src/models_endpoint.rs` is the catalog endpoint `/models` re-verifies against.
+- **developers.openai.com/api/docs/pricing** — per-1M in/cached-in/out: sol $5/$0.50/$30 · terra $2.50/$0.25/$15 · luna $1/$0.10/$6. Cross-checked against the installed `codex-cli 0.144.0`.
+- **Anthropic model reference** — Claude per-1M in/out (opus-4-8 $5/$25 · sonnet-5 $3/$15 · haiku-4-5 $1/$5 · fable-5 $10/$50).
 
 ## Claims we deliberately labeled as unverified
 

@@ -81,14 +81,7 @@ earns it. Briefs and mechanics: `template/.claude/references/dispatch-protocol.m
 
 ## Review lenses stack
 
-Different lenses catch different defect classes; stacking is additive, not redundant.
-
-| Lens | Scope | Catches |
-|---|---|---|
-| Per-task validation (inside `/implement`) | one task's diff | mechanical: lint/type/tests red, spec deviation |
-| Runtime lens — `qa-evaluator` (inside `/validate` and `/accept`, work with a runtime surface) | the running app vs the plan's acceptance criteria | stubs: renders-but-doesn't-respond, display-only features, broken round-trips |
-| `/review-branch` — fresh evaluator | whole branch vs plan | plan conformance, integration seams, missed acceptance criteria |
-| Adversarial second-vendor pass (L/XL only) | whole branch, different model backbone | shared blind spots, architectural defects |
+Different lenses catch different defect classes; stacking is additive, not redundant. Four of them, each owned by the skill that runs it — per-task validation inside `/implement` (one task's diff), the runtime `qa-evaluator` lens inside `/validate` and `/accept` (the running app vs the plan's acceptance criteria), the fresh evaluator in `/review-branch` (whole branch vs plan), and the optional adversarial second-vendor pass on L/XL work (a different model backbone). Each skill states what its own lens catches.
 
 Two incidents justify the stack (AIDF v0.4 adversarial-review history):
 
