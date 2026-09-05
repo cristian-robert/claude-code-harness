@@ -101,6 +101,20 @@ test('a non-numeric or zero --tail / --timeout-sec fails closed with exit 64', (
   assert.strictEqual(run(['t', '--timeout-sec', '-3', '--', 'node -e "process.exit(0)"']).code, 64);
 });
 
+test('an unknown flag before -- is a usage error, exit 64, and nothing runs', () => {
+  const r = run(['typo', '--tial', '5', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.code, 64);
+  assert.ok(/usage/.test(r.out), r.out);
+  assert.ok(!fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'typo.log')), 'a misread argv must not run the command or write a log');
+});
+
+test('a stray positional word before -- is a usage error, exit 64, and nothing runs', () => {
+  const r = run(['stray', '--tail', '5', 'oops', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.code, 64);
+  assert.ok(/usage/.test(r.out), r.out);
+  assert.ok(!fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'stray.log')), 'a misread argv must not run the command or write a log');
+});
+
 test('words after -- are re-quoted one by one, so an argument with a space survives', () => {
   const r = run(['words', '--', 'node', '-e', 'console.log(process.argv.length + ":" + process.argv[2])', 'x', 'y z']);
   assert.strictEqual(r.code, 0);
