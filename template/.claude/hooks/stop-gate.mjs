@@ -41,9 +41,9 @@ async function main() {
   const cwd = event.cwd || process.cwd();
   const cfgPath = join(cwd, ".claude", "harness.json");
 
-  // Gate-CONFIG tamper check (always on, no config): a RED gate snapshots its own command
-  // list; a later GREEN whose list lost a command — or an emptied gate, or a deleted or
-  // unreadable harness.json — is refused. Once rewriting the tests is closed off
+  // Gate-CONFIG tamper check (always on, no config): a RED or INCOMPLETE gate snapshots its
+  // own command list; a later GREEN whose list lost a command — or an emptied gate, or a
+  // deleted or unreadable harness.json — is refused. Once rewriting the tests is closed off
   // (stopGateTamperPaths), editing harness.json is the next-cheapest way to "go green":
   // same escape class (coleam00/skills), one door in. The snapshot is read BEFORE the
   // missing-config and empty-gate exits so disarming the gate outright is caught too.
@@ -69,14 +69,14 @@ async function main() {
   let cfg = null;
   try { if (existsSync(cfgPath)) cfg = JSON.parse(readFileSync(cfgPath, "utf8")); } catch { cfg = null; /* unreadable config: handled below */ }
   if (!cfg || typeof cfg !== "object") {
-    // No usable config disarms the gate — unless it went RED earlier this session: then a
-    // deleted (or corrupted) harness.json is a removed gate, the cheapest disarm of all.
-    if (snapped.length) refuse(`Stop gate config was removed since it last went RED — .claude/harness.json is ${existsSync(cfgPath) ? "unreadable" : "missing"}; removed: ${snapped.join(" · ")}. Restore the file and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, snapped);
+    // No usable config disarms the gate — unless the gate went RED or INCOMPLETE earlier this
+    // session: then a deleted (or corrupted) harness.json is a removed gate, the cheapest disarm.
+    if (snapped.length) refuse(`Stop gate config was removed since the gate last went RED or INCOMPLETE — .claude/harness.json is ${existsSync(cfgPath) ? "unreadable" : "missing"}; removed: ${snapped.join(" · ")}. Restore the file and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, snapped);
     process.exit(0);
   }
   const gate = Array.isArray(cfg.stopGate) ? cfg.stopGate : [];
   const removed = snapped.filter((c) => !gate.includes(c));
-  if (removed.length) refuse(`Stop gate config shrank since it last went RED — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, removed);
+  if (removed.length) refuse(`Stop gate config shrank since the gate last went RED or INCOMPLETE — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, removed);
   if (gate.length === 0) process.exit(0);
   // Per-command cap AND a cumulative budget: the gate fires on EVERY turn end,
   // so it must stay in seconds — and must finish before the hook's own outer
@@ -108,8 +108,10 @@ async function main() {
   // before it could run (a partial gate is NOT a pass), else GREEN.
   let verdict = failures.length ? "RED" : skipped.length ? "INCOMPLETE" : "GREEN";
 
-  try { // snapshot the gate itself ONCE on RED; an honest GREEN clears it below
-    if (verdict === "RED" && !existsSync(gateSnapPath)) {
+  try { // snapshot the gate itself ONCE on any non-GREEN verdict; an honest GREEN clears it below.
+    // INCOMPLETE arms it too: an unrun check is not a passing check, and the block message
+    // names the checks that never ran — deleting one is the cheapest way to "finish".
+    if ((verdict === "RED" || verdict === "INCOMPLETE") && !existsSync(gateSnapPath)) {
       mkdirSync(join(cwd, ".claude", "state"), { recursive: true });
       writeFileSync(gateSnapPath, JSON.stringify({ stopGate: gate }));
     }
@@ -170,7 +172,7 @@ async function main() {
   } else if (verdict === "INCOMPLETE") {
     process.stdout.write(JSON.stringify({
       decision: "block",
-      reason: `Stop gate INCOMPLETE — ${skipped.length}/${gate.length} check(s) never ran (time budget ${cfg.stopGateTotalSec || 75}s exhausted): ${skipped.join(", ")}. A partial gate is not a pass. Raise stopGateTotalSec, trim/speed up the gate, or run /validate manually before finishing.`.slice(0, MAX_REASON),
+      reason: `Stop gate INCOMPLETE — ${skipped.length}/${gate.length} check(s) never ran (time budget ${cfg.stopGateTotalSec || 75}s exhausted): ${skipped.join(", ")}. A partial gate is not a pass, and the gate list is now snapshotted: removing a command to finish is refused. Raise stopGateTotalSec / stopGateTimeoutSec, make the checks faster, or run /validate manually before finishing.`.slice(0, MAX_REASON),
     }));
   } else if (verdict === "TAMPER") {
     process.stdout.write(JSON.stringify({

@@ -529,6 +529,26 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   writeFileSync(join(t4, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t4, false);
   const restored = stop(t4);
   check("restored config going green passes and clears the gate snapshot", restored.code === 0 && restored.out === "" && !existsSync(snap4));
+
+  // An INCOMPLETE gate (budget spent before every check ran) arms the snapshot too: the
+  // block message names the checks that never ran, so deleting one is the cheapest way to
+  // "finish" — the same escape the RED snapshot closes. The first check must SUCCEED inside
+  // the budget: a command killed by the timeout is a failure (RED), not a skip; the second
+  // is skipped because the loop needs a full second of budget left to start a command.
+  const SLOW = 'node -e "setTimeout(()=>{}, 200)"';
+  const TIGHT = { stopGateTotalSec: 1, stopGateTimeoutSec: 1 };
+  const cfgT = (cmds, extra = {}) => JSON.stringify({ stopGate: cmds, ...extra });
+  const t5 = mk(); const snap5 = join(t5, ".claude", "state", "gate-smoke.json");
+  writeFileSync(join(t5, ".claude", "harness.json"), cfgT([SLOW, FLAG_CMD], TIGHT)); setRed(t5, true);
+  const inc = stop(t5);
+  const armed = blocked(inc) && reason(inc).includes("INCOMPLETE") && !/trim/i.test(reason(inc)) && existsSync(snap5);
+  writeFileSync(join(t5, ".claude", "harness.json"), cfgT([OK], TIGHT)); // drop the checks that never ran
+  const shrunk = stop(t5);
+  const caught = blocked(shrunk) && reason(shrunk).includes("shrank");
+  writeFileSync(join(t5, ".claude", "harness.json"), cfgT([SLOW, FLAG_CMD])); setRed(t5, false); // full gate, real budget
+  const green5 = stop(t5);
+  check("INCOMPLETE arms the gate snapshot (message never says trim); shrinking it after blocks; the full gate going green clears it",
+    armed && caught && green5.code === 0 && green5.out === "" && !existsSync(snap5));
 }
 
 console.log("post-edit.mjs");
