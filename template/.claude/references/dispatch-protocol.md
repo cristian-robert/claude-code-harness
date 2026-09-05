@@ -40,14 +40,16 @@ Roles, never model names. `.claude/harness.json` → `models` maps them per harn
 `build`-written code is reviewed at `deep`. Different weights find different bugs — a model does not
 catch the mistake it just made. `/review-branch` reads the plan's `tier:` and inverts it.
 
-Model resolution, in order (verified 2026-07-12 against code.claude.com/docs/en/sub-agents): the
-`CLAUDE_CODE_SUBAGENT_MODEL` env var → the per-invocation `model` → the agent's `model:` frontmatter →
-the session model. A dispatch that pins no tier inherits the session model — a silent cost and quality bug.
+Model resolution, in order (verified 2026-09-05 against code.claude.com/docs/en/sub-agents.md and the
+2.1.251 / 2.1.257 changelog entries): the per-invocation `model` → the agent's `model:` frontmatter →
+`CLAUDE_CODE_SUBAGENT_MODEL` (a DEFAULT since 2.1.251, no longer an override) → the session model. A
+dispatch that pins no tier inherits that default or the session model — a silent cost and quality bug.
 
-**`CLAUDE_CODE_SUBAGENT_MODEL` defeats sibling review.** It sits ABOVE the per-invocation model, so if it is
-set, every agent — reviewer included — runs on that one model: the reviewer silently becomes the model that
-wrote the code, and the inversion above is dead with no error and nothing in the transcript. Do not set it in
-a harnessed repo; if a CI image or shell profile exports it, unset it before `/review-branch`.
+**`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` defeats sibling review.** Added in 2.1.257, it applies
+`CLAUDE_CODE_SUBAGENT_MODEL` (or the main model) to EVERY subagent, ignoring per-spawn and frontmatter
+models: the reviewer silently becomes the model that wrote the code, with no error and nothing in the
+transcript. Never set it in a harnessed repo; `session-start.mjs` warns when it is exported. (Before
+2.1.251 the plain variable had this effect — the old warning traced to that.)
 
 ## Effort scaling (models misjudge effort — budget it in the brief)
 

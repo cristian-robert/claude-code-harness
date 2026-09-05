@@ -61,7 +61,7 @@ Codex support in this release is **guidance-only**: instructions, skills, and su
 
 **Adopting over an existing harness?** Every existing file is saved as `<file>.backup` before the payload is written, and nothing you own that PHE doesn't ship (your own skills/agents/rules) is touched. Your team `.claude/settings.json` is then **deep-merged** automatically — your hooks and permissions are unioned with PHE's, not replaced (deterministic, re-runnable via `npx perfect-harness-engineering merge-settings`). `CLAUDE.md` and rules need judgment, so `/harness-init` reconciles them against the `.backup` (see below).
 
-Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18.
+Then open Claude Code and run **`/harness-init`** — it detects your stack, reconciles any backed-up `CLAUDE.md`/rules, fills every `CLAUDE.md` placeholder, arms the stop gate, optionally scaffolds an Obsidian vault, and configures work tracking. Requires Node ≥18 and Claude Code ≥2.1.246 (the shipped agents' `maxTurns` is ignored by older versions).
 
 ## Workflow
 

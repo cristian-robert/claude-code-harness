@@ -78,6 +78,7 @@ Ask ONLY what detection cannot know, all in one round:
 | Check | Must show |
 |---|---|
 | `node .claude/hooks/smoke-test.mjs` | Green — record the real output |
+| `claude --version` | ≥ 2.1.246 — below it the agents' `maxTurns` is ignored and a scout can grind unbounded; record the version |
 | `npx perfect-harness-engineering file-size-check` | Total vs budget — record the real output |
 | `grep -rnoE '<[A-Za-z][^<>]*>' AGENTS.md .claude/rules/ knowledge-base/ \| grep -vE '<(a\|n\|id\|div\|slug\|tool\|button\|dialog)>$' \|\| true` | Prints NOTHING. This is the placeholder GRAMMAR — any `<…>` token — minus the allowlist of things that legitimately survive: path notation (`backlog/<id>-<slug>.md`, `sprints/<n>.md`, `wiki/stack/<tool>/`) and the real HTML tags in `rules/frontend.md`. `knowledge-base/` is in scope because the KB now holds the content the two knowledge skills used to; the skills themselves are out because their remaining `<…>` tokens are notation, not fill slots. Do not narrow it back to an enumeration of known names. If your rules cite other HTML tags (`<input>`, `<nav>`, …), add them to the allowlist — never to the pattern |
 | `grep -n "workTracking" .claude/harness.json` | Prints the line with the chosen backend + method |

@@ -13,10 +13,11 @@ import { tmpdir } from "node:os";
 const HOOKS = dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
 
-function runHook(script, event) {
+function runHook(script, event, env) {
   try {
     const out = execFileSync("node", [join(HOOKS, script)], {
       input: JSON.stringify(event), encoding: "utf8", timeout: 20000,
+      env: env ? { ...process.env, ...env } : process.env,
       stdio: ["pipe", "pipe", "pipe"], // capture stderr too (verdict-gate writes there)
     });
     return { code: 0, out: out.trim() };
@@ -671,6 +672,17 @@ console.log("session-start.mjs");
   const none = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let noneCtx = ""; try { noneCtx = JSON.parse(none.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: noneCtx stays "" */ }
   check("no models key emits no staleness warning", none.code === 0 && !noneCtx.includes("Model map is stale"));
+}
+{
+  // CLAUDE_CODE_SUBAGENT_MODEL_FORCE (2.1.257) runs EVERY subagent on one model — the
+  // reviewer becomes the model that wrote the code and sibling review is dead with no
+  // error. The plain CLAUDE_CODE_SUBAGENT_MODEL is only a default since 2.1.251.
+  const on = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "opus" });
+  let ctx = ""; try { ctx = JSON.parse(on.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: ctx stays "" and the check fails */ }
+  check("warns when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set", on.code === 0 && ctx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") && ctx.includes("sibling review"));
+  const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "" });
+  let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* empty output is fine here */ }
+  check("no FORCE warning when the variable is unset", off.code === 0 && !offCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
 }
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
 

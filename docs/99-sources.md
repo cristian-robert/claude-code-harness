@@ -18,7 +18,8 @@ Anthropic Applied AI on curating the whole token budget, not one prompt.
 The platform contract every PHE mechanism is built against.
 - Exact hook I/O: stdin JSON, `permissionDecision: deny`, `stop_hook_active`, 8-consecutive-block Stop ceiling → guard.mjs, stop-gate.mjs.
 - Rule frontmatter is `paths:` (never `globs:`); memory load order; real skill frontmatter fields only.
-- **Subagent model resolution** (verified 2026-07-12, `/en/sub-agents#choose-a-model`): `CLAUDE_CODE_SUBAGENT_MODEL` → per-invocation `model` → frontmatter `model:` → the main conversation's model. `/en/model-config#environment-variables` on that env var: *"The model to use for all subagents and agent teams. Overrides the per-invocation `model` parameter and the subagent definition's `model` frontmatter."* It therefore silently defeats the sibling-reviewer rule → the warning in `template/.claude/references/dispatch-protocol.md`.
+- **Subagent model resolution** (verified 2026-07-12; re-verified 2026-09-05 against `/en/sub-agents.md` and CHANGELOG 2.1.251/2.1.257): per-invocation `model` → agent `model:` → `CLAUDE_CODE_SUBAGENT_MODEL` (a default since 2.1.251) → session model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (2.1.257) overrides everything and therefore defeats the sibling-reviewer rule → the warning in `template/.claude/references/dispatch-protocol.md` and the `session-start.mjs` check. Before 2.1.251 the plain variable was the override; that older claim is superseded, not wrong for its date.
+- **Minimum version:** agent `maxTurns` is honored from 2.1.246 (`/en/sub-agents`); below it a scout has no turn cap. Stated in README and checked at `/harness-init` step 4.
 - **Drift warning:** the docs are versioned and change — re-verify hook schemas and frontmatter keys on every Claude Code upgrade.
 
 ## 4 · Anthropic engineering quartet — claude-code-best-practices · building-effective-agents · writing-tools-for-agents · multi-agent-research-system
