@@ -34,8 +34,9 @@ signal: on 2026-09-05 it reported the SessionStart hook field as `start_reason`;
 1. Fetch the raw page — Claude Code docs serve markdown at `https://code.claude.com/docs/en/<page>.md`;
    most doc sites have an equivalent (`.md`, `?raw`, the GitHub source).
 2. `grep` the exact token in that text and quote the line, with the URL and the date read.
-3. No raw form available → mark the claim `unverified (summary only)` in the note and in docs/99's
-   unverified table; never let it into a hook or a rule.
+3. No raw form available → mark the claim `unverified (summary only)` in the note and keep it out of
+   every hook, rule, and reference; a project that keeps a sources ledger (this framework's `docs/99`)
+   records it there too.
 
 ## Tool key normalization
 
