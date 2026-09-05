@@ -978,7 +978,7 @@ console.log("statusline.mjs");
   check("statusline shows percent and absolute tokens", out.includes("ctx 43% 86k/200k"));
   const bare = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12 } });
   let out2 = ""; try { out2 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bare, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out2 = `${e.stdout || ""}`; }
-  check("statusline degrades to percent only when token fields are absent", /ctx 12%(\s|$)/.test(out2) && !/ctx 12% \d/.test(out2));
+  check("statusline degrades to percent only when token fields are absent", out2.split(" · ").includes("ctx 12%")); // exact token: rejects a slashed branch name AND a NaNk/NaNk regression
   const big = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12.3, total_input_tokens: 123456, context_window_size: 1000000 } });
   let out3 = ""; try { out3 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: big, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out3 = `${e.stdout || ""}`; }
   check("statusline renders a 1M window as 1.0M, never 1000k", out3.includes("ctx 12% 123k/1.0M"));
