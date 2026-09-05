@@ -78,7 +78,8 @@ Per work item — the PIV+E loop. Every stage's state lives on disk, never in th
 | 4 · Validate | `/validate` | GATE GREEN/RED verdict |
 | 5 · Review | `/review-branch` | `reports/<slug>-review.md` — PASS / REQUEST_CHANGES |
 | 6 · Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence; the human verdict |
-| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns |
+| 7 · Evolve | `/evolve` | rule/vault deltas — the harness learns BEFORE the work ships; writes the marker the push gate reads |
+| 8 · Ship | `superpowers:finishing-a-development-branch` | push / PR — `guard.mjs` denies a push until `/evolve` has run since the last commit (`requireEvolveBeforePush`, default on for new installs; existing adopters flip it in `.claude/harness.json`) |
 
 Merge/PR happens after review PASS (superpowers `finishing-a-development-branch` owns the mechanics). Scrum mode adds `/sprint plan` / `/sprint close` around the loop. The superpowers plugin is the execution discipline inside each stage; skills degrade to inline fallbacks without it.
 

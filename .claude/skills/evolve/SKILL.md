@@ -83,16 +83,16 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 
 - Smallest diff; adapt existing files in place — never rewrite rules/AGENTS.md from scratch.
 - Selections touched AGENTS.md/rules → reconcile auto-memory: remove any MEMORY.md lines now covered by team rules (memory holds machine-local facts only).
-- Always — even on "none": write `.claude/state/.evolve-ran` (timestamp) — the opt-in push gate (`harness.json` `requireEvolveBeforePush`) reads it. `.claude/state/` is gitignored by adopters.
 - `knowledge-base/` touched this session → run `npx perfect-harness-engineering kb-check` and show its real output. Exit 1 is a blocker exactly like a red smoke test: fix the findings, re-run. `/validate` ran the same gate at pipeline step 4, but the KB commit happens HERE at step 7 — the gate has to be where the commit is (`.claude/references/knowledge-protocol.md`).
 - Then stage `knowledge-base/` and commit it as exactly ONE `docs(kb): <what this session taught the KB>` commit, on the FEATURE branch — it is a work artifact like `plans/` and `reports/`, never a tracking-root file, so it merges with the PR.
 - Knowledge writes follow the Index Law: update that folder's `_index.md` in the same change — `knowledge-base/` locally, and the shared store when a promotion MOVED something there.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.
   A hook change without a green smoke test is not applied.
+- LAST, after every commit above — even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, default true); written before the `docs(kb):` commit it is stale the moment that commit lands. `.claude/state/` is gitignored by adopters.
 
 ## 7. Output contract
 
-Changes go to disk; no terminal recap of file contents. End with exactly one line:
+Changes go to disk; no terminal recap of file contents. The push gate is open once the marker is written. End with exactly one line:
 
 `Evolved harness: +N -M · Next: superpowers:finishing-a-development-branch`
 

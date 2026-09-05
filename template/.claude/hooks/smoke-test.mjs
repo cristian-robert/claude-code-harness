@@ -7,7 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, unlinkSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const HOOKS = dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,15 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   writeFileSync(join(tmp, ".claude", "state", ".evolve-ran"), new Date().toISOString());
   const allowed = runHook("guard.mjs", { ...base, cwd: tmp, tool_name: "Bash", tool_input: { command: "git push origin feat/x" } });
   check("fresh evolve marker allows push", !denies(allowed));
+  // Ordering: /evolve used to write the marker BEFORE its docs(kb) commit, so HEAD was newer
+  // than the marker and the push /evolve had just unblocked was denied again. The skill now
+  // writes the marker LAST; this pins what the old order produced. The marker is aged 5s so
+  // the comparison never lands inside git's 1-second commit-time granularity.
+  const past = new Date(Date.now() - 5000);
+  utimesSync(join(tmp, ".claude", "state", ".evolve-ran"), past, past);
+  execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "docs(kb): x"]);
+  const stale = runHook("guard.mjs", { ...base, cwd: tmp, tool_name: "Bash", tool_input: { command: "git push origin feat/x" } });
+  check("a commit after the evolve marker re-blocks the push (the marker must be written last)", denies(stale));
   const unarmed = mkdtempSync(join(tmpdir(), "phe-pushgate-off-"));
   execFileSync("git", ["init", "-q", "-b", "feat/y", unarmed]);
   check("push gate off by default (no config)", !denies(runHook("guard.mjs", { ...base, cwd: unarmed, tool_name: "Bash", tool_input: { command: "git push" } })));

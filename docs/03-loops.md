@@ -5,9 +5,9 @@ Three loops at three timescales. All of them keep state on disk, never in a cont
 ## The three loops
 
 ```
-             +--------------------- OUTER: the harness learns ---------------------------+
-             |                                                                           v
-  ticket --> /plan-work ---> /implement ---> /validate ---> /review-branch ---> ship  /evolve
+             +--------------------- OUTER: the harness learns, BEFORE the ship -------+
+             |                                                                        v
+  ticket --> /plan-work ---> /implement ---> /validate ---> /review-branch ---> /evolve ---> ship
              |___________________ INNER: PIV per work item ________________|
               (session A)        (session B, fresh)
 
@@ -18,7 +18,7 @@ Three loops at three timescales. All of them keep state on disk, never in a cont
 | Loop | Cadence | Mechanism | State on disk |
 |---|---|---|---|
 | INNER | per work item | PIV: `/plan-work → /implement → /validate → /review-branch`; superpowers skills as per-task discipline inside each stage | `plans/<slug>-plan.md`, `reports/<slug>-implementation-report.md`, `reports/<slug>-review.md` |
-| OUTER | after every shipped item or failure | `/evolve`: mine the session for lessons; rules added WITH incident provenance, rules pruned when no longer earning their lines | rule/vault deltas |
+| OUTER | after review PASS and before every push/merge; also after every failure | `/evolve`: mine the session for lessons; rules added WITH incident provenance, rules pruned when no longer earning their lines | rule/vault deltas |
 | AUTONOMOUS | per iteration until sentinel | `loop/loop.mjs` re-feeds `PROMPT.md` to a fresh headless process | commits, `fix_plan.md`, `DONE.txt` |
 
 Agile-ceremony overlap: standup, retro, and DoD already live here (session-start, `/evolve`, Stop gate + `/validate`) — the delivery layer (`docs/06-delivery-org.md`) adds only refine/scope/accept, never re-encoding these loops.
