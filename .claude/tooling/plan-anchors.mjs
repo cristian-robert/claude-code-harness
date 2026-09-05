@@ -6,16 +6,22 @@
 //   node .claude/tooling/plan-anchors.mjs <plan.md> [--root <dir>]
 // Exit 0 only when every anchor resolves AND every citation line parses. A checker that stays
 // silent about what it could not read is worse than none, so exit 1 covers: a MISS, an UNPARSED
-// citation, and a plan with no `## Context` heading at all (review 2026-09-05 — one good anchor
-// used to excuse every malformed sibling, and a `### Context` plan checked nothing at exit 0).
+// citation, a `## Context` that yields no anchors, and a plan with no `## Context` heading at all
+// (review 2026-09-05 — one good anchor used to excuse every malformed sibling, a `### Context`
+// plan checked nothing at exit 0, and a Context citing nothing reported a vacuous pass).
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const argv = process.argv.slice(2);
 const rootIdx = argv.indexOf("--root");
-const root = resolve(rootIdx !== -1 ? argv[rootIdx + 1] : process.cwd());
+const rootArg = rootIdx === -1 ? null : argv[rootIdx + 1];
 const planPath = argv.find((a, i) => !a.startsWith("--") && (rootIdx === -1 || i !== rootIdx + 1));
-if (!planPath) { console.error("usage: plan-anchors.mjs <plan.md> [--root <dir>]"); process.exit(64); }
+// Usage FIRST: a bare `--root` (or one swallowing the next flag) reached resolve(undefined) and
+// threw a stack trace with exit 1 — the contract is exit 64, before any read (memory-delta.mjs
+// took the same fix; review 2026-09-05 — two sibling tools disagreed on one malformed flag).
+const badRoot = rootIdx !== -1 && (!rootArg || rootArg.startsWith("-"));
+if (badRoot || !planPath) { console.error("usage: plan-anchors.mjs <plan.md> [--root <dir>]"); process.exit(64); }
+const root = resolve(rootArg || process.cwd());
 
 const lines = readFileSync(resolve(planPath), "utf8").replace(/\r\n/g, "\n").split("\n");
 // Only the Context section carries anchors; task bodies quote code freely.
@@ -61,7 +67,9 @@ for (let i = 0; i < ctx.length; i++) {
   i = end - 1;
 }
 
-if (ok + miss === 0 && ctx.some((l) => CITATION.test(l))) {
+// Zero anchors is never a pass: a `## Context` with no citation at all is a plan that cites
+// nothing, and the guard used to excuse it whenever no bullet said `Read first`.
+if (ok + miss === 0) {
   console.log('no anchors found — Read first: entries need `path` · "phrase" (see .claude/references/plan-template.md)');
   process.exit(1);
 }

@@ -54,10 +54,17 @@ test('a Read first line with no parsable anchor is an error, not a silent pass',
   assert.ok(/no anchors found/.test(r.out), r.out);
 });
 
-test('a plan with no Read first line at all passes with zero anchors', () => {
+test('a Context that yields zero anchors fails loudly, citation bullet or not', () => {
   const r = run([plan('- Library versions: none')]);
-  assert.strictEqual(r.code, 0, r.out);
-  assert.ok(r.out.includes('anchors: 0 ok, 0 missing, 0 unparsed'), r.out);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(/no anchors found/.test(r.out), r.out);
+});
+
+test('a Context holding only a Knowledge line is zero anchors, not a vacuous pass', () => {
+  const r = run([plan('- Knowledge to load first: LOCAL: `knowledge-base/architecture.md`')]);
+  assert.strictEqual(r.code, 1, r.out);
+  assert.ok(/no anchors found/.test(r.out), r.out);
+  assert.ok(!/UNPARSED/.test(r.out), r.out);
 });
 
 test('--root resolves paths against another directory', () => {
@@ -65,6 +72,16 @@ test('--root resolves paths against another directory', () => {
   fs.writeFileSync(path.join(other, 'b.md'), 'needle here\n');
   const r = run([plan('- Read first: `b.md` · "needle here" — why'), '--root', other]);
   assert.strictEqual(r.code, 0, r.out);
+});
+
+test('a --root with no value is a usage error at exit 64, not a stack trace', () => {
+  const p = plan('- Read first: `src/a.js:2` · "function alpha()" — why');
+  const bare = run([p, '--root']);
+  assert.strictEqual(bare.code, 64, bare.out);
+  assert.ok(/usage: plan-anchors\.mjs/.test(bare.out), bare.out);
+  assert.ok(!/ERR_INVALID_ARG_TYPE/.test(bare.out), bare.out);
+  const swallowed = run([p, '--root', '--tail']);
+  assert.strictEqual(swallowed.code, 64, swallowed.out);
 });
 
 test('a plan with no ## Context heading fails loudly instead of checking nothing', () => {

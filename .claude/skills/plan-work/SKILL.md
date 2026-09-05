@@ -3,7 +3,7 @@ name: plan-work
 description: "Architect hat: turn a ticket or brain dump into an executable plan file. Writes plans/<slug>-plan.md."
 disable-model-invocation: true
 argument-hint: "<backlog/<id>-<slug>.md | ticket-id | free-form brain dump>"
-allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merge-base *) Bash(ls *)
+allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merge-base *) Bash(ls *) Bash(node .claude/tooling/plan-anchors.mjs *)
 ---
 
 # /plan-work
