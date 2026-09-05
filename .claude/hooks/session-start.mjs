@@ -35,6 +35,13 @@ async function main() {
   const source = event.source || "startup";
   const lines = [];
 
+  // Every subagent — the reviewer included — runs on ONE model while this is on (2.1.257): the
+  // reviewer loses its `deep` pin (/review-branch) and reviews on the session's model, silently. env-vars.md (raw,
+  // 2026-09-05) documents it as "Set to `1`" and does NOT list it among the set-at-all variables,
+  // so `0`/`false`/empty are off. Above the compact branch on purpose: a compaction must not hide it.
+  const force = String(process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? "").trim().toLowerCase();
+  if (force && force !== "0" && force !== "false") lines.push("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set — every subagent runs on one model, so the reviewer's `deep` pin (/review-branch) is dead this session. Unset it.");
+
   if (source === "compact") {
     // Snapshot written by pre-compact.mjs (.claude/state/ — gitignored by adopters).
     const snap = join(cwd, ".claude", "state", "compact-snapshot.md");
@@ -138,10 +145,6 @@ async function main() {
     if (cm.includes("<placeholder") || cm.includes("<Project Name>")) lines.push("Template not initialized — run /harness-init first.");
   } catch { /* no CLAUDE.md: nothing to say */ }
 
-  // Every subagent — the reviewer included — runs on ONE model when this is exported
-  // (2.1.257): the reviewer loses its `deep` pin and runs on the session's model, silently. The plain
-  // CLAUDE_CODE_SUBAGENT_MODEL is only a default since 2.1.251 (see dispatch-protocol.md).
-  if (process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE) lines.push("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set — every subagent runs on one model, so the reviewer's `deep` pin (/review-branch) is dead this session. Unset it.");
   if (source === "resume") lines.push("Session resumed — re-verify assumptions against git status before continuing.");
 
   emit(lines);

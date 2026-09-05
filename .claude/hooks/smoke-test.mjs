@@ -819,10 +819,19 @@ console.log("session-start.mjs");
   // runs on, with no error. The plain CLAUDE_CODE_SUBAGENT_MODEL is only a default since 2.1.251.
   const on = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "opus" });
   let ctx = ""; try { ctx = JSON.parse(on.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: ctx stays "" and the check fails */ }
-  check("warns when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set", on.code === 0 && ctx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") && ctx.includes("deep"));
+  check("warns when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set", on.code === 0 && ctx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") && ctx.includes("`deep` pin (/review-branch) is dead this session"));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "" });
   let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* empty output is fine here */ }
   check("no FORCE warning when the variable is unset", off.code === 0 && !offCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
+  // env-vars.md (raw, 2026-09-05): the row says "Set to `1`", and the variable is NOT in the
+  // page's list of set-at-all variables (where `0` would mean on) — so `0` and `false` are off.
+  const zero = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0" });
+  let zeroCtx = ""; try { zeroCtx = JSON.parse(zero.out).hookSpecificOutput.additionalContext; } catch { /* empty output is fine here */ }
+  check("FORCE=0 does not warn", zero.code === 0 && !zeroCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
+  // A compaction must not hide the warning: the compact branch used to emit() before the check ran.
+  const cmp = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "compact" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
+  let cmpCtx = ""; try { cmpCtx = JSON.parse(cmp.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: the check fails */ }
+  check("FORCE=1 still warns after a compaction", cmp.code === 0 && cmpCtx.includes("Compaction dropped") && cmpCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
 }
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
 
@@ -969,7 +978,13 @@ console.log("statusline.mjs");
   check("statusline shows percent and absolute tokens", out.includes("ctx 43% 86k/200k"));
   const bare = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12 } });
   let out2 = ""; try { out2 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bare, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out2 = `${e.stdout || ""}`; }
-  check("statusline degrades to percent only when token fields are absent", out2.includes("ctx 12%") && !out2.includes("/"));
+  check("statusline degrades to percent only when token fields are absent", /ctx 12%(\s|$)/.test(out2) && !/ctx 12% \d/.test(out2));
+  const big = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12.3, total_input_tokens: 123456, context_window_size: 1000000 } });
+  let out3 = ""; try { out3 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: big, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out3 = `${e.stdout || ""}`; }
+  check("statusline renders a 1M window as 1.0M, never 1000k", out3.includes("ctx 12% 123k/1.0M"));
+  const bad = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: "lots", total_input_tokens: "x" } });
+  let out4 = ""; try { out4 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bad, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out4 = `${e.stdout || ""}`; }
+  check("statusline omits ctx on a malformed context_window and still prints the model", !out4.includes("ctx") && out4.includes("M"));
 
   // gate:armed(n) counts the same entries stop-gate.mjs runs — the statusline is the other
   // place a typo'd entry could claim an armed gate that never fires (task-1 review, 2026-09-05).
