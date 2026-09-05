@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const assert = require('assert');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 
 const SCRIPT = path.join(__dirname, '..', 'template', '.claude', 'tooling', 'run-check.mjs');
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'run-check-'));
@@ -20,6 +20,7 @@ function run(args) {
   try { return { code: 0, out: execFileSync('node', [SCRIPT].concat(args), { cwd: TMP, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }) }; }
   catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; }
 }
+function sleep(ms) { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }
 const noisy = 'node -e "for (let i = 1; i <= 100; i++) console.log(\'line \' + i); process.exit(3)"';
 
 console.log('\nrun-check: gate output stays on disk\n');
@@ -63,6 +64,23 @@ test('a command the shell cannot find still exits non-zero and writes a log', ()
   const r = run(['missing', '--', 'definitely-not-a-command-xyz']);
   assert.notStrictEqual(r.code, 0, 'a missing command must not report success');
   assert.ok(fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'missing.log')), 'log must exist');
+});
+
+test('a child killed by a signal is reported as a signal death, not a timeout', () => {
+  const r = run(['segv', '--', 'node -e "process.kill(process.pid, \'SIGSEGV\')"']);
+  assert.strictEqual(r.code, 1, 'a signal death is exit 1, not 124');
+  const header = r.out.trimEnd().split('\n')[0];
+  assert.ok(/killed by SIGSEGV/.test(header), 'header names the signal, got: ' + header);
+  assert.ok(!/timed out/.test(header), 'a signal death must not claim a timeout, got: ' + header);
+});
+
+test('output written before an outer kill survives on disk', () => {
+  const child = spawn('node', [SCRIPT, 'outer', '--', 'node -e "console.log(\'early\'); setTimeout(() => {}, 10000)"'], { cwd: TMP, stdio: 'ignore' });
+  sleep(2000);
+  child.kill('SIGKILL');
+  sleep(500);
+  const log = fs.readFileSync(path.join(TMP, '.claude', 'state', 'checks', 'outer.log'), 'utf-8');
+  assert.ok(log.includes('early'), 'partial output must survive the runner being killed, got: ' + JSON.stringify(log));
 });
 
 test('missing -- separator is a usage error, exit 64', () => {
