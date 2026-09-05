@@ -10,7 +10,7 @@
   "stopGateTamperPaths": [],
   "workTracking": { "backend": "none", "method": "kanban", "wipLimit": 3 },
   "models": {
-    "checkedAt": "2026-07-12",
+    "checkedAt": "2026-09-05",
     "staleDays": 30,
     "claude": { "scout": "haiku", "routine": "sonnet", "build": "opus", "deep": "opus" },
     "codex": { "scout": "gpt-5.6-luna", "routine": "gpt-5.6-luna", "build": "gpt-5.6-terra", "deep": "gpt-5.6-sol" },

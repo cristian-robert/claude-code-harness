@@ -23,8 +23,8 @@ const ROLES = ['scout', 'routine', 'build', 'deep'];
 
 const HARNESSES = ['claude', 'codex'];
 
-// Verified 2026-07-12 against openai/codex models.json + the installed codex-cli 0.144.0,
-// and the Anthropic model reference. Claude values are ALIASES on purpose: Claude Code
+// Verified 2026-09-05 against Codex's own catalog endpoint (installed codex-cli 0.144.3)
+// and the live Anthropic Models API. Claude values are ALIASES on purpose: Claude Code
 // floats `opus`/`sonnet`/`haiku` to the newest family member, so they never need a bump.
 // Codex has no alias mechanism, so its IDs are pinned and DO need /models to refresh them.
 //
@@ -38,7 +38,7 @@ const HARNESSES = ['claude', 'codex'];
 // its ceiling travels with it, instead of being silently inherited from the model it replaced.
 // Codex-only: Claude's aliases float, so there is no stable ID to key a ceiling to.
 const DEFAULT_MODELS = {
-  checkedAt: '2026-07-12',
+  checkedAt: '2026-09-05',
   staleDays: 30,
   claude: { scout: 'haiku', routine: 'sonnet', build: 'opus', deep: 'opus' },
   codex: { scout: 'gpt-5.6-luna', routine: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-5.6-sol' },
