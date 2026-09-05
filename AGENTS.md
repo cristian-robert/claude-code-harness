@@ -4,8 +4,7 @@ Framework repo: the harness-engineering framework for Claude Code lives here. `t
 
 ## Knowledge Vault
 
-This project's knowledge base lives in the unified Obsidian vault at:
-`~/Dev/The Vault/`
+This project's knowledge base lives in the unified Obsidian vault at `~/Dev/The Vault/`.
 
 **Before architecture, design, or planning work, navigate the vault** (3–4 reads, any vault size):
 1. Read `~/Dev/The Vault/CLAUDE.md` — vault conventions.
@@ -13,9 +12,7 @@ This project's knowledge base lives in the unified Obsidian vault at:
 3. Read `~/Dev/The Vault/projects/perfectHarnessEngineering/_index.md` — THIS project's wiki (START HERE), then its `architecture.md`, `decisions.md`, `resources.md`, `runbook.md` as needed.
 4. Read the specific file you need.
 
-**Reusable knowledge** beyond this project:
-- `~/Dev/The Vault/wiki/` — cross-project engineering knowledge.
-- `~/Dev/The Vault/agent-kb/` — AI-agent building know-how (prompts, evals, models, patterns, tooling).
+**Reusable knowledge** beyond this project: `~/Dev/The Vault/wiki/` — cross-project engineering knowledge; `~/Dev/The Vault/agent-kb/` — AI-agent building know-how (prompts, evals, models, patterns, tooling).
 
 **Write back:** when a decision, architecture change, or reusable lesson emerges, record it in the vault (this project's wiki, or `wiki/`/`agent-kb/` if it generalizes) — and follow the vault's Index Law: any folder you create or whose contents you change, create/update its `_index.md` in the same change.
 

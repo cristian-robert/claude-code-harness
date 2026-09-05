@@ -86,4 +86,50 @@ test('--check reports a file the root lacks as missing', () => {
   assert.ok(/missing\s+rules\/00-core\.md/.test(r.out), r.out);
 });
 
+test('a file the template retires shows up as extra and the sync removes it', () => {
+  assert.strictEqual(run(args, root).code, 0, 'heal the drift the previous test left');
+  fs.unlinkSync(path.join(tpl, 'hooks', 'guard.mjs'));
+  const r = run(args.concat('--check'), root);
+  assert.strictEqual(r.code, 1, 'a retired file must fail the check');
+  assert.ok(/extra\s+hooks\/guard\.mjs/.test(r.out), 'must name hooks/guard.mjs as extra, got: ' + r.out);
+  const s = run(args, root);
+  assert.strictEqual(s.code, 0, s.out);
+  assert.ok(/removed 1/.test(s.out), 'sync must report removed 1, got: ' + s.out);
+  assert.ok(!fs.existsSync(path.join(root, '.claude', 'hooks', 'guard.mjs')), 'retired file still in the root');
+  assert.ok(!fs.existsSync(path.join(root, '.claude', 'hooks')), 'the emptied directory was left behind');
+  assert.strictEqual(run(args.concat('--check'), root).code, 0, '--check red after the sync removed the extra');
+});
+
+test('root-only paths outside the template directories are never reported or deleted', () => {
+  const keep = path.join(root, '.claude', 'agent-memory', 'x.md');
+  fs.mkdirSync(path.dirname(keep), { recursive: true });
+  fs.writeFileSync(keep, 'memory\n');
+  const r = run(args.concat('--check'), root);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.ok(!/agent-memory/.test(r.out), 'agent-memory must not be reported: ' + r.out);
+  assert.strictEqual(run(args, root).code, 0);
+  assert.ok(fs.existsSync(keep), 'agent-memory/x.md was deleted');
+});
+
+test('a root-only file inside a still-shipped adapted skill is not extra', () => {
+  const notes = path.join(root, '.claude', 'skills', 'architecture-map', 'NOTES.md');
+  fs.writeFileSync(notes, 'root-owned\n');
+  const r = run(args.concat('--check'), root);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.strictEqual(run(args, root).code, 0);
+  assert.ok(fs.existsSync(notes), 'root-owned content inside an adapted skill was deleted');
+});
+
+test('an adapted skill the template retires is extra, directory and all', () => {
+  fs.rmSync(path.join(tpl, 'skills', 'architecture-map'), { recursive: true, force: true });
+  const r = run(args.concat('--check'), root);
+  assert.strictEqual(r.code, 1, 'a retired adapted skill must fail the check');
+  assert.ok(/extra\s+skills\/architecture-map\/SKILL\.md/.test(r.out), r.out);
+  assert.ok(/extra\s+skills\/architecture-map\/NOTES\.md/.test(r.out), r.out);
+  assert.strictEqual(run(args, root).code, 0);
+  assert.ok(!fs.existsSync(path.join(root, '.claude', 'skills', 'architecture-map')), 'retired adapted skill directory left behind');
+  assert.ok(fs.existsSync(path.join(root, '.claude', 'skills', 'validate', 'SKILL.md')), 'a live skill was swept up');
+  assert.strictEqual(run(args.concat('--check'), root).code, 0);
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
