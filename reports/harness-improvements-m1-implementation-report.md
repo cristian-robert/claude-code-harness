@@ -167,6 +167,7 @@ Three, all benign, none a defect.
 21. **Ruling 21** — fix two surviving stale three-role lists (`template/.claude/references/harness-maintenance.md:15`, `docs/01-context-engineering.md:131`) and re-sync. *Costs nothing.*
 
 **Cost note carried from Task 9:** reviews on Claude now run opus at `xhigh` for every tier, per Ruling 9 and the retired inversion. Per-review cost rises accordingly.
+- Ruling 22: Task 8 (this report and the vault ADRs) has no separate task review; its completeness is checked by the final whole-branch review against the ledger extract (every ruling and every deferred minor must appear here) — costs one missed line if that reviewer skims.
 
 ## Manual — pending the operator
 
