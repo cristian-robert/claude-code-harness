@@ -47,6 +47,8 @@ tier: deep
 
 ## Tasks
 
+Execution order: 1 → 7, then 9, then 8 (Task 9 was added mid-run by operator directive; Task 8 closes the milestone).
+
 ### Task 1: The framework runs under its own harness
 
 **Files:**
@@ -1123,6 +1125,149 @@ git add reports/harness-improvements-m1-implementation-report.md
 git commit -m "docs(reports): harness improvements m1 — implementation report"
 ```
 
+
+### Task 9: Model roles — `build` is never Sonnet; `routine` is the Sonnet-grade tier; the reviewer is a fresh `deep` context
+
+Operator directives (2026-09-05, mid-run): "we dont want to build with sonnet unless its a routine task (change texts, something VERY VERY EASY, everything else should be opus or fable if asked)" and "or maybe searching on web, stuff like that. easy". The three-role map (`scout`/`build`/`deep`) gains a fourth role, `routine`, for Sonnet-grade work — read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes — and `build` moves to Opus. On Claude `build` and `deep` then share a model, so the sibling-reviewer inversion (which bought weight diversity) is retired: the reviewer is always a fresh `deep` context at `effort: xhigh`, never the session that wrote the code. Fable is not a role; it is a per-dispatch override the PO names. Runs AFTER Task 7 and BEFORE Task 8 so the closing report covers it.
+
+**Files:**
+- Modify: `cli/model-tiers.js` (`ROLES`, `DEFAULT_MODELS`, `reviewerRoleFor` + its comment), `cli/model-tiers.test.js`, `cli/emit-codex.test.js` (one `routine`-tier fixture)
+- Modify: `template/.claude/harness.json` (`models.claude`, `models.codex`, two `$comment` sentences)
+- Modify: `template/.claude/agents/scout.md`, `template/.claude/agents/research-gatherer.md` (`tier: routine`), `template/.claude/agents/code-reviewer.md` (the "Your model is pinned by the dispatcher" paragraph)
+- Modify: `template/.claude/skills/models/SKILL.md` (role list line 11, role bullets 33–35, section 5), `template/.claude/skills/plan-work/SKILL.md` (the `tier:` hint sentence in step 7), `template/.claude/skills/review-branch/SKILL.md` (step 2 item 3), `template/.claude/references/plan-template.md` (the `tier:` line), `template/.claude/references/dispatch-protocol.md` (matrix rows + the sibling paragraph), `template/.claude/rules/00-core.md` (rows 24 and 28, in place — file stays 44 lines), `docs/04-model-policy.md` (role table row + the reviewer section)
+- Root sync (`node tools/self-harness.mjs`)
+
+**Interfaces:**
+- Produces: `ROLES = ['scout', 'routine', 'build', 'deep']`; `reviewerRoleFor(<any role>) === 'deep'`; `DEFAULT_MODELS.claude = { scout: 'haiku', routine: 'sonnet', build: 'opus', deep: 'opus' }`, `DEFAULT_MODELS.codex = { scout: 'gpt-5.6-luna', routine: 'gpt-5.6-luna', build: 'gpt-5.6-terra', deep: 'gpt-5.6-sol' }`.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `cli/model-tiers.test.js`, replace the three `reviewerRoleFor` assertions (the lines asserting `deep`→`build`, `build`→`deep`, `scout`→`deep`) with:
+
+```js
+assert('deep-written code is reviewed at deep — a fresh context, not a sibling model', reviewerRoleFor('deep') === 'deep');
+assert('build-written code is reviewed at deep', reviewerRoleFor('build') === 'deep');
+assert('routine-written code is reviewed at deep', reviewerRoleFor('routine') === 'deep');
+assert('scout never implements — its reviewer is deep', reviewerRoleFor('scout') === 'deep');
+```
+
+In the garbage-role loop, change the expected message regex `/scout, build, deep/` to `/scout, routine, build, deep/`. Replace the `resolveReviewer` assertions (the block asserting claude/deep→`sonnet`, codex/deep→`gpt-5.6-terra`, claude/build→`opus`, codex/build→`gpt-5.6-sol`, and the two "reviewer is never the implementer's model" assertions) with:
+
+```js
+assert('claude reviewer for deep-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'deep') === 'opus');
+assert('codex reviewer for deep-written code is sol', resolveReviewer(DEFAULT_MODELS, 'codex', 'deep') === 'gpt-5.6-sol');
+assert('claude reviewer for build-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'build') === 'opus');
+assert('codex reviewer for build-written code is sol', resolveReviewer(DEFAULT_MODELS, 'codex', 'build') === 'gpt-5.6-sol');
+assert('claude reviewer for routine-written code is opus', resolveReviewer(DEFAULT_MODELS, 'claude', 'routine') === 'opus');
+assert('build resolves to opus on claude — never sonnet', resolveModel(DEFAULT_MODELS, 'claude', 'build') === 'opus');
+assert('routine resolves to sonnet on claude', resolveModel(DEFAULT_MODELS, 'claude', 'routine') === 'sonnet');
+assert('routine resolves to luna on codex', resolveModel(DEFAULT_MODELS, 'codex', 'routine') === 'gpt-5.6-luna');
+```
+
+Update the role list `['scout', 'build', 'deep']` in the "every role resolves" loop to the four roles, and the `claude: { scout: 'haiku', build: 'sonnet', deep: 'opus' }` fixture map near the end of the file to `claude: { scout: 'haiku', routine: 'sonnet', build: 'opus', deep: 'opus' }`. In `cli/emit-codex.test.js`, after the `build`-tier assertion (`a build-tier agent resolves to terra`), add a mirror-image `routine`-tier fixture asserting `a routine-tier agent resolves to luna` (`model = "gpt-5.6-luna"`).
+
+Run: `node cli/model-tiers.test.js; node cli/emit-codex.test.js` → the new assertions FAIL (`routine` is an unknown role; reviewers still invert), everything else passes.
+
+- [ ] **Step 2: Implement the role change**
+
+In `cli/model-tiers.js`: `const ROLES = ['scout', 'routine', 'build', 'deep'];` `DEFAULT_MODELS.claude` and `.codex` per Interfaces. Replace the rule comment and body of `reviewerRoleFor` with:
+
+```js
+// THE RULE: the reviewer is a FRESH `deep` context, whoever implemented. It never shares the
+// implementer's session, sees only diff + plan + protocol, and runs at effort xhigh. (The
+// earlier sibling inversion — deep-written reviewed at build and vice versa — bought weight
+// diversity; it was retired on 2026-09-05 when `build` moved to opus by PO directive: build
+// and deep now share a model on Claude, and a sonnet reviewer is not wanted.)
+//
+// Anything that is not a role is a BUG at the call site, and must not be absorbed: a
+// bare `else return 'deep'` answered undefined, null, 'review' and 42 with a plausible
+// role, so a typo'd tier in a plan silently got a reviewer and nobody ever learned.
+function reviewerRoleFor(implementerRole) {
+  if (ROLES.indexOf(implementerRole) !== -1) return 'deep';
+  throw new Error(
+    'unknown implementer role: ' + JSON.stringify(implementerRole) +
+    ' (expected one of ' + ROLES.join(', ') + '). ' +
+    '`review` is not a role — the reviewer is DERIVED from the implementer.'
+  );
+}
+```
+
+Run: `node cli/model-tiers.test.js; node cli/emit-codex.test.js` → all PASS.
+
+- [ ] **Step 3: The shipped map and its comment**
+
+In `template/.claude/harness.json`, set `"claude": { "scout": "haiku", "routine": "sonnet", "build": "opus", "deep": "opus" }` and `"codex": { "scout": "gpt-5.6-luna", "routine": "gpt-5.6-luna", "build": "gpt-5.6-terra", "deep": "gpt-5.6-sol" }`. In `$comment`: replace `models maps ROLES (scout/build/deep) to model IDs per harness` with `models maps ROLES (scout/routine/build/deep) to model IDs per harness`, and replace the sentence `review is NOT a role: the reviewer is the sibling of whoever implemented (deep<->build).` with `review is NOT a role: the reviewer is always a fresh deep context at effort xhigh, never the session that wrote the code (the sibling inversion was retired 2026-09-05 when build moved to opus). routine is the sonnet-grade tier — read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes — and never builds; build is opus.` Validate: `node -e "const c=require('./template/.claude/harness.json'); if (c.models.claude.build !== 'opus' || c.models.claude.routine !== 'sonnet') process.exit(1)"` → exit 0.
+
+- [ ] **Step 4: Agents**
+
+`template/.claude/agents/scout.md` and `research-gatherer.md`: `tier: build` → `tier: routine` (their `model: sonnet` stays — both are read-only). `template/.claude/agents/code-reviewer.md`: replace the paragraph beginning `Your model is pinned by the dispatcher, never here:` with:
+
+```markdown
+Your model is pinned by the dispatcher, never here: always the `deep` tier at `effort: xhigh`, in a
+fresh context — you never share the session that wrote the code, and you see only diff + plan +
+protocol. If you were dispatched without an explicit model, say so and stop.
+```
+
+- [ ] **Step 5: Skills, references, rules, docs — every place the roles are drawn**
+
+`template/.claude/skills/models/SKILL.md`: line 11 `a role (\`scout\` | \`build\` | \`deep\`)` → `a role (\`scout\` | \`routine\` | \`build\` | \`deep\`)`; the role bullets become:
+
+```markdown
+- `scout` — cheapest reading tier. Never a model that has to decide anything.
+- `routine` — sonnet-grade: read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes. Never builds.
+- `build` — implementation the planner specified step by step; hard but doable. Opus, never sonnet.
+- `deep` — hard logic, architecture, planning, debugging, and every review.
+```
+
+and section 5 becomes:
+
+```markdown
+## 5 · Reviewer rule (unchanged by any refresh)
+
+The reviewer is a fresh `deep` context at `effort: xhigh`, whoever implemented — never the session
+that wrote the code. A refresh may change *which model* `deep` names; it never changes this. `build`
+and `deep` MAY name the same model on Claude (they do by default); on Codex keep `deep` at least as
+capable as `build`. `routine` must never name a model stronger than `build`.
+```
+
+`template/.claude/skills/plan-work/SKILL.md` step 7: replace the clause `\`tier:\` implementer hint (\`deep\` default; \`build\` only when this plan already specifies the change step by step). /review-branch inverts this to choose the reviewer, so an honest tier matters twice.` with `\`tier:\` implementer hint (\`deep\` default; \`build\` only when this plan already specifies the change step by step; \`routine\` only for text-only or trivially easy one-file tasks). Every tier is reviewed at \`deep\`, so an honest tier decides who builds, not who reviews.`
+
+`template/.claude/skills/review-branch/SKILL.md` step 2 item 3 → `3. Pin the reviewer's model explicitly: always \`tier: deep\` at \`effort: xhigh\`, in a fresh context — never the session that wrote the code. Independence comes from context isolation and the diff-only package, not from different weights (the sibling inversion was retired 2026-09-05 when \`build\` moved to opus). No plan or tier? Still \`deep\`.`
+
+`template/.claude/references/plan-template.md`: the `tier:` frontmatter line → `tier: deep                # implementer hint: \`deep\` (hard logic/architecture, default) | \`build\` (this plan already specs it out step by step; opus) | \`routine\` (text-only or trivially easy; sonnet). Every tier is reviewed at \`deep\`.`
+
+`template/.claude/references/dispatch-protocol.md`: matrix rows → `| Understand / synthesize | \`scout\` agent | \`routine\` | medium |`, `| Implement | general-purpose | per the plan's \`tier:\` — \`build\` is opus, never sonnet; \`routine\` only for text-only or trivially easy tasks | high |`, `| Code review | \`code-reviewer\` | **\`deep\`, fresh context** | xhigh |`; replace the paragraph beginning `**The reviewer is never the model that wrote the code.**` (three lines) with `**The reviewer never shares the session that wrote the code.** Every review runs at \`deep\`, \`effort: xhigh\`, in a fresh context that sees only diff + plan + protocol. The sibling inversion (deep↔build) was retired 2026-09-05 when \`build\` moved to opus: weight diversity is gone, context isolation is the independence.`
+
+`template/.claude/rules/00-core.md` (in place, stays 44 lines): row 24 → `| Understand / synthesize | \`scout\` agent (\`routine\` tier) |`; row 28 → `| Code review | \`code-reviewer\` at \`deep\`, fresh context — never the session that wrote the code |`.
+
+`docs/04-model-policy.md`: add the row `| \`routine\` | Read-only synthesis, web/doc gathering, text-only edits, trivially easy one-file changes | Anything that builds — \`build\` is opus, never sonnet (PO directive 2026-09-05) |` after the `scout` row; change the `build` row's "Route here" cell to `Implementation the planner already specified step by step — hard but doable. Opus`; replace the section `## The reviewer is the sibling, never the author` (heading through its blockquote) with:
+
+```markdown
+## The reviewer is a fresh `deep` context, never the author's session
+
+Every review runs at `deep`, `effort: xhigh`, in a fresh context that sees only diff + plan +
+protocol. Independence is context isolation, not weight diversity.
+
+> **This supersedes the sibling rule (2026-07-12), which superseded "never downgrade a reviewer".**
+> The sibling inversion reviewed opus-written code at sonnet to buy different weights. On 2026-09-05
+> the PO moved `build` to opus and ruled reviews run on opus, so `build` and `deep` share a model on
+> Claude and a sonnet reviewer is not wanted. What the inversion protected against — a model
+> rubber-stamping its own reasoning — is still covered: the reviewer never inherits the
+> implementer's session, and the harness's `code-reviewer` sees the diff, the plan, and nothing else.
+```
+
+Validate: `wc -l template/.claude/rules/00-core.md` → 44; `wc -l template/.claude/skills/models/SKILL.md` → ≤100; `wc -l docs/04-model-policy.md` → ≤130; `grep -rn 'SIBLING tier\|sibling of whoever\|deep-written → review at' template docs` → nothing.
+
+- [ ] **Step 6: Sync, full suite, commit**
+
+```bash
+node tools/self-harness.mjs && node tools/self-harness.mjs --check
+node tools/context-ledger.mjs template | tail -1
+npm test 2>&1 | tail -2
+git add cli/model-tiers.js cli/model-tiers.test.js cli/emit-codex.test.js template/.claude template/.claude/harness.json docs/04-model-policy.md .claude
+git commit -m "feat(models): routine tier for sonnet-grade work; build is opus, never sonnet; the reviewer is a fresh deep context"
+```
+
 ## End-to-end verification
 
 The milestone is done when all of these hold, run fresh, output read:
@@ -1133,6 +1278,7 @@ The milestone is done when all of these hold, run fresh, output read:
 4. In a scratch repo with `stopGate: ["false"]`: run the stop gate (RED), set `stopGate: []`, run again → blocked with "shrank".
 5. `node .claude/tooling/run-check.mjs demo -- npm test` prints one `exit=` line plus ≤40 lines; the full log is at `.claude/state/checks/demo.log`.
 6. `grep -rn '"autonomous"' .claude` → only the harness-init notice line and the reference's incident line (the root copy inherits the 3.3.0 change).
+8. `node -e "const m=require('./cli/model-tiers'); console.log(m.resolveModel(m.DEFAULT_MODELS,'claude','build'), m.reviewerRoleFor('build'))"` → `opus deep`; `grep -rn 'SIBLING tier' template docs` → nothing.
 7. In a scratch git repo with `.claude/harness.json` = `{"requireEvolveBeforePush": true}`: commit → `git push` denied by the guard; write `.claude/state/.evolve-ran` → allowed; commit again → denied again. Then, in this repo, run `/evolve` (answer "none") and confirm `git push --dry-run origin <branch>` is not denied.
 
 ## Risks & assumptions
