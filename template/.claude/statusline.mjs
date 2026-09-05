@@ -41,7 +41,7 @@ async function main() {
     try {
       const root = d.workspace?.project_dir || cwd;
       const cfg = JSON.parse(readFileSync(join(root, ".claude", "harness.json"), "utf8"));
-      const n = Array.isArray(cfg.stopGate) ? cfg.stopGate.length : 0;
+      const n = (Array.isArray(cfg.stopGate) ? cfg.stopGate : []).filter((c) => typeof c === "string" && c.trim()).length; // count what stop-gate.mjs RUNS
       if (n) gate = `gate:armed(${n})`;
     } catch { /* no/unreadable harness.json => gate:off */ }
     parts.push(gate);

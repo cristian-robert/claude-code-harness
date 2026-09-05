@@ -734,6 +734,21 @@ console.log("session-start.mjs");
   check("no knowledge key -> no knowledge line", off.code === 0 && offCtx.includes("Stop gate:") && !offCtx.includes("Knowledge ("));
 }
 {
+  // The banner counts only the entries the gate will RUN: stop-gate.mjs ignores everything
+  // that is not a non-empty string, so a typo'd number is not an armed check. Announcing it as
+  // armed is the quiet half of that bug — a disarmed gate the session believes is on
+  // (task-1 review, 2026-09-05).
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-count-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  const ctxOf = (r) => { try { return JSON.parse(r.out).hookSpecificOutput.additionalContext; } catch { return ""; /* no JSON on stdout: the check reports it */ } };
+  const banner = (cfg) => {
+    writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify(cfg));
+    return ctxOf(runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp }));
+  };
+  check("banner counts only the gate entries that run", banner({ stopGate: [42, 'node -e "process.exit(0)"'] }).includes("Stop gate: 1 check(s) armed"));
+  check("a gate of only non-string entries is announced as not configured", banner({ stopGate: [42] }).includes("Stop gate: not configured"));
+}
+{
   // Uninitialized template: session-start nudges toward /harness-init.
   const tmp = mkdtempSync(join(tmpdir(), "phe-uninit-"));
   writeFileSync(join(tmp, "CLAUDE.md"), "# <Project Name>\n<placeholder>\n");
@@ -955,6 +970,18 @@ console.log("statusline.mjs");
   const bare = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12 } });
   let out2 = ""; try { out2 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bare, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out2 = `${e.stdout || ""}`; }
   check("statusline degrades to percent only when token fields are absent", out2.includes("ctx 12%") && !out2.includes("/"));
+
+  // gate:armed(n) counts the same entries stop-gate.mjs runs — the statusline is the other
+  // place a typo'd entry could claim an armed gate that never fires (task-1 review, 2026-09-05).
+  const gateDir = mkdtempSync(join(tmpdir(), "phe-statusline-gate-"));
+  mkdirSync(join(gateDir, ".claude"), { recursive: true });
+  const gateLine = (cfg) => {
+    writeFileSync(join(gateDir, ".claude", "harness.json"), JSON.stringify(cfg));
+    const inp = JSON.stringify({ model: { display_name: "M" }, workspace: { project_dir: gateDir, current_dir: gateDir } });
+    try { return execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: inp, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { return `${e.stdout || ""}`; }
+  };
+  check("statusline counts only the gate entries that run", gateLine({ stopGate: [42, 'node -e "process.exit(0)"'] }).includes("gate:armed(1)"));
+  check("statusline shows gate:off when no entry would run", gateLine({ stopGate: [42] }).includes("gate:off"));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -70,7 +70,7 @@ async function main() {
   if (existsSync(cfgPath)) {
     try {
       const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
-      const n = Array.isArray(cfg.stopGate) ? cfg.stopGate.length : 0;
+      const n = (Array.isArray(cfg.stopGate) ? cfg.stopGate : []).filter((c) => typeof c === "string" && c.trim()).length; // count what stop-gate.mjs RUNS
       lines.push(n ? `Stop gate: ${n} check(s) armed — the turn cannot end red.` : "Stop gate: not configured (set stopGate in .claude/harness.json).");
       // Two stores, one boundary rule: project-scoped knowledge is IN THE REPO
       // (knowledge-base/, git-tracked), evergreen knowledge is in the shared vault, and
