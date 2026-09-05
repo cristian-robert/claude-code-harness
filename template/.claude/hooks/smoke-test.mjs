@@ -62,6 +62,18 @@ const base = { session_id: "smoke", cwd: process.cwd(), hook_event_name: "PreToo
 
 console.log("guard.mjs");
 check("denies Read of .env", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env" } })));
+{
+  // Plan-lint (review M6, 2026-08-29; ADR-014): nothing checked the plan's knowledge field —
+  // a planner could skip retrieval and nobody noticed until review. `none — <reason>` passes.
+  const plan = (field) => ({ ...base, tool_name: "Write", tool_input: { file_path: "plans/x-plan.md", content: `---\nticket: t\n---\n# X\n\n## Context\n${field}\n- Read first: a\n` } });
+  check("denies a plan write with no Knowledge to load first line", denies(runHook("guard.mjs", plan(""))));
+  check("denies a plan write whose Knowledge to load first is empty", denies(runHook("guard.mjs", plan("- Knowledge to load first:   "))));
+  check("allows a plan write with `none — <reason>`", !denies(runHook("guard.mjs", plan("- Knowledge to load first: LOCAL: none — no knowledge-base/ · SHARED: wiki/stack/x/"))));
+  check("plan-lint ignores non-plan files under plans/", !denies(runHook("guard.mjs", { ...base, tool_name: "Write", tool_input: { file_path: "plans/notes.md", content: "no field here" } })));
+  check("plan-lint ignores Edit (plans are written whole)", !denies(runHook("guard.mjs", { ...base, tool_name: "Edit", tool_input: { file_path: "plans/x-plan.md", old_string: "a", new_string: "b" } })));
+  const reasonOf = (r) => { try { return JSON.parse(r.out).hookSpecificOutput.permissionDecisionReason || ""; } catch { return ""; } };
+  check("plan-lint reason names the field and the template", /Knowledge to load first/.test(reasonOf(runHook("guard.mjs", plan("")))) && /plan-template\.md/.test(reasonOf(runHook("guard.mjs", plan("")))));
+}
 check("denies Read of .env.production", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.production" } })));
 check("allows Read of .env.example", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.example" } })));
 check("allows Read of normal file", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/src/app.ts" } })));
@@ -119,7 +131,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("allows message mentioning main", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo 'main topic' > notes.txt" } })));
 }
 {
-  // Evolve->push gate (default on): armed + no marker => deny push; marker fresh => allow.
+  // Evolve->push gate (on in the shipped config): armed + no marker => deny push; marker fresh => allow.
   const tmp = mkdtempSync(join(tmpdir(), "phe-pushgate-"));
   execFileSync("git", ["init", "-q", "-b", "feat/x", tmp]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "x"]);
@@ -141,7 +153,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("a commit after the evolve marker re-blocks the push (the marker must be written last)", denies(stale));
   const unarmed = mkdtempSync(join(tmpdir(), "phe-pushgate-off-"));
   execFileSync("git", ["init", "-q", "-b", "feat/y", unarmed]);
-  check("push gate off by default (no config)", !denies(runHook("guard.mjs", { ...base, cwd: unarmed, tool_name: "Bash", tool_input: { command: "git push" } })));
+  check("push gate off when the key is absent (the shipped config sets it)", !denies(runHook("guard.mjs", { ...base, cwd: unarmed, tool_name: "Bash", tool_input: { command: "git push" } })));
 }
 {
   // Tracking-only commits are allowed on protected branches; mixed commits stay blocked.

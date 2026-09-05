@@ -24,7 +24,7 @@
 | Review | `/review-branch` | `reports/<slug>-review.md` |
 | Accept | `/accept backlog/<id>-<slug>.md` | per-criterion evidence → item `accepted` |
 | Evolve | `/evolve` | `knowledge-base/` (one `docs(kb):` commit) + rule updates (ask-first); scrum: this is the retro |
-| Ship | `superpowers:finishing-a-development-branch`, after `/evolve` | push / PR — `guard.mjs` denies a push until `/evolve` has run since the last commit (`requireEvolveBeforePush`, default on) |
+| Ship | `superpowers:finishing-a-development-branch`, after `/evolve` | push / PR — `guard.mjs` denies a push until `/evolve` has run since the last commit (`requireEvolveBeforePush`, on in the shipped config) |
 | Sprint (scrum mode) | `/sprint` plan·close | `sprints/<n>.md` |
 
 **Roles are hats, not personas** — the user is **PO** (backlog priorities) and **Stakeholder** (`/accept` verdict); every other hat is a pipeline phase or checker agent, and `/review-branch` adds a security lens on sensitive diffs (global `security-audit` skill when available, else the reviewer's checklist). Full role + ceremony map (standup, refinement, sprint planning, review/demo, retro, DoD → command): `.claude/references/delivery-org.md`. Tracking backend/method: `.claude/harness.json` → `.claude/references/work-tracking.md`.

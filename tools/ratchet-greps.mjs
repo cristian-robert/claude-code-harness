@@ -11,7 +11,7 @@
 //
 // Traces to: 2026-09-05 — three fix rounds chasing stale three-role lists, a docs/99 "defeats
 //   sibling review" line, and README/guard comments still saying "opt-in" after
-//   requireEvolveBeforePush flipped to default on.
+//   requireEvolveBeforePush flipped to on in the shipped config.
 //
 //   node tools/ratchet-greps.mjs [--root <dir>]
 //
@@ -51,8 +51,13 @@ const CHECKS = [
     hit: (l) => /scout[^A-Za-z0-9]{1,3}build[^A-Za-z0-9]{1,3}deep/i.test(l) && !/routine/i.test(l),
   },
   {
-    name: 'evolve->push gate described as "opt-in" (it is default on)',
+    name: 'evolve->push gate described as "opt-in" (the shipped config sets it on)',
     hit: (l) => /opt-?in\b[^\n]{0,40}evolve|evolve[^\n]{0,40}\bopt-?in\b/i.test(l),
+  },
+  {
+    // traces to: 2026-09-05 — guard.mjs:311 said "default true" while the hook required === true
+    name: 'evolve->push gate described as "default true/on" (the shipped config sets it; an absent key is off)',
+    hit: (l) => /default (true|on)\b[^\n]{0,60}(requireEvolveBeforePush|push gate|evolve)|(requireEvolveBeforePush|push gate|evolve)[^\n]{0,60}\bdefault (true|on)\b/i.test(l),
   },
   {
     // traces to: 2026-09-05 — the INCOMPLETE reason invited the edit the exact-string gate refuses

@@ -88,7 +88,7 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 - Knowledge writes follow the Index Law: update that folder's `_index.md` in the same change — `knowledge-base/` locally, and the shared store when a promotion MOVED something there.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.
   A hook change without a green smoke test is not applied.
-- LAST — after the `docs(kb):` commit and after committing every other change this run made on the feature branch (rule/AGENTS.md edits, hook fixes: `chore(evolve): <what>`), even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, default true), so any commit made after the marker re-blocks the push until `/evolve` runs again. `.claude/state/` is gitignored by adopters.
+- LAST — after the `docs(kb):` commit and after committing every other change this run made on the feature branch (rule/AGENTS.md edits, hook fixes: `chore(evolve): <what>`), even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, on in the shipped config), so any commit made after the marker re-blocks the push until `/evolve` runs again. `.claude/state/` is gitignored by adopters.
 
 ## 7. Output contract
 
