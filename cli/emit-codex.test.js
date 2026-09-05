@@ -690,7 +690,7 @@ fs.rmSync(REAL_TEST_DIR, { recursive: true, force: true });
 // ─── REGRESSION GUARD: no Claude model name in Codex DISPATCH prose ───────────
 // The defect this phase fixed: skill bodies said "pin `model: sonnet`" / "default
 // opus", and the dual-emit copied that verbatim into .agents/skills/ where those
-// names mean NOTHING to Codex. Roles (scout|build|deep) replaced them.
+// names mean NOTHING to Codex. Roles (scout|routine|build|deep) replaced them.
 //
 // ONE documented exception: skills/models/ is the /models refresh command — naming
 // model IDs is its literal subject matter, and it is harness-aware prose, not a
