@@ -89,7 +89,9 @@ async function main() {
       const k = cfg.knowledge;
       if (k && typeof k === "object" && !Array.isArray(k)) {
         const local = typeof k.local === "string" && k.local ? k.local : "knowledge-base";
-        lines.push(`Knowledge (local): ${local}/ — RETRIEVE before structural work, CAPTURE after; protocol: .claude/references/knowledge-protocol.md`);
+        lines.push(existsSync(join(cwd, local))
+          ? `Knowledge (local): ${local}/ — RETRIEVE before structural work, CAPTURE after; protocol: .claude/references/knowledge-protocol.md`
+          : `Knowledge (local): ${local}/ is ABSENT — this project keeps its knowledge elsewhere (AGENTS.md says where) or has not run /harness-init; the two knowledge skills point at the real store.`);
         const s = k.shared;
         if (s && s.mode === "existing" && typeof s.path === "string" && s.path) {
           lines.push(`Knowledge (shared): ${s.path} — evergreen only (wiki/, agent-kb/); promotion MOVES, never copies.`);

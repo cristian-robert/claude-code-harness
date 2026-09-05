@@ -25,7 +25,6 @@
     "cli/",
     "template/",
     "tools/context-ledger.mjs",
-    "tools/self-harness.mjs",
     "tools/kb-check.mjs",
     "docs/*.md",
     "README.md"

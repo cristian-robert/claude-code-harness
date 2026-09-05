@@ -132,4 +132,27 @@ test('an adapted skill the template retires is extra, directory and all', () => 
   assert.strictEqual(run(args.concat('--check'), root).code, 0);
 });
 
+test('a top-level dir the template no longer ships is swept from the root (retired-dir gap)', () => {
+  // Own root + template: the shared `root`/`tpl` above are mid-teardown by this point.
+  const root2 = path.join(TMP, 'root-retired');
+  fs.mkdirSync(path.join(root2, '.claude'), { recursive: true });
+  fs.writeFileSync(path.join(root2, '.claude', 'harness.json'), JSON.stringify({ stopGate: [], harness: ['claude'] }) + '\n');
+  const tpl2 = path.join(TMP, 'template-retired', '.claude'); makeTemplate(tpl2);
+  const args2 = ['--root', root2, '--template', tpl2];
+  assert.strictEqual(run(args2, root2).code, 0, 'first sync');
+  fs.mkdirSync(path.join(root2, '.claude', 'oldskills'), { recursive: true });
+  fs.writeFileSync(path.join(root2, '.claude', 'oldskills', 'x.md'), 'retired\n');
+  fs.mkdirSync(path.join(root2, '.claude', 'state'), { recursive: true });
+  fs.writeFileSync(path.join(root2, '.claude', 'state', 'keep.json'), '{}');
+  fs.mkdirSync(path.join(root2, '.claude', 'agent-memory'), { recursive: true });
+  fs.writeFileSync(path.join(root2, '.claude', 'agent-memory', 'keep.md'), 'mine\n');
+  const chk = run(args2.concat('--check'), root2);
+  assert.strictEqual(chk.code, 1, chk.out);
+  assert.ok(/extra\s+oldskills\/x\.md/.test(chk.out), chk.out);
+  assert.ok(!/state\/keep\.json|agent-memory\/keep\.md/.test(chk.out), 'root-only dirs are never extras');
+  assert.strictEqual(run(args2, root2).code, 0, 're-sync');
+  assert.ok(!fs.existsSync(path.join(root2, '.claude', 'oldskills')), 'retired dir removed');
+  assert.ok(fs.existsSync(path.join(root2, '.claude', 'state', 'keep.json')) && fs.existsSync(path.join(root2, '.claude', 'agent-memory', 'keep.md')), 'machine state untouched');
+});
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

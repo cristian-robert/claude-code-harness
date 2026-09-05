@@ -705,12 +705,15 @@ console.log("session-start.mjs");
   // quiet rather than wrong.
   const tmp = mkdtempSync(join(tmpdir(), "phe-knowledge-"));
   mkdirSync(join(tmp, ".claude"), { recursive: true });
+  // The local dir must EXIST for the RETRIEVE form: the line is now branch-dependent, and
+  // without this the whole block would silently assert the ABSENT branch instead.
+  mkdirSync(join(tmp, "knowledge-base"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
     knowledge: { local: "knowledge-base", shared: { mode: "existing", path: "/tmp/x-vault" }, migratedAt: null },
   }));
   const both = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let bothCtx = ""; try { bothCtx = JSON.parse(both.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: bothCtx stays "" and the checks fail */ }
-  check("knowledge configured -> local KB line present", both.code === 0 && bothCtx.includes("Knowledge (local): knowledge-base/"));
+  check("knowledge configured + dir present -> local KB line says RETRIEVE", both.code === 0 && bothCtx.includes("Knowledge (local): knowledge-base/ — RETRIEVE"));
   check("shared store configured -> shared line present", both.code === 0 && bothCtx.includes("Knowledge (shared): /tmp/x-vault"));
 
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
@@ -737,6 +740,15 @@ console.log("session-start.mjs");
   let arrCtx = ""; try { arrCtx = JSON.parse(arr.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: arrCtx stays "" */ }
   check("array-valued knowledge -> no knowledge line (agrees with readKnowledgeConfig)",
     arr.code === 0 && arrCtx.includes("Stop gate:") && !arrCtx.includes("Knowledge ("));
+
+  // This repo keeps its knowledge in the vault: the local dir is absent, and the line said
+  // RETRIEVE from a directory that does not exist (M1 review, Task 1 minor).
+  const noKb = mkdtempSync(join(tmpdir(), "phe-nokb-"));
+  mkdirSync(join(noKb, ".claude"), { recursive: true });
+  writeFileSync(join(noKb, ".claude", "harness.json"), JSON.stringify({ knowledge: { local: "knowledge-base" } }));
+  const nk = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: noKb });
+  let nkCtx = ""; try { nkCtx = JSON.parse(nk.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: the check fails */ }
+  check("absent local knowledge dir is reported as ABSENT, not as a store to retrieve from", nkCtx.includes("Knowledge (local): knowledge-base/ is ABSENT") && !nkCtx.includes("knowledge-base/ — RETRIEVE"));
 
   // The "Stop gate:" clause anchors this positively: session-start exits 0 on EVERY path,
   // so a bare `!includes` would also pass for a hook that emitted nothing at all.
