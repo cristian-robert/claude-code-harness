@@ -2,7 +2,7 @@
 
 ## Context economy
 
-- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent: it burns tokens in its own window and returns a summary. `/clear` between unrelated tasks — leftover context biases the next.
+- Broad exploration (codebase survey, multi-file grep, research) → dispatch a subagent: it burns tokens in its own window and returns a summary. In THIS window read targeted (offset/limit, `sed -n`); a whole-directory dump goes to a subagent or a scratch file you grep. `/clear` between unrelated tasks — leftover context biases the next. (traces to: 2026-09-05 — 190 KB of `cat` output in three calls)
 - Context past ~120k tokens (statusline `ctx`), or a stage boundary in a long plan → `/handoff` then `/clear` (beats compacting — that loses paths-scoped rules + subdir CLAUDE.md; windows run 200k–1M, so a percentage says nothing). Two failed corrections on one issue → stop patching; `/clear` and restart with a rewritten prompt. (traces to: 2026-09-05 — three 40–96 KB dumps read in one turn with no trigger to hand off)
 
 ## Task routing
