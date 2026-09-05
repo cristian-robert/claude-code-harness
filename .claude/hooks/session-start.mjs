@@ -46,6 +46,7 @@ async function main() {
       }
     } catch { /* stale/unreadable snapshot: the warning below still lands */ }
     lines.push("Compaction dropped: paths-scoped rules and subdirectory CLAUDE.md (reload on next matching file read). Disk artifacts (plans/, reports/) are ground truth over the summary.");
+    lines.push("Invoked skills were re-attached within a 25k-token budget (5k each, newest first): re-invoke the active pipeline skill (/implement, /validate, …) before continuing so its full body is back.");
     emit(lines);
   }
 

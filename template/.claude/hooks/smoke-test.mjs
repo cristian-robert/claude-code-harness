@@ -577,7 +577,7 @@ console.log("session-start.mjs");
   writeFileSync(join(tmp, ".claude", "state", "compact-snapshot.md"), "# Compact snapshot\n- when: now\n- branch: feature/x\n");
   const res = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "compact", cwd: tmp });
   let ctx = ""; try { ctx = JSON.parse(res.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: ctx stays "" and the check fails */ }
-  check("compact source re-injects snapshot + dropped-context warning", res.code === 0 && ctx.includes("Compaction dropped") && ctx.includes("feature/x"));
+  check("compact source re-injects snapshot + dropped-context warning + re-invoke line", res.code === 0 && ctx.includes("Compaction dropped") && ctx.includes("feature/x") && ctx.includes("re-invoke the active pipeline skill"));
 }
 {
   // workTracking backend "files": one derived Board line from backlog frontmatter.
@@ -875,6 +875,18 @@ console.log("shipped .mjs lint hygiene");
   }
   check("no empty catch block (eslint no-empty) — every swallow carries a comment",
     offenders.length === 0, offenders.join(", "));
+}
+
+console.log("statusline.mjs");
+{
+  // Windows now run 200k–1M, so a percentage says nothing about how many tokens are in
+  // play; the handoff rule in 00-core.md is stated in tokens and reads this line.
+  const input = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 43.2, total_input_tokens: 86400, context_window_size: 200000 } });
+  let out = ""; try { out = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out = `${e.stdout || ""}`; }
+  check("statusline shows percent and absolute tokens", out.includes("ctx 43% 86k/200k"));
+  const bare = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12 } });
+  let out2 = ""; try { out2 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bare, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out2 = `${e.stdout || ""}`; }
+  check("statusline degrades to percent only when token fields are absent", out2.includes("ctx 12%") && !out2.includes("/"));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

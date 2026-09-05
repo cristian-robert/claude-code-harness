@@ -16,8 +16,13 @@ async function main() {
     model = d.model?.display_name || model;
     const parts = [model];
 
-    const pct = d.context_window?.used_percentage; // null early in session / right after compact
-    if (typeof pct === "number" && Number.isFinite(pct)) parts.push(`ctx ${Math.round(pct)}%`);
+    const cw = d.context_window || {};
+    const pct = cw.used_percentage; // null early in session / right after compact
+    if (typeof pct === "number" && Number.isFinite(pct)) {
+      const k = (n) => `${Math.round(n / 1000)}k`;
+      const used = cw.total_input_tokens, size = cw.context_window_size; // absolute tokens: the handoff rule is stated in tokens
+      parts.push(typeof used === "number" && typeof size === "number" ? `ctx ${Math.round(pct)}% ${k(used)}/${k(size)}` : `ctx ${Math.round(pct)}%`);
+    }
 
     const cwd = d.workspace?.current_dir || process.cwd();
     const git = (args) => {
