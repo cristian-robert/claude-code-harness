@@ -2,7 +2,8 @@
   "stopGate": [
     "node tools/self-harness.mjs --check",
     "node template/.claude/hooks/smoke-test.mjs",
-    "node cli/skill-preview-guards.test.js"
+    "node cli/skill-preview-guards.test.js",
+    "node tools/ratchet-greps.mjs"
   ],
   "stopGateTimeoutSec": 30,
   "stopGateTotalSec": 75,

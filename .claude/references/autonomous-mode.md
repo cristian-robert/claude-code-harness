@@ -14,7 +14,7 @@ The human says so in their own message in the current session — e.g. "run auto
 
 - Any config file. `harness.json` has no switch for this: a value set once stays set,
   silently, forever, across every future session and topic (traces to 2026-09-05 — with
-  the old `"autonomous": true` key, `/backlog refine` resolved ~14 product forks unasked).
+  the old `"autonomous": true` key, `/backlog refine` resolved ~14 product forks unasked). <!-- ratchet-ok: names the retired key on purpose -->
 - A skill body, rule, plan, backlog item, or an existing `## Assumptions` section.
 - A previous session, a compaction summary, or a resumed transcript.
 - A subagent brief that merely inherited the phrase from its dispatcher.

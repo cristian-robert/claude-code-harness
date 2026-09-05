@@ -22,7 +22,7 @@ function threw(fn) {
 }
 
 // --- the reviewer rule: always a fresh deep context, whoever implemented ---
-assert('deep-written code is reviewed at deep — a fresh context, not a sibling model', reviewerRoleFor('deep') === 'deep');
+assert('deep-written code is reviewed at deep — a fresh context, not a sibling model', reviewerRoleFor('deep') === 'deep'); // ratchet-ok: names the retired inversion on purpose
 assert('build-written code is reviewed at deep', reviewerRoleFor('build') === 'deep');
 assert('routine-written code is reviewed at deep', reviewerRoleFor('routine') === 'deep');
 assert('scout never implements — its reviewer is deep', reviewerRoleFor('scout') === 'deep');

@@ -342,13 +342,18 @@ test('the placeholder gate catches every placeholder the pristine templates ship
 });
 
 test('every gate allowlist entry is earned by a real token in the templates', () => {
-  // Over-match guard. Path notation survives /harness-init in AGENTS.md; the HTML tags
-  // are real prose in rules/frontend.md. An allowlist entry with no such use would be
-  // silently hiding a placeholder instead of exempting notation.
-  const claudeMd = readTemplate('AGENTS.md');
+  // Over-match guard. Path notation survives /harness-init across the gate's OWN scope —
+  // AGENTS.md and .claude/rules/, not AGENTS.md alone (`wiki/stack/<tool>/` lives in
+  // 00-core.md's Dispatch row). The HTML tags are real prose in rules/frontend.md. An
+  // allowlist entry with no such use would be silently hiding a placeholder instead of
+  // exempting notation.
+  const rulesDir = path.join(TEMPLATE, '.claude', 'rules');
+  const notation = [readTemplate('AGENTS.md')]
+    .concat(fs.readdirSync(rulesDir).map((f) => fs.readFileSync(path.join(rulesDir, f), 'utf-8')))
+    .join('\n');
   const frontend = readTemplate('.claude', 'rules', 'frontend.md');
   for (const t of ['<id>', '<slug>', '<n>', '<tool>']) {
-    assert.ok(claudeMd.includes(t), 'allowlisted ' + t + ' is unused in template/AGENTS.md — drop it');
+    assert.ok(notation.includes(t), 'allowlisted ' + t + ' is unused in AGENTS.md + rules/ — drop it');
   }
   for (const t of ['<a>', '<div>', '<button>', '<dialog>']) {
     assert.ok(frontend.includes(t), 'allowlisted ' + t + ' is unused in rules/frontend.md — drop it');

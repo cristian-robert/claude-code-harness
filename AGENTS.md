@@ -24,6 +24,7 @@ This project's knowledge base lives in the unified Obsidian vault at `~/Dev/The 
 | Full suite (CLI + hooks) | `npm test` |
 | Context ledger (self-check on template/) | `node tools/context-ledger.mjs template` |
 | Root harness sync · drift check | `node tools/self-harness.mjs` · `node tools/self-harness.mjs --check` |
+| Retired-vocabulary sweep (stop-gate row) | `node tools/ratchet-greps.mjs` — this repo's ratcheted greps; add a retirement as a CHECKS entry, mark a deliberate mention `ratchet-ok` |
 | Loop driver dry run | `node loop/loop.mjs --dry-run` |
 
 ## Pipeline (PIV+E)

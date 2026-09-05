@@ -119,7 +119,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("allows message mentioning main", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo 'main topic' > notes.txt" } })));
 }
 {
-  // Opt-in evolve->push gate: armed + no marker => deny push; marker fresh => allow.
+  // Evolve->push gate (default on): armed + no marker => deny push; marker fresh => allow.
   const tmp = mkdtempSync(join(tmpdir(), "phe-pushgate-"));
   execFileSync("git", ["init", "-q", "-b", "feat/x", tmp]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "x"]);

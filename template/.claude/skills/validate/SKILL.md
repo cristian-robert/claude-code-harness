@@ -36,6 +36,8 @@ If the Commands table still has `<cmd>` placeholders, stop: blocker line, ask th
 <!-- One fenced bash block per ratcheted grep, each ending `|| echo clean`. Shape:
      grep -rniE "phrase one|phrase two" path/to/scope/ || echo clean -->
 
+A repo whose `.claude/` is a GENERATED copy cannot host its greps here — this file must match its template byte-for-byte. Put them in a repo tool the gate names instead, and keep this row a pointer to it. (traces to: 2026-09-05 — a repo-specific ratchet had nowhere to live in a synced skill)
+
 ## 2 · Detect what changed
 
 Start from the injected "Changed files" list plus uncommitted changes (`git status --porcelain`). Looks truncated or wrong → re-derive against the base branch (`.claude/harness.json` `baseBranch`, else `git symbolic-ref --short refs/remotes/origin/HEAD`, else main/master): `git diff --name-only $(git merge-base HEAD <base>)`. Then:
