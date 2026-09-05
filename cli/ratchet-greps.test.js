@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // tools/ratchet-greps.mjs: the repo-wide sweep for RETIRED vocabulary. Executable logic lives in a
-// tested file (ADR-021), so the six checks get fixtures: a tree carrying each retired term must
+// tested file (ADR-021), so the seven checks get fixtures: a tree carrying each retired term must
 // exit 1 and NAME it, a clean tree must print `clean` and exit 0, and the escape hatch
 // (`ratchet-ok`) must exempt a deliberate mention without weakening the pattern.
 const fs = require('fs');
@@ -55,6 +55,7 @@ const RETIRED = [
   ['evolve gate called opt-in', 'cli/thing.js', "// Opt-in evolve->push gate: off unless armed.\n", /opt-?in/i],
   ['evolve gate called default true', 'tools/x.mjs', "// Evolve->push gate (requireEvolveBeforePush, default true).\n", /default true\/on/i],
   ['retired "make the checks faster" advice', 'template/.claude/hooks/x.mjs', "// Raise the budget, make the checks faster, or run /validate.\n", /faster/i],
+  ['routine described as "never builds"', 'template/.claude/skills/models/SKILL.md', '- `routine` — text-only edits. Never builds.\n', /never a build task/i],
 ];
 for (const [label, rel, body, namePattern] of RETIRED) {
   test(`${label} fails the gate and names ${rel}`, () => {
@@ -65,12 +66,12 @@ for (const [label, rel, body, namePattern] of RETIRED) {
   });
 }
 
-test('all six retired vocabularies are reported in one run', () => {
+test('all seven retired vocabularies are reported in one run', () => {
   const files = {};
   for (const [, rel, body] of RETIRED) files[rel] = body;
   const r = run(makeTree(files));
   assert.strictEqual(r.code, 1, r.out);
-  assert.ok(/6 retired-vocabulary hit\(s\)/.test(r.out), 'expected 6 hits, got: ' + r.out);
+  assert.ok(/7 retired-vocabulary hit\(s\)/.test(r.out), 'expected 7 hits, got: ' + r.out);
 });
 
 test('a `ratchet-ok` line is a deliberate mention, not a hit', () => {

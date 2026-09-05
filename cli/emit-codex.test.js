@@ -123,6 +123,17 @@ try { agentMdToToml(routineMd, 'r', { claude: PRE_ROUTINE.claude }, function () 
 assert('a map with no codex half at all still throws (a deleted half is not a new role)',
   noCodexErr instanceof Error && /no model mapped/i.test(noCodexErr.message));
 
+// A role PRESENT but blank is a malformed map, not a pre-release map: it must throw, not take
+// the package default behind a warning that says the role is missing (M1 final review).
+var BLANK_ROLE = JSON.parse(JSON.stringify(DEFAULT_MODELS));
+BLANK_ROLE.codex.routine = '';
+var blankErr = null, blankWarnings = [];
+try { agentMdToToml(routineMd, 'r', BLANK_ROLE, function (m) { blankWarnings.push(m); }); } catch (e) { blankErr = e; }
+assert('a role present but blank throws (no model mapped) instead of defaulting',
+  blankErr instanceof Error && /no model mapped/i.test(blankErr.message));
+assert('...and emits no "has no role" warning for a role the map does have',
+  blankWarnings.length === 0);
+
 // luna is the ONE 5.6 model without `ultra` (models.json, verified 2026-07-12). Emitting it
 // would fail at dispatch time, far from the file that caused it — so fail at emit instead.
 // This protection predates the ceilings move and MUST survive it: the levels now come from

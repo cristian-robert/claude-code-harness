@@ -64,6 +64,12 @@ const CHECKS = [
     name: 'retired stop-gate advice "make the checks faster"',
     hit: (l) => /make the checks faster/i.test(l),
   },
+  {
+    // traces to: 2026-09-05 — models/SKILL.md, docs/04 and both harness.json $comments described
+    //   routine three different ways
+    name: 'routine described as "never builds" (the reconciled wording is "never a build task")',
+    hit: (l) => /never builds/i.test(l),
+  },
 ];
 
 function walk(abs, out) {
