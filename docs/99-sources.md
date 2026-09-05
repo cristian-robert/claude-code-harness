@@ -19,7 +19,7 @@ The platform contract every PHE mechanism is built against.
 - Exact hook I/O: stdin JSON, `permissionDecision: deny`, `stop_hook_active`, 8-consecutive-block Stop ceiling → guard.mjs, stop-gate.mjs.
 - Rule frontmatter is `paths:` (never `globs:`); memory load order; real skill frontmatter fields only.
 - **Subagent model resolution** (verified 2026-07-12; re-verified 2026-09-05 against `/en/sub-agents.md` and CHANGELOG 2.1.251/2.1.257): per-invocation `model` → agent `model:` → `CLAUDE_CODE_SUBAGENT_MODEL` (a default since 2.1.251) → session model. `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` (2.1.257) overrides everything and therefore defeats the sibling-reviewer rule → the warning in `template/.claude/references/dispatch-protocol.md` and the `session-start.mjs` check. Before 2.1.251 the plain variable was the override; that older claim is superseded, not wrong for its date.
-- **Minimum version:** agent `maxTurns` is honored from 2.1.246 (`/en/sub-agents`); below it a scout has no turn cap. Stated in README and checked at `/harness-init` step 4.
+- **Minimum version:** `maxTurns` is enforced on every version; from 2.1.246 a capped subagent's output is marked partial with a resume hint (`/en/sub-agents.md` frontmatter table, read raw 2026-09-05). Below it a truncated scout return reads as a complete answer — the silent-failure class the dispatch protocol guards against. Stated in README and checked at `/harness-init` step 4.
 - **Drift warning:** the docs are versioned and change — re-verify hook schemas and frontmatter keys on every Claude Code upgrade.
 
 ## 4 · Anthropic engineering quartet — claude-code-best-practices · building-effective-agents · writing-tools-for-agents · multi-agent-research-system
