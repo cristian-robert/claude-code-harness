@@ -43,8 +43,8 @@ protocol. Independence is context isolation, not weight diversity.
 > rubber-stamping its own reasoning — is still covered: the reviewer never inherits the
 > implementer's session, and the harness's `code-reviewer` sees the diff, the plan, and nothing else.
 
-`review` is not a role for exactly this reason: it has no fixed model. It is derived per dispatch
-from whoever implemented.
+`review` is not a role: it is always `deep` — derived, never chosen per dispatch — so the map has
+nothing to name for it.
 
 ## Three cost rules
 

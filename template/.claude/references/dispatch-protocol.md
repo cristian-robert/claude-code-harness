@@ -46,11 +46,11 @@ Model resolution, in order (verified 2026-09-05 against code.claude.com/docs/en/
 `CLAUDE_CODE_SUBAGENT_MODEL` (a DEFAULT since 2.1.251, no longer an override) → the session model. A
 dispatch that pins no tier inherits that default or the session model — a silent cost and quality bug.
 
-**`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` defeats sibling review.** Added in 2.1.257, it applies
+**`CLAUDE_CODE_SUBAGENT_MODEL_FORCE` defeats the reviewer's `deep` pin.** Added in 2.1.257, it applies
 `CLAUDE_CODE_SUBAGENT_MODEL` (or the main model) to EVERY subagent, ignoring per-spawn and frontmatter
-models: the reviewer silently becomes the model that wrote the code, with no error and nothing in the
-transcript. Never set it in a harnessed repo; `session-start.mjs` warns when it is exported. (Before
-2.1.251 the plain variable had this effect — the old warning traced to that.)
+models: a session on a weaker model would review on it, with no error and nothing in the transcript.
+Never set it in a harnessed repo; `session-start.mjs` warns when it is exported. (Before 2.1.251 the
+plain variable had this effect — the old warning traced to that.)
 
 ## Effort scaling (models misjudge effort — budget it in the brief)
 

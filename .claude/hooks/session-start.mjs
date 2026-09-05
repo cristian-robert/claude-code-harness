@@ -139,9 +139,9 @@ async function main() {
   } catch { /* no CLAUDE.md: nothing to say */ }
 
   // Every subagent — the reviewer included — runs on ONE model when this is exported
-  // (2.1.257): the reviewer becomes the model that wrote the code, silently. The plain
+  // (2.1.257): the reviewer loses its `deep` pin and runs on the session's model, silently. The plain
   // CLAUDE_CODE_SUBAGENT_MODEL is only a default since 2.1.251 (see dispatch-protocol.md).
-  if (process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE) lines.push("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set — every subagent runs on one model, so sibling review (/review-branch) is dead this session. Unset it.");
+  if (process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE) lines.push("CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set — every subagent runs on one model, so the reviewer's `deep` pin (/review-branch) is dead this session. Unset it.");
   if (source === "resume") lines.push("Session resumed — re-verify assumptions against git status before continuing.");
 
   emit(lines);
