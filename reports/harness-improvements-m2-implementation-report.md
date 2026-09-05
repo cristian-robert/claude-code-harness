@@ -482,4 +482,4 @@ Publishing is not part of this milestone. `npm publish` is the operator's action
 
 - **ADR-026** — Tier 2 mechanisms: plans anchor by phrase (`plan-anchors.mjs`), the plan-lint guard (M6), auto-memory deltas reach `/evolve` (`memory-delta.mjs`), skill bodies and docs are measured in the ledger and gated at the root, migrations are CLI code.
 
-Appended to `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md`, with the Current-focus bullet updated in that folder's `_index.md`. Both files live outside this git repository and are not part of this branch's commits.
+Appended to `~/Dev/The Vault/projects/perfectHarnessEngineering/decisions.md`, newest-first above ADR-025. That folder's `_index.md` gained a milestone-2 Current-focus bullet marked `[~]`, not `[x]`: the branch is implemented but not merged, and `/validate`, `/review-branch` and `/evolve` are still ahead — the same marker milestone 1 carried until it merged, which this task flipped to `[x]`. Both files live outside this git repository and are not part of this branch's commits.
