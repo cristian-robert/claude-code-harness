@@ -83,7 +83,7 @@ Three, all benign, none a defect.
 
 ## Follow-ups (deferred minors)
 
-47 items, none blocking. Grouped by the task (or the final review) that surfaced them; file:line references are the reviewers' own.
+50 items, none blocking. Grouped by the task (or the final review) that surfaced them; file:line references are the reviewers' own.
 
 **Task 1 (5)**
 - The two ADAPTED knowledge skills at the root still point at `knowledge-base/`, which this repo does not have (its KB is the vault); fill them in as project content in a follow-up.
