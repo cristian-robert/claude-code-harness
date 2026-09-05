@@ -398,6 +398,11 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   check("skipped check blocks as INCOMPLETE, never GREEN", res.code === 0 && blocked && reason.includes("INCOMPLETE"));
   check("last-gate.json records INCOMPLETE + skipped", state?.verdict === "INCOMPLETE" && state?.skipped?.length >= 1);
 }
+// One command whose TEXT never changes between RED and GREEN — it reads a flag file
+// instead. The gate-config tamper check (below) compares command text, so a fixture
+// that rewrites the command to "go green" would trip it for the wrong reason.
+const FLAG_CMD = 'node -e "process.exit(require(\'fs\').existsSync(\'.red\') ? 1 : 0)"';
+const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync(f, ""); else if (existsSync(f)) unlinkSync(f); };
 {
   // Tamper check (opt-in, stopGateTamperPaths): a RED gate snapshots gated files
   // ONCE; a later GREEN that required editing them is refused as dishonest —
@@ -410,17 +415,17 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
   execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
-  const cfg = (exit) => JSON.stringify({ stopGate: [`node -e "process.exit(${exit})"`], stopGateTamperPaths: ["tests/"] });
+  const cfg = JSON.stringify({ stopGate: [FLAG_CMD], stopGateTamperPaths: ["tests/"] });
   const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json"); // session_id "smoke"
 
-  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(1));
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg); setRed(tmp, true);
   const red = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   let redBlocked = false; try { redBlocked = JSON.parse(red.out).decision === "block"; } catch { /* non-JSON stdout: not a block */ }
   let snap = null; try { snap = JSON.parse(readFileSync(snapPath, "utf8")); } catch { /* no snapshot: the check reports it */ }
   check("red gate writes tamper snapshot of gated files", redBlocked && typeof snap?.["tests/a.test.js"] === "string");
 
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 5)\n"); // the dishonest edit
-  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(0)); // suite "goes green"
+  setRed(tmp, false); // suite "goes green"
   const tampered = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   let tBlocked = false, tReason = ""; try { const o = JSON.parse(tampered.out); tBlocked = o.decision === "block"; tReason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
   check("green-after-gated-edit blocks and names the file", tBlocked && tReason.includes("tests/a.test.js") && existsSync(snapPath));
@@ -440,12 +445,12 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
   execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
-  const cfg = (exit) => JSON.stringify({ stopGate: [`node -e "process.exit(${exit})"`], stopGateTamperPaths: ["tests/"] });
+  const cfg = JSON.stringify({ stopGate: [FLAG_CMD], stopGateTamperPaths: ["tests/"] });
   const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json");
-  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(1));
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg); setRed(tmp, true);
   runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   unlinkSync(join(tmp, "tests", "a.test.js")); // delete the check outright
-  writeFileSync(join(tmp, ".claude", "harness.json"), cfg(0)); // suite "goes green"
+  setRed(tmp, false); // suite "goes green"
   const res = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   let blocked = false, reason = ""; try { const o = JSON.parse(res.out); blocked = o.decision === "block"; reason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
   check("green-after-gated-delete blocks and keeps the snapshot", blocked && reason.includes("tests/a.test.js") && existsSync(snapPath));
@@ -456,13 +461,48 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
   const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-off-"));
   execFileSync("git", ["init", "-q", "-b", "main", tmp]);
   mkdirSync(join(tmp, ".claude"), { recursive: true });
-  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(1)\""] }));
+  const cfg = JSON.stringify({ stopGate: [FLAG_CMD] });
+  writeFileSync(join(tmp, ".claude", "harness.json"), cfg); setRed(tmp, true);
   runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
-  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: ["node -e \"process.exit(0)\""] }));
+  setRed(tmp, false);
   const green = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   const stateDir = join(tmp, ".claude", "state");
   const snaps = existsSync(stateDir) ? readdirSync(stateDir).filter((f) => f.startsWith("tamper-")) : [];
   check("tamper check off by default (no snapshot, green passes)", green.code === 0 && green.out === "" && snaps.length === 0);
+}
+{
+  // Gate-CONFIG tamper (always on): a RED gate snapshots its own command list; a later
+  // GREEN whose list lost a command — or an emptied gate — is refused. Editing
+  // harness.json is the cheapest way to "go green" once rewriting the tests is closed
+  // off; same escape class (coleam00/skills), one door further in.
+  const mk = () => { const t = mkdtempSync(join(tmpdir(), "phe-gate-cfg-")); mkdirSync(join(t, ".claude"), { recursive: true }); return t; };
+  const cfg = (cmds) => JSON.stringify({ stopGate: cmds });
+  const OK = 'node -e "process.exit(0)"';
+  const stop = (t) => runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: t });
+  const blocked = (r) => { try { return JSON.parse(r.out).decision === "block"; } catch { return false; } };
+  const reason = (r) => { try { return JSON.parse(r.out).reason || ""; } catch { return ""; } };
+
+  const t1 = mk(); writeFileSync(join(t1, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t1, true);
+  const snap1 = join(t1, ".claude", "state", "gate-smoke.json");
+  check("red gate writes a gate-config snapshot", blocked(stop(t1)) && existsSync(snap1));
+  writeFileSync(join(t1, ".claude", "harness.json"), cfg([]));
+  const emptied = stop(t1);
+  check("emptied gate after RED blocks", blocked(emptied) && reason(emptied).includes("shrank"));
+  writeFileSync(join(t1, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t1, false);
+  const honest = stop(t1);
+  check("same gate going green passes and clears the gate snapshot", honest.code === 0 && honest.out === "" && !existsSync(snap1));
+
+  const t2 = mk(); writeFileSync(join(t2, ".claude", "harness.json"), cfg([FLAG_CMD, OK])); setRed(t2, true);
+  stop(t2);
+  writeFileSync(join(t2, ".claude", "harness.json"), cfg([OK]));
+  const dropped = stop(t2);
+  check("gate missing a command after RED blocks and names it", blocked(dropped) && reason(dropped).includes(".red"));
+
+  const t3 = mk(); writeFileSync(join(t3, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t3, true);
+  stop(t3);
+  writeFileSync(join(t3, ".claude", "harness.json"), cfg([FLAG_CMD, OK])); setRed(t3, false);
+  const grew = stop(t3);
+  check("gate that only grew passes", grew.code === 0 && grew.out === "" && !existsSync(join(t3, ".claude", "state", "gate-smoke.json")));
 }
 
 console.log("post-edit.mjs");

@@ -43,6 +43,25 @@ async function main() {
 
   const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
   const gate = Array.isArray(cfg.stopGate) ? cfg.stopGate : [];
+
+  // Gate-CONFIG tamper check (always on, no config): a RED gate snapshots its own command
+  // list; a later GREEN whose list lost a command — or an emptied gate — is refused. Once
+  // rewriting the tests is closed off (stopGateTamperPaths), editing harness.json is the
+  // next-cheapest way to "go green": same escape class (coleam00/skills), one door in.
+  // Runs BEFORE the empty-gate exit so disarming the gate outright is caught too.
+  // Best-effort like all state here: any error behaves as feature-off.
+  const gsid = String(event.session_id || "nosession").slice(0, 8);
+  const gateSnapPath = join(cwd, ".claude", "state", `gate-${gsid}.json`);
+  let gateBefore = null;
+  try { if (existsSync(gateSnapPath)) gateBefore = JSON.parse(readFileSync(gateSnapPath, "utf8")).stopGate; } catch { gateBefore = null; }
+  const removed = Array.isArray(gateBefore) ? gateBefore.filter((c) => !gate.includes(c)) : [];
+  if (removed.length) {
+    process.stdout.write(JSON.stringify({
+      decision: "block",
+      reason: `Stop gate config shrank since it last went RED — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`.slice(0, MAX_REASON),
+    }));
+    process.exit(0);
+  }
   if (gate.length === 0) process.exit(0);
   // Per-command cap AND a cumulative budget: the gate fires on EVERY turn end,
   // so it must stay in seconds — and must finish before the hook's own outer
@@ -73,6 +92,13 @@ async function main() {
   // Verdict: RED if anything failed, INCOMPLETE if the budget skipped a check
   // before it could run (a partial gate is NOT a pass), else GREEN.
   let verdict = failures.length ? "RED" : skipped.length ? "INCOMPLETE" : "GREEN";
+
+  try { // snapshot the gate itself ONCE on RED; an honest GREEN clears it below
+    if (verdict === "RED" && !existsSync(gateSnapPath)) {
+      mkdirSync(join(cwd, ".claude", "state"), { recursive: true });
+      writeFileSync(gateSnapPath, JSON.stringify({ stopGate: gate }));
+    }
+  } catch { /* advisory scaffolding — never break the gate */ }
 
   // Tamper check (opt-in via harness.json stopGateTamperPaths): on RED, snapshot
   // the gated files ONCE — re-snapshotting per block would let them be edited one
@@ -136,6 +162,8 @@ async function main() {
       decision: "block",
       reason: `Stop gate went GREEN only after edits to gated files: ${tampered.join(", ")}. If the check change is legitimate, explain it to the user and get their confirmation; otherwise revert it and fix the code instead. (harness.json stopGateTamperPaths)`.slice(0, MAX_REASON),
     }));
+  } else if (verdict === "GREEN") {
+    try { if (existsSync(gateSnapPath)) unlinkSync(gateSnapPath); } catch { /* state is advisory */ }
   }
   process.exit(0);
 }
