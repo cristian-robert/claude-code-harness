@@ -3,7 +3,8 @@
 // .claude/harness.json and blocks the turn from ending until they pass.
 // - Honors stop_hook_active to avoid infinite re-block loops (Claude Code also
 //   force-ends the turn after 8 consecutive blocks, so this can never wedge).
-// - No gate configured => silent exit 0. The gate is meant to stay CHEAP
+// - No gate configured => silent exit 0 (unless the gate went RED earlier this
+//   session — see the gate-config tamper check). The gate is meant to stay CHEAP
 //   (lint + unit tests); the full gate is the explicit /validate skill.
 // - Fails OPEN on internal errors: a broken gate script must not block work.
 import { execSync, execFileSync } from "node:child_process";
@@ -39,29 +40,43 @@ async function main() {
 
   const cwd = event.cwd || process.cwd();
   const cfgPath = join(cwd, ".claude", "harness.json");
-  if (!existsSync(cfgPath)) process.exit(0);
-
-  const cfg = JSON.parse(readFileSync(cfgPath, "utf8"));
-  const gate = Array.isArray(cfg.stopGate) ? cfg.stopGate : [];
 
   // Gate-CONFIG tamper check (always on, no config): a RED gate snapshots its own command
-  // list; a later GREEN whose list lost a command — or an emptied gate — is refused. Once
-  // rewriting the tests is closed off (stopGateTamperPaths), editing harness.json is the
-  // next-cheapest way to "go green": same escape class (coleam00/skills), one door in.
-  // Runs BEFORE the empty-gate exit so disarming the gate outright is caught too.
+  // list; a later GREEN whose list lost a command — or an emptied gate, or a deleted or
+  // unreadable harness.json — is refused. Once rewriting the tests is closed off
+  // (stopGateTamperPaths), editing harness.json is the next-cheapest way to "go green":
+  // same escape class (coleam00/skills), one door in. The snapshot is read BEFORE the
+  // missing-config and empty-gate exits so disarming the gate outright is caught too.
   // Best-effort like all state here: any error behaves as feature-off.
   const gsid = String(event.session_id || "nosession").slice(0, 8);
   const gateSnapPath = join(cwd, ".claude", "state", `gate-${gsid}.json`);
   let gateBefore = null;
   try { if (existsSync(gateSnapPath)) gateBefore = JSON.parse(readFileSync(gateSnapPath, "utf8")).stopGate; } catch { gateBefore = null; }
-  const removed = Array.isArray(gateBefore) ? gateBefore.filter((c) => !gate.includes(c)) : [];
-  if (removed.length) {
-    process.stdout.write(JSON.stringify({
-      decision: "block",
-      reason: `Stop gate config shrank since it last went RED — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`.slice(0, MAX_REASON),
-    }));
+  const snapped = Array.isArray(gateBefore) ? gateBefore : [];
+  // A refused GREEN persists a TAMPER verdict first, so the statusline and the
+  // pre-compact snapshot never show the stale verdict of the last real run.
+  const refuse = (reason, removed) => {
+    try {
+      mkdirSync(join(cwd, ".claude", "state"), { recursive: true });
+      writeFileSync(join(cwd, ".claude", "state", "last-gate.json"), JSON.stringify({
+        verdict: "TAMPER", failed: [], skipped: [], removed, when: new Date().toISOString(),
+      }));
+    } catch { /* state is advisory — swallow */ }
+    process.stdout.write(JSON.stringify({ decision: "block", reason: reason.slice(0, MAX_REASON) }));
+    process.exit(0);
+  };
+
+  let cfg = null;
+  try { if (existsSync(cfgPath)) cfg = JSON.parse(readFileSync(cfgPath, "utf8")); } catch { cfg = null; /* unreadable config: handled below */ }
+  if (!cfg || typeof cfg !== "object") {
+    // No usable config disarms the gate — unless it went RED earlier this session: then a
+    // deleted (or corrupted) harness.json is a removed gate, the cheapest disarm of all.
+    if (snapped.length) refuse(`Stop gate config was removed since it last went RED — .claude/harness.json is ${existsSync(cfgPath) ? "unreadable" : "missing"}; removed: ${snapped.join(" · ")}. Restore the file and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, snapped);
     process.exit(0);
   }
+  const gate = Array.isArray(cfg.stopGate) ? cfg.stopGate : [];
+  const removed = snapped.filter((c) => !gate.includes(c));
+  if (removed.length) refuse(`Stop gate config shrank since it last went RED — removed: ${removed.join(" · ")}. Restore the command(s) in .claude/harness.json and fix the code; if the removal is legitimate, explain it to the user and get confirmation.`, removed);
   if (gate.length === 0) process.exit(0);
   // Per-command cap AND a cumulative budget: the gate fires on EVERY turn end,
   // so it must stay in seconds — and must finish before the hook's own outer

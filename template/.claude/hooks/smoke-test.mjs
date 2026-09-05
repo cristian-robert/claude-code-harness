@@ -488,6 +488,8 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   writeFileSync(join(t1, ".claude", "harness.json"), cfg([]));
   const emptied = stop(t1);
   check("emptied gate after RED blocks", blocked(emptied) && reason(emptied).includes("shrank"));
+  const lastGate = (t) => { try { return JSON.parse(readFileSync(join(t, ".claude", "state", "last-gate.json"), "utf8")); } catch { return null; } };
+  check("refused GREEN persists a TAMPER verdict (statusline never stale)", lastGate(t1)?.verdict === "TAMPER" && (lastGate(t1)?.removed || []).includes(FLAG_CMD));
   writeFileSync(join(t1, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t1, false);
   const honest = stop(t1);
   check("same gate going green passes and clears the gate snapshot", honest.code === 0 && honest.out === "" && !existsSync(snap1));
@@ -503,6 +505,21 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   writeFileSync(join(t3, ".claude", "harness.json"), cfg([FLAG_CMD, OK])); setRed(t3, false);
   const grew = stop(t3);
   check("gate that only grew passes", grew.code === 0 && grew.out === "" && !existsSync(join(t3, ".claude", "state", "gate-smoke.json")));
+
+  // Deleting (or corrupting) harness.json outright is the cheapest disarm of all — a
+  // missing file used to exit before the check could run (task-3 review, concern 1).
+  const t4 = mk(); writeFileSync(join(t4, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t4, true);
+  stop(t4);
+  const snap4 = join(t4, ".claude", "state", "gate-smoke.json");
+  unlinkSync(join(t4, ".claude", "harness.json")); // delete the config outright
+  const gone = stop(t4);
+  check("deleted harness.json after RED blocks, says missing, keeps the snapshot", blocked(gone) && reason(gone).includes("missing") && existsSync(snap4));
+  writeFileSync(join(t4, ".claude", "harness.json"), "{not json"); // corrupt it instead
+  const garbled = stop(t4);
+  check("unreadable harness.json after RED blocks too", blocked(garbled) && reason(garbled).includes("unreadable") && existsSync(snap4));
+  writeFileSync(join(t4, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t4, false);
+  const restored = stop(t4);
+  check("restored config going green passes and clears the gate snapshot", restored.code === 0 && restored.out === "" && !existsSync(snap4));
 }
 
 console.log("post-edit.mjs");
