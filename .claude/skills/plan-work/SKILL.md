@@ -3,7 +3,7 @@ name: plan-work
 description: "Architect hat: turn a ticket or brain dump into an executable plan file. Writes plans/<slug>-plan.md."
 disable-model-invocation: true
 argument-hint: "<backlog/<id>-<slug>.md | ticket-id | free-form brain dump>"
-allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merge-base *) Bash(ls *)
+allowed-tools: Bash(git diff *) Bash(git log *) Bash(git status *) Bash(git merge-base *) Bash(ls *) Bash(node .claude/tooling/plan-anchors.mjs *)
 ---
 
 # /plan-work
@@ -66,12 +66,14 @@ Fallback (plugin unavailable), condensed:
 ## 6. Write to disk
 
 MUST use the Write tool to create `plans/<slug>-plan.md` (slug: kebab-case from ticket or title). This is a required deliverable, not optional — `/implement` reads it from disk, so the file must exist. Do NOT print the plan body to the terminal.
+Then run `node .claude/tooling/plan-anchors.mjs plans/<slug>-plan.md` — fix every MISS before step 7; its exit code feeds the confidence rubric.
 
 Planning a backlog item → set plan frontmatter `item: backlog/<id>-<slug>.md`, append to the item's `## Log` (in the tracking root): `<YYYY-MM-DD> plan: plans/<slug>-plan.md`, and commit that item edit there as `track(<id>): plan linked` (guard permits tracking-only commits on any branch; github mode: mirror per work-tracking.md, degrade rules apply). Status stays untouched — /plan-work owns no status transition. Item still `status: backlog` → its AC are not PO-approved: the ONLY unblock is `/backlog refine <id>` (refine owns backlog→ready; an in-chat "approved" would never land on disk). Autonomous mode: run the refine transition yourself and log under `## Assumptions`.
 
 ## 7. Self-assess
 
 Fill plan frontmatter per the template: `complexity: S|M|L|XL`, `confidence: N/10` (that `/implement` succeeds first-pass), `tier:` implementer hint (`deep` default; `build` only when this plan already specifies the change step by step; `routine` only for text-only or trivially easy one-file tasks). Every tier is reviewed at `deep`, so an honest tier decides who builds, not who reviews.
+`confidence` is capped at 6 unless ALL three hold — every `Read first:` file was read THIS session and `plan-anchors.mjs` exits 0; every external tool the plan builds against is cached at `wiki/stack/<tool>/` or was `/research`ed this session; open questions are zero. A self-score above 6 without the three is a planning failure, not optimism. (traces to: 2026-09-05 — agents skew positive grading their own work; a felt 7 never asks)
 
 - Complexity XL → decompose into milestone plan files; THIS plan covers only the first milestone. Each later milestone gets its own `/plan-work` run when its turn comes.
 - Tasks provably independent (pairwise-disjoint `Files:` lists, no ordering) → mark them with the same `Wave: N` per the template rule; otherwise omit Wave — sequential is the default. One judgment, made NOW by the planner, not re-litigated at implement time.

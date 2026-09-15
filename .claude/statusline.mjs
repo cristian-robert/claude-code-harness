@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // PHE statusline (settings.json "statusLine" command — NOT a hook). Prints ONE
-// line: model · context % · branch(+dirty count) · gate state. Runs locally
+// line: model · context % + tokens · branch(+dirty count) · gate state. Runs locally
 // after each assistant message, costs zero tokens. Never crashes: worst case
 // prints the model name alone.
 import { execFileSync } from "node:child_process";
@@ -19,7 +19,7 @@ async function main() {
     const cw = d.context_window || {};
     const pct = cw.used_percentage; // null early in session / right after compact
     if (typeof pct === "number" && Number.isFinite(pct)) {
-      const k = (n) => `${Math.round(n / 1000)}k`;
+      const k = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1000)}k`); // 1M windows read as 1.0M, not 1000k
       const used = cw.total_input_tokens, size = cw.context_window_size; // absolute tokens: the handoff rule is stated in tokens
       parts.push(typeof used === "number" && typeof size === "number" ? `ctx ${Math.round(pct)}% ${k(used)}/${k(size)}` : `ctx ${Math.round(pct)}%`);
     }
@@ -41,7 +41,7 @@ async function main() {
     try {
       const root = d.workspace?.project_dir || cwd;
       const cfg = JSON.parse(readFileSync(join(root, ".claude", "harness.json"), "utf8"));
-      const n = Array.isArray(cfg.stopGate) ? cfg.stopGate.length : 0;
+      const n = (Array.isArray(cfg.stopGate) ? cfg.stopGate : []).filter((c) => typeof c === "string" && c.trim()).length; // count what stop-gate.mjs RUNS
       if (n) gate = `gate:armed(${n})`;
     } catch { /* no/unreadable harness.json => gate:off */ }
     parts.push(gate);

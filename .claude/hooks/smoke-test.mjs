@@ -62,6 +62,18 @@ const base = { session_id: "smoke", cwd: process.cwd(), hook_event_name: "PreToo
 
 console.log("guard.mjs");
 check("denies Read of .env", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env" } })));
+{
+  // Plan-lint (review M6, 2026-08-29; ADR-014): nothing checked the plan's knowledge field —
+  // a planner could skip retrieval and nobody noticed until review. `none — <reason>` passes.
+  const plan = (field) => ({ ...base, tool_name: "Write", tool_input: { file_path: "plans/x-plan.md", content: `---\nticket: t\n---\n# X\n\n## Context\n${field}\n- Read first: a\n` } });
+  check("denies a plan write with no Knowledge to load first line", denies(runHook("guard.mjs", plan(""))));
+  check("denies a plan write whose Knowledge to load first is empty", denies(runHook("guard.mjs", plan("- Knowledge to load first:   "))));
+  check("allows a plan write with `none — <reason>`", !denies(runHook("guard.mjs", plan("- Knowledge to load first: LOCAL: none — no knowledge-base/ · SHARED: wiki/stack/x/"))));
+  check("plan-lint ignores non-plan files under plans/", !denies(runHook("guard.mjs", { ...base, tool_name: "Write", tool_input: { file_path: "plans/notes.md", content: "no field here" } })));
+  check("plan-lint ignores Edit (plans are written whole)", !denies(runHook("guard.mjs", { ...base, tool_name: "Edit", tool_input: { file_path: "plans/x-plan.md", old_string: "a", new_string: "b" } })));
+  const reasonOf = (r) => { try { return JSON.parse(r.out).hookSpecificOutput.permissionDecisionReason || ""; } catch { return ""; } };
+  check("plan-lint reason names the field and the template", /Knowledge to load first/.test(reasonOf(runHook("guard.mjs", plan("")))) && /plan-template\.md/.test(reasonOf(runHook("guard.mjs", plan("")))));
+}
 check("denies Read of .env.production", denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.production" } })));
 check("allows Read of .env.example", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/.env.example" } })));
 check("allows Read of normal file", !denies(runHook("guard.mjs", { ...base, tool_name: "Read", tool_input: { file_path: "/x/src/app.ts" } })));
@@ -119,7 +131,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("allows message mentioning main", !denies(runHook("guard.mjs", { ...base, tool_name: "Bash", tool_input: { command: "echo 'main topic' > notes.txt" } })));
 }
 {
-  // Evolve->push gate (default on): armed + no marker => deny push; marker fresh => allow.
+  // Evolve->push gate (on in the shipped config): armed + no marker => deny push; marker fresh => allow.
   const tmp = mkdtempSync(join(tmpdir(), "phe-pushgate-"));
   execFileSync("git", ["init", "-q", "-b", "feat/x", tmp]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "x"]);
@@ -141,7 +153,7 @@ check("survives malformed input (fail-open)", runHook("guard.mjs", null).code ==
   check("a commit after the evolve marker re-blocks the push (the marker must be written last)", denies(stale));
   const unarmed = mkdtempSync(join(tmpdir(), "phe-pushgate-off-"));
   execFileSync("git", ["init", "-q", "-b", "feat/y", unarmed]);
-  check("push gate off by default (no config)", !denies(runHook("guard.mjs", { ...base, cwd: unarmed, tool_name: "Bash", tool_input: { command: "git push" } })));
+  check("push gate off when the key is absent (the shipped config sets it)", !denies(runHook("guard.mjs", { ...base, cwd: unarmed, tool_name: "Bash", tool_input: { command: "git push" } })));
 }
 {
   // Tracking-only commits are allowed on protected branches; mixed commits stay blocked.
@@ -412,18 +424,24 @@ check("survives malformed input (fail-open)", runHook("stop-gate.mjs", null).cod
 // that rewrites the command to "go green" would trip it for the wrong reason.
 const FLAG_CMD = 'node -e "process.exit(require(\'fs\').existsSync(\'.red\') ? 1 : 0)"';
 const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync(f, ""); else if (existsSync(f)) unlinkSync(f); };
-{
-  // Tamper check (opt-in, stopGateTamperPaths): a RED gate snapshots gated files
-  // ONCE; a later GREEN that required editing them is refused as dishonest —
-  // upstream escape (coleam00/skills): handed a failing `2+2==5` test, the agent
-  // rewrote the test and finished. An honest green clears the snapshot.
-  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-tamper-"));
+// A git repo holding one COMMITTED gated test — the setup every file-tamper fixture starts from
+// (the layer hashes `git ls-files`, so an uncommitted file is invisible to it).
+const gatedRepo = (prefix) => {
+  const tmp = mkdtempSync(join(tmpdir(), prefix));
   execFileSync("git", ["init", "-q", "-b", "main", tmp]);
   mkdirSync(join(tmp, ".claude"), { recursive: true });
   mkdirSync(join(tmp, "tests"), { recursive: true });
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n");
   execFileSync("git", ["-C", tmp, "add", "tests/a.test.js"]);
   execFileSync("git", ["-C", tmp, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "tests"]);
+  return tmp;
+};
+{
+  // Tamper check (opt-in, stopGateTamperPaths): a RED gate snapshots gated files
+  // ONCE; a later GREEN that required editing them is refused as dishonest —
+  // upstream escape (coleam00/skills): handed a failing `2+2==5` test, the agent
+  // rewrote the test and finished. An honest green clears the snapshot.
+  const tmp = gatedRepo("phe-gate-tamper-");
   const cfg = JSON.stringify({ stopGate: [FLAG_CMD], stopGateTamperPaths: ["tests/"] });
   const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json"); // session_id "smoke"
 
@@ -442,6 +460,24 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 4)\n"); // revert the edit
   const honest = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
   check("honest green passes and clears the snapshot", honest.code === 0 && honest.out === "" && !existsSync(snapPath));
+}
+{
+  // INCOMPLETE arms the opt-in file-tamper layer too: after a partial gate, rewriting a gated
+  // test and then letting the full gate run "green" is the same escape RED closes.
+  const tmp = gatedRepo("phe-gate-tamper-inc-");
+  const OK0 = 'node -e "process.exit(0)"';
+  const tight = { stopGate: [OK0, FLAG_CMD], stopGateTamperPaths: ["tests/"], stopGateTotalSec: 1, stopGateTimeoutSec: 1 };
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify(tight)); setRed(tmp, true);
+  const inc = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let incBlocked = false, incReason = ""; try { const o = JSON.parse(inc.out); incBlocked = o.decision === "block"; incReason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
+  const snapPath = join(tmp, ".claude", "state", "tamper-smoke.json");
+  check("INCOMPLETE gate writes the tamper snapshot", incBlocked && incReason.includes("INCOMPLETE") && existsSync(snapPath));
+  writeFileSync(join(tmp, "tests", "a.test.js"), "assert(2 + 2 === 5)\n"); // the dishonest edit
+  writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({ stopGate: [OK0, FLAG_CMD], stopGateTamperPaths: ["tests/"] })); // full budget again
+  setRed(tmp, false); // suite "goes green"
+  const after = runHook("stop-gate.mjs", { ...base, hook_event_name: "Stop", stop_hook_active: false, cwd: tmp });
+  let aBlocked = false, aReason = ""; try { const o = JSON.parse(after.out); aBlocked = o.decision === "block"; aReason = o.reason || ""; } catch { /* non-JSON stdout: not a block */ }
+  check("green after a gated edit following INCOMPLETE blocks and names the file", aBlocked && aReason.includes("tests/a.test.js"));
 }
 {
   // Tamper check, deletion escape: REMOVING the gated file must block the same
@@ -498,7 +534,7 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   const emptied = stop(t1);
   check("emptied gate after RED blocks", blocked(emptied) && reason(emptied).includes("shrank"));
   const lastGate = (t) => { try { return JSON.parse(readFileSync(join(t, ".claude", "state", "last-gate.json"), "utf8")); } catch { return null; } };
-  check("refused GREEN persists a TAMPER verdict (statusline never stale)", lastGate(t1)?.verdict === "TAMPER" && (lastGate(t1)?.removed || []).includes(FLAG_CMD));
+  check("refused GREEN persists a TAMPER verdict (pre-compact snapshot never stale)", lastGate(t1)?.verdict === "TAMPER" && (lastGate(t1)?.removed || []).includes(FLAG_CMD));
   writeFileSync(join(t1, ".claude", "harness.json"), cfg([FLAG_CMD])); setRed(t1, false);
   const honest = stop(t1);
   check("same gate going green passes and clears the gate snapshot", honest.code === 0 && honest.out === "" && !existsSync(snap1));
@@ -535,7 +571,7 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   // "finish" — the same escape the RED snapshot closes. The first check must SUCCEED inside
   // the budget: a command killed by the timeout is a failure (RED), not a skip; the second
   // is skipped because the loop needs a full second of budget left to start a command.
-  const SLOW = 'node -e "setTimeout(()=>{}, 200)"';
+  const SLOW = OK; // any elapsed time under a 1 s budget skips the second command — no sleep needed (fix-wave re-review, 2026-09-05)
   const TIGHT = { stopGateTotalSec: 1, stopGateTimeoutSec: 1 };
   const cfgT = (cmds, extra = {}) => JSON.stringify({ stopGate: cmds, ...extra });
   const t5 = mk(); const snap5 = join(t5, ".claude", "state", "gate-smoke.json");
@@ -549,6 +585,21 @@ const setRed = (dir, on) => { const f = join(dir, ".red"); if (on) writeFileSync
   const green5 = stop(t5);
   check("INCOMPLETE arms the gate snapshot (message never says trim); shrinking it after blocks; the full gate going green clears it",
     armed && caught && green5.code === 0 && green5.out === "" && !existsSync(snap5));
+
+  // A non-string entry (a typo'd JSON number, null) used to reach execSync, throw, and pin the
+  // gate RED on every turn end for the whole session. Entries are filtered to non-empty strings.
+  const t6 = mk(); writeFileSync(join(t6, ".claude", "harness.json"), JSON.stringify({ stopGate: [42, null, OK] }));
+  const mixed = stop(t6);
+  check("non-string stopGate entries are ignored, the string entry still runs", mixed.code === 0 && mixed.out === "");
+  writeFileSync(join(t6, ".claude", "harness.json"), JSON.stringify({ stopGate: [42] }));
+  const onlyBad = stop(t6);
+  check("a gate with no string entry is disarmed, never RED", onlyBad.code === 0 && onlyBad.out === "");
+
+  // The INCOMPLETE message must not invite the one edit the exact-string check refuses.
+  const t7 = mk(); writeFileSync(join(t7, ".claude", "harness.json"), cfgT([OK, FLAG_CMD], TIGHT)); setRed(t7, true);
+  const inc7 = stop(t7);
+  check("INCOMPLETE reason never says faster and says an edited command counts as removed",
+    blocked(inc7) && !/faster/i.test(reason(inc7)) && reason(inc7).includes("counts as removing it"));
 }
 
 console.log("post-edit.mjs");
@@ -654,12 +705,15 @@ console.log("session-start.mjs");
   // quiet rather than wrong.
   const tmp = mkdtempSync(join(tmpdir(), "phe-knowledge-"));
   mkdirSync(join(tmp, ".claude"), { recursive: true });
+  // The local dir must EXIST for the RETRIEVE form: the line is now branch-dependent, and
+  // without this the whole block would silently assert the ABSENT branch instead.
+  mkdirSync(join(tmp, "knowledge-base"), { recursive: true });
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
     knowledge: { local: "knowledge-base", shared: { mode: "existing", path: "/tmp/x-vault" }, migratedAt: null },
   }));
   const both = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let bothCtx = ""; try { bothCtx = JSON.parse(both.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: bothCtx stays "" and the checks fail */ }
-  check("knowledge configured -> local KB line present", both.code === 0 && bothCtx.includes("Knowledge (local): knowledge-base/"));
+  check("knowledge configured + dir present -> local KB line says RETRIEVE", both.code === 0 && bothCtx.includes("Knowledge (local): knowledge-base/ — RETRIEVE"));
   check("shared store configured -> shared line present", both.code === 0 && bothCtx.includes("Knowledge (shared): /tmp/x-vault"));
 
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({
@@ -687,12 +741,36 @@ console.log("session-start.mjs");
   check("array-valued knowledge -> no knowledge line (agrees with readKnowledgeConfig)",
     arr.code === 0 && arrCtx.includes("Stop gate:") && !arrCtx.includes("Knowledge ("));
 
+  // This repo keeps its knowledge in the vault: the local dir is absent, and the line said
+  // RETRIEVE from a directory that does not exist (M1 review, Task 1 minor).
+  const noKb = mkdtempSync(join(tmpdir(), "phe-nokb-"));
+  mkdirSync(join(noKb, ".claude"), { recursive: true });
+  writeFileSync(join(noKb, ".claude", "harness.json"), JSON.stringify({ knowledge: { local: "knowledge-base" } }));
+  const nk = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: noKb });
+  let nkCtx = ""; try { nkCtx = JSON.parse(nk.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: the check fails */ }
+  check("absent local knowledge dir is reported as ABSENT, not as a store to retrieve from", nkCtx.includes("Knowledge (local): knowledge-base/ is ABSENT") && !nkCtx.includes("knowledge-base/ — RETRIEVE"));
+
   // The "Stop gate:" clause anchors this positively: session-start exits 0 on EVERY path,
   // so a bare `!includes` would also pass for a hook that emitted nothing at all.
   writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify({}));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp });
   let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* no JSON on stdout: offCtx stays "" */ }
   check("no knowledge key -> no knowledge line", off.code === 0 && offCtx.includes("Stop gate:") && !offCtx.includes("Knowledge ("));
+}
+{
+  // The banner counts only the entries the gate will RUN: stop-gate.mjs ignores everything
+  // that is not a non-empty string, so a typo'd number is not an armed check. Announcing it as
+  // armed is the quiet half of that bug — a disarmed gate the session believes is on
+  // (task-1 review, 2026-09-05).
+  const tmp = mkdtempSync(join(tmpdir(), "phe-gate-count-"));
+  mkdirSync(join(tmp, ".claude"), { recursive: true });
+  const ctxOf = (r) => { try { return JSON.parse(r.out).hookSpecificOutput.additionalContext; } catch { return ""; /* no JSON on stdout: the check reports it */ } };
+  const banner = (cfg) => {
+    writeFileSync(join(tmp, ".claude", "harness.json"), JSON.stringify(cfg));
+    return ctxOf(runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup", cwd: tmp }));
+  };
+  check("banner counts only the gate entries that run", banner({ stopGate: [42, 'node -e "process.exit(0)"'] }).includes("Stop gate: 1 check(s) armed"));
+  check("a gate of only non-string entries is announced as not configured", banner({ stopGate: [42] }).includes("Stop gate: not configured"));
 }
 {
   // Uninitialized template: session-start nudges toward /harness-init.
@@ -765,10 +843,19 @@ console.log("session-start.mjs");
   // runs on, with no error. The plain CLAUDE_CODE_SUBAGENT_MODEL is only a default since 2.1.251.
   const on = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "opus" });
   let ctx = ""; try { ctx = JSON.parse(on.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: ctx stays "" and the check fails */ }
-  check("warns when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set", on.code === 0 && ctx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") && ctx.includes("deep"));
+  check("warns when CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set", on.code === 0 && ctx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE") && ctx.includes("`deep` pin (/review-branch) is dead this session"));
   const off = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "" });
   let offCtx = ""; try { offCtx = JSON.parse(off.out).hookSpecificOutput.additionalContext; } catch { /* empty output is fine here */ }
   check("no FORCE warning when the variable is unset", off.code === 0 && !offCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
+  // env-vars.md (raw, 2026-09-05): the row says "Set to `1`", and the variable is NOT in the
+  // page's list of set-at-all variables (where `0` would mean on) — so `0` and `false` are off.
+  const zero = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "startup" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "0" });
+  let zeroCtx = ""; try { zeroCtx = JSON.parse(zero.out).hookSpecificOutput.additionalContext; } catch { /* empty output is fine here */ }
+  check("FORCE=0 does not warn", zero.code === 0 && !zeroCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
+  // A compaction must not hide the warning: the compact branch used to emit() before the check ran.
+  const cmp = runHook("session-start.mjs", { ...base, hook_event_name: "SessionStart", source: "compact" }, { CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
+  let cmpCtx = ""; try { cmpCtx = JSON.parse(cmp.out).hookSpecificOutput.additionalContext; } catch { /* no JSON: the check fails */ }
+  check("FORCE=1 still warns after a compaction", cmp.code === 0 && cmpCtx.includes("Compaction dropped") && cmpCtx.includes("CLAUDE_CODE_SUBAGENT_MODEL_FORCE"));
 }
 check("survives malformed input", runHook("session-start.mjs", null).code === 0);
 
@@ -915,7 +1002,25 @@ console.log("statusline.mjs");
   check("statusline shows percent and absolute tokens", out.includes("ctx 43% 86k/200k"));
   const bare = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12 } });
   let out2 = ""; try { out2 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bare, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out2 = `${e.stdout || ""}`; }
-  check("statusline degrades to percent only when token fields are absent", out2.includes("ctx 12%") && !out2.includes("/"));
+  check("statusline degrades to percent only when token fields are absent", out2.split(" · ").includes("ctx 12%")); // exact token: rejects a slashed branch name AND a NaNk/NaNk regression
+  const big = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: 12.3, total_input_tokens: 123456, context_window_size: 1000000 } });
+  let out3 = ""; try { out3 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: big, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out3 = `${e.stdout || ""}`; }
+  check("statusline renders a 1M window as 1.0M, never 1000k", out3.includes("ctx 12% 123k/1.0M"));
+  const bad = JSON.stringify({ model: { display_name: "M" }, workspace: { current_dir: tmpdir() }, context_window: { used_percentage: "lots", total_input_tokens: "x" } });
+  let out4 = ""; try { out4 = execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: bad, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { out4 = `${e.stdout || ""}`; }
+  check("statusline omits ctx on a malformed context_window and still prints the model", !out4.includes("ctx") && out4.includes("M"));
+
+  // gate:armed(n) counts the same entries stop-gate.mjs runs — the statusline is the other
+  // place a typo'd entry could claim an armed gate that never fires (task-1 review, 2026-09-05).
+  const gateDir = mkdtempSync(join(tmpdir(), "phe-statusline-gate-"));
+  mkdirSync(join(gateDir, ".claude"), { recursive: true });
+  const gateLine = (cfg) => {
+    writeFileSync(join(gateDir, ".claude", "harness.json"), JSON.stringify(cfg));
+    const inp = JSON.stringify({ model: { display_name: "M" }, workspace: { project_dir: gateDir, current_dir: gateDir } });
+    try { return execFileSync("node", [join(HOOKS, "..", "statusline.mjs")], { input: inp, encoding: "utf8", timeout: 10000 }).trim(); } catch (e) { return `${e.stdout || ""}`; }
+  };
+  check("statusline counts only the gate entries that run", gateLine({ stopGate: [42, 'node -e "process.exit(0)"'] }).includes("gate:armed(1)"));
+  check("statusline shows gate:off when no entry would run", gateLine({ stopGate: [42] }).includes("gate:off"));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

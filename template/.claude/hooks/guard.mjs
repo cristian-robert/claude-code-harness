@@ -189,6 +189,16 @@ async function main() {
     }
   }
 
+  // Plan-lint: a plan written without its knowledge field skipped retrieval, and nothing
+  // checked it until review (review M6, 2026-08-29; ADR-014). Only Write — plans are written
+  // whole by /plan-work. The literal `none — <reason>` per store passes. The value must sit
+  // on the field's own line: a `\s*` tail would swallow the newline and match the next bullet.
+  if (tool === "Write" && typeof input.file_path === "string" && /(^|[\\/])plans[\\/][^\\/]+-plan\.md$/.test(input.file_path)) {
+    if (!/^[ \t]*-?[ \t]*Knowledge to load first:[ \t]*\S/m.test(String(input.content || ""))) {
+      deny(`Plan write blocked: '${input.file_path}' has no non-empty "Knowledge to load first:" line. /plan-work records BOTH stores (LOCAL knowledge-base/…, SHARED wiki/ or agent-kb/) or the literal \`none — <reason>\` per store — see .claude/references/plan-template.md.`);
+    }
+  }
+
   // The knowledge boundary (two stores, one rule). Project-scoped knowledge lives in THIS
   // repo's knowledge-base/; the shared vault keeps evergreen wiki/ + agent-kb/ only.
   // Reads are untouched — this blocks the two WRITES that would re-fork the truth.
@@ -308,7 +318,7 @@ async function main() {
           deny(`git ${gm.isPush ? "push" : "commit"} on '${branch}' is blocked (code never lands on ${branch} directly). Create a feature branch first ({type}/{description}). Exception: commits staging ONLY backlog/ or sprints/ files (tracking state) are allowed.`);
         }
       }
-      // Evolve->push gate (harness.json: "requireEvolveBeforePush", default true; false opts out):
+      // Evolve->push gate (harness.json requireEvolveBeforePush — the shipped config sets true; an absent key is OFF, the hook needs === true):
       // push is denied until /evolve has run since the last commit — the marker
       // .claude/state/.evolve-ran must be newer than HEAD's commit time.
       if (gm.isPush) {

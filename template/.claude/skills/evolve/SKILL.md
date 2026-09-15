@@ -18,6 +18,7 @@ In scrum mode this IS the retrospective (dispatched by `/sprint close`).
 - Accepted/rejected backlog items' `## Log` lines since the last evolve (Dev/QA/review/acceptance evidence)
 - Surprising discoveries: undocumented gotchas, assumptions that proved wrong
 - Structural changes this session — new/removed modules, routes, DB tables, or endpoints — from the plan's affected-surfaces list and the diff since the base branch (new files under module/route dirs, migrations, new endpoints).
+- New MEMORY.md lines since the last run — `node .claude/tooling/memory-delta.mjs diff`: a `feedback` entry saved to machine-local memory is a rule the team never got (promote it here, delete it from memory in step 6).
 
 ## 2. Choose a destination — decision ladder, first match wins
 
@@ -58,7 +59,7 @@ Scan AGENTS.md + unscoped `.claude/rules/*.md` for lines no longer earning their
 - Guidance duplicated elsewhere (a hook already enforces it; the code itself says it)
 - Rules now FALSE against this branch's diff — a moved path, a renamed module, a retired command: a wrong rule misleads every future session; propose the minimal one-line fix, never a catalog of the new layout
 
-Measure, don't estimate: run `node <PHE>/tools/context-ledger.mjs` (or the project's copy) and include the delta in the proposal list.
+Measure, don't estimate: run `node <PHE>/tools/context-ledger.mjs` (or the project's copy) and include the delta; ask the operator for `/skill-doctor` (unused skills and their cost; headless: `claude -p "/skill-doctor"`, needs ≥2.1.252), `/doctor` (proposes CLAUDE.md trims) and `/context` (what actually loaded) — interactive commands this skill cannot run; absent → write `not measured` for that input, never a guess.
 
 Propose removals alongside additions. After a model upgrade, propose re-testing which scaffolding
 is still load-bearing (ablation: remove one component at a time, observe). Harnesses move; they
@@ -88,7 +89,7 @@ Autonomous mode (per `.claude/references/autonomous-mode.md`): apply all, but ap
 - Knowledge writes follow the Index Law: update that folder's `_index.md` in the same change — `knowledge-base/` locally, and the shared store when a promotion MOVED something there.
 - Any hook changed → run `node .claude/hooks/smoke-test.mjs` and show its real output.
   A hook change without a green smoke test is not applied.
-- LAST — after the `docs(kb):` commit and after committing every other change this run made on the feature branch (rule/AGENTS.md edits, hook fixes: `chore(evolve): <what>`), even on "none": write `.claude/state/.evolve-ran` (timestamp). `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, default true), so any commit made after the marker re-blocks the push until `/evolve` runs again. `.claude/state/` is gitignored by adopters.
+- LAST — after the `docs(kb):` commit and after committing every other change this run made on the feature branch (rule/AGENTS.md edits, hook fixes: `chore(evolve): <what>`), even on "none": write `.claude/state/.evolve-ran` (timestamp), then `node .claude/tooling/memory-delta.mjs snapshot` so the next run diffs against this one. `guard.mjs` denies `git push` until this marker is newer than HEAD (`harness.json` `requireEvolveBeforePush`, on in the shipped config), so any commit made after the marker re-blocks the push until `/evolve` runs again. `.claude/state/` is gitignored by adopters.
 
 ## 7. Output contract
 

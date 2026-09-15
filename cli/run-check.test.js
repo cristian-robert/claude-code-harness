@@ -75,7 +75,7 @@ test('a child killed by a signal is reported as a signal death, not a timeout', 
 });
 
 test('output written before an outer kill survives on disk', () => {
-  const child = spawn('node', [SCRIPT, 'outer', '--', 'node -e "console.log(\'early\'); setTimeout(() => {}, 10000)"'], { cwd: TMP, stdio: 'ignore' });
+  const child = spawn('node', [SCRIPT, 'outer', '--', 'node -e "console.log(\'early\'); setTimeout(() => {}, 2600)"'], { cwd: TMP, stdio: 'ignore' });
   sleep(2000);
   child.kill('SIGKILL');
   sleep(500);
@@ -87,6 +87,76 @@ test('missing -- separator is a usage error, exit 64', () => {
   const r = run(['nolabel']);
   assert.strictEqual(r.code, 64);
   assert.ok(/usage/.test(r.out));
+});
+
+test('a leading flag where the label should be is a usage error, exit 64', () => {
+  const r = run(['--timeout-sec', '5', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.code, 64);
+  assert.ok(/usage/.test(r.out));
+});
+
+test('a non-numeric or zero --tail / --timeout-sec fails closed with exit 64', () => {
+  assert.strictEqual(run(['t', '--tail', 'abc', '--', 'node -e "process.exit(0)"']).code, 64);
+  assert.strictEqual(run(['t', '--tail', '0', '--', 'node -e "process.exit(0)"']).code, 64);
+  assert.strictEqual(run(['t', '--timeout-sec', '-3', '--', 'node -e "process.exit(0)"']).code, 64);
+});
+
+test('an unknown flag before -- is a usage error, exit 64, and nothing runs', () => {
+  const r = run(['typo', '--tial', '5', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.code, 64);
+  assert.ok(/usage/.test(r.out), r.out);
+  assert.ok(!fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'typo.log')), 'a misread argv must not run the command or write a log');
+});
+
+test('a stray positional word before -- is a usage error, exit 64, and nothing runs', () => {
+  const r = run(['stray', '--tail', '5', 'oops', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.code, 64);
+  assert.ok(/usage/.test(r.out), r.out);
+  assert.ok(!fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'stray.log')), 'a misread argv must not run the command or write a log');
+});
+
+test('words after -- are re-quoted one by one, so an argument with a space survives', () => {
+  const r = run(['words', '--', 'node', '-e', 'console.log(process.argv.length + ":" + process.argv[2])', 'x', 'y z']);
+  assert.strictEqual(r.code, 0);
+  assert.ok(r.out.includes('3:y z'), 'expected the two extra argv words intact, got: ' + r.out);
+});
+
+test('a label that sanitizes to nothing falls back to check.log', () => {
+  // NOT a leading-dash label: those are a usage error now (see the test above), so the
+  // fallback is exercised with a label whose every character sanitizes away.
+  const r = run(['...', '--', 'node -e "console.log(1)"']);
+  assert.ok(/log=\.claude\/state\/checks\/check\.log/.test(r.out), r.out);
+});
+
+test('a command with no output prints a 0-lines header and no tail', () => {
+  const r = run(['quiet', '--', 'node -e "process.exit(0)"']);
+  assert.strictEqual(r.out.trimEnd(), 'exit=0 · log=.claude/state/checks/quiet.log · 0 lines');
+});
+
+test('the tail of a log larger than the read window is still the last N lines', () => {
+  const r = run(['big', '--tail', '3', '--', 'node -e "for (let i = 1; i <= 3000; i++) console.log(\'row \' + i + \' \' + \'x\'.repeat(90))"']);
+  const lines = r.out.trimEnd().split('\n');
+  assert.ok(/· 3000 lines$/.test(lines[0]), lines[0]);
+  assert.strictEqual(lines.length, 4);
+  assert.ok(lines[3].startsWith('row 3000 '), lines[3]);
+});
+
+test('a run from a subdirectory writes the log at the repo root', () => {
+  execFileSync('git', ['init', '-q', TMP]);
+  const sub = path.join(TMP, 'sub'); fs.mkdirSync(sub, { recursive: true });
+  const r = (() => { try { return { code: 0, out: execFileSync('node', [SCRIPT, 'deep', '--', 'node -e "console.log(9)"'], { cwd: sub, encoding: 'utf-8', stdio: ['ignore', 'pipe', 'pipe'] }) }; } catch (e) { return { code: e.status, out: (e.stdout || '') + (e.stderr || '') }; } })();
+  assert.strictEqual(r.code, 0);
+  assert.ok(fs.existsSync(path.join(TMP, '.claude', 'state', 'checks', 'deep.log')), 'log must be at the git root');
+  assert.ok(!fs.existsSync(path.join(sub, '.claude')), 'no second .claude/state under the subdirectory');
+  assert.ok(/log=\.\.\/\.claude\/state\/checks\/deep\.log/.test(r.out), 'header path is relative to the cwd, got: ' + r.out);
+});
+
+test('old logs are pruned: the newest 20 stay', () => {
+  for (let i = 1; i <= 22; i++) { run(['prune-' + i, '--', 'node -e "process.exit(0)"']); sleep(15); }
+  const dir = path.join(TMP, '.claude', 'state', 'checks');
+  const logs = fs.readdirSync(dir).filter((f) => f.endsWith('.log'));
+  assert.strictEqual(logs.length, 20, 'kept ' + logs.length);
+  assert.ok(logs.includes('prune-22.log') && !logs.includes('prune-1.log'), 'newest kept, oldest gone');
 });
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');

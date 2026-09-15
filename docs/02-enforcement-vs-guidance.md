@@ -16,6 +16,7 @@ shapes behavior; enforcement bounds it. Pick the mechanism by consequence:
 | Workflow with steps | Skill |
 | Place-specific | Subdirectory CLAUDE.md (loads on file access there) |
 | File-type-specific | `paths:`-scoped rule |
+| A retired or renamed key, skill, or path (a migration) | `cli/` code with a test (`RETIRED_KEYS`, `RENAMED_SKILLS`), applied on `init`/`update` — never a skill body, which no headless check can verify (ADR-021, one step wider) |
 
 ## The PHE enforcement set
 
@@ -24,7 +25,7 @@ Wiring: `template/.claude/settings.json`. Scripts: `template/.claude/hooks/`.
 | Layer | Event · matcher | Does | Mode | Traces to |
 |---|---|---|---|---|
 | `permissions.deny` | — | Denies `Read(./.env)`, `Read(./.env.*)`, `Read(./secrets/**)`, `Read(**/*.pem)` | Blocking | Agent read `.env`, echoed keys into a transcript |
-| `guard.mjs` | PreToolUse · `Bash\|Read\|Edit\|Write\|NotebookEdit\|Glob\|Grep` | Denies secret-file access (incl. Bash indirection), recursive deletes (`rm -rf`, `find -delete`, `git clean -d`), commit/push on `main`/`master` (sole exception: tracking-only commits staging just `backlog/`/`sprints/`) + evolve→push gate (default on: a push needs a `/evolve` newer than HEAD) | Blocking — JSON deny, exit 0 | Same secrets incident; deleted working tree; direct commit to main |
+| `guard.mjs` | PreToolUse · `Bash\|Read\|Edit\|Write\|NotebookEdit\|Glob\|Grep` | Denies secret-file access (incl. Bash indirection), recursive deletes (`rm -rf`, `find -delete`, `git clean -d`), commit/push on `main`/`master` (sole exception: tracking-only commits staging just `backlog/`/`sprints/`) + evolve→push gate (on in the shipped config: a push needs a `/evolve` newer than HEAD) + plan-lint (a `Write` of `plans/*-plan.md` with no non-empty `Knowledge to load first:` line is denied; `none — <reason>` passes) | Blocking — JSON deny, exit 0 | Same secrets incident; deleted working tree; direct commit to main |
 | `post-edit.mjs` | PostToolUse · `Edit\|Write\|NotebookEdit` | Cheapest available checker for the touched file type; an edit under `.claude/hooks/` additionally runs `smoke-test.mjs` (advisory-but-automatic — the "hooks change → smoke test" rule as mechanism, not prose); findings return via `additionalContext` | Advisory — always exit 0 | Lint drift surfacing only at gate time; hook edits shipped untested despite the prose rule |
 | `stop-gate.mjs` | Stop · (no matcher) | Runs `stopGate` commands from `.claude/harness.json`; blocks turn end until green; honors `stop_hook_active`; persists the verdict to `.claude/state/last-gate.json` for the pre-compact snapshot; opt-in tamper check (`stopGateTamperPaths`) refuses a green that required editing or deleting gated files; always-on gate-config check refuses a GREEN reached by changing or removing a `stopGate` command, or by deleting `harness.json`, after a RED or INCOMPLETE in the same session | Blocking — `decision: "block"` | "Done" claimed with failing tests; upstream escape: a failing test rewritten to force green (docs/99 · 18) |
 | `session-start.mjs` | SessionStart | Injects branch/dirty state, latest plan, gate config; on `source=compact` re-injects the compact snapshot + a Tier-1-loss warning | Advisory context | Every fresh session re-explored repo state |

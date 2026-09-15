@@ -103,9 +103,11 @@ function agentMdToToml(mdText, fallbackName, models, onWarn) {
     // so two agents pinning the tier print one line). A role the user's map DOES have is never
     // overridden. Two cases stay hard errors, unchanged: a tier the package does not know
     // either (a typo), and a map with no codex half at all (a deleted half is a different
-    // problem from a new role) — resolveModel throws for both.
+    // problem from a new role) — resolveModel throws for both. `in`, not falsiness: a role that
+    // is present but blank is malformed and must reach resolveModel's throw, not the pre-release
+    // fallback.
     var codexHalf = resolved.codex;
-    if (codexHalf && typeof codexHalf === 'object' && !codexHalf[tier] && DEFAULT_MODELS.codex[tier]) {
+    if (codexHalf && typeof codexHalf === 'object' && !(tier in codexHalf) && DEFAULT_MODELS.codex[tier]) {
       model = DEFAULT_MODELS.codex[tier];
       warn(
         'harness.json models.codex has no "' + tier + '" role — emitting ' + name + '.md (and ' +

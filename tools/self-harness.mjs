@@ -32,6 +32,7 @@ const ADAPTED = ["skills/architecture-map", "skills/debugging-this-repo"];
 const NEVER = new Set(["harness.json", "settings.local.json"]);
 // backupAndCopy's own safety net, not payload — never reported as drift, never swept.
 const BACKUP = /\.backup(-|$)/;
+const ROOT_ONLY_DIRS = new Set(["agent-memory", "state"]); // machine state under root .claude/ that the template never ships
 
 function files(dir, base = dir, out = []) {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
@@ -54,25 +55,19 @@ function drift() {
   return out;
 }
 
-// Top-level directories the template owns. Extras are looked for ONLY under these, so
-// agent-memory/, state/ and settings.local.json at the root are out of scope by construction.
-function templateDirs() {
-  return readdirSync(TEMPLATE, { withFileTypes: true })
-    .filter((e) => e.isDirectory() && !e.isSymbolicLink())
-    .map((e) => e.name);
-}
-
 // Root files the template no longer ships. Root .claude/ is GENERATED: a rule or skill
 // retired from the payload must stop loading here, or every future session keeps reading it.
 function extras() {
   const shipped = new Set(files(TEMPLATE));
   const out = [];
-  for (const d of templateDirs()) {
-    const rootDir = join(DEST, d);
-    if (!existsSync(rootDir)) continue;
-    for (const f of files(rootDir, DEST)) {
+  if (!existsSync(DEST)) return out; // never synced — drift() already names every payload file as missing
+  // Every top-level dir under the root .claude/ is swept — the template's own dirs for files it
+  // stopped shipping, and dirs the template no longer ships AT ALL (a retired top-level dir was
+  // invisible to a sweep that only walked the template's dirs, M1 review). Machine state is exempt.
+  for (const e of readdirSync(DEST, { withFileTypes: true })) {
+    if (!e.isDirectory() || e.isSymbolicLink() || ROOT_ONLY_DIRS.has(e.name)) continue;
+    for (const f of files(join(DEST, e.name), DEST)) {
       if (shipped.has(f) || BACKUP.test(f)) continue;
-      // The root OWNS an adapted skill's content — but only while the template still ships it.
       if (ADAPTED.some((a) => f.startsWith(a + "/") && existsSync(join(TEMPLATE, a)))) continue;
       out.push(f);
     }

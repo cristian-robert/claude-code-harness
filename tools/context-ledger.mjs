@@ -1,20 +1,23 @@
 #!/usr/bin/env node
 // Context ledger: measures the ALWAYS-LOADED context tax of a harnessed project.
-//   node tools/context-ledger.mjs [projectDir] [--budget N]     (default budget: 2000 est. tokens)
+//   node tools/context-ledger.mjs [projectDir] [--budget N] [--docs <dir>]   (default budget: 2000 est. tokens)
 // Counts what Claude Code loads into EVERY session: root CLAUDE.md, .claude/CLAUDE.md,
 // CLAUDE.local.md, every .claude/rules/*.md WITHOUT a `paths:` frontmatter key (unscoped
 // rules always load — and `globs:` is the wrong key, silently ignored, so those load too),
 // plus each skill's SKILL.md frontmatter description (the only skill part that always
 // loads — EXCEPT skills with disable-model-invocation: true, which cost nothing).
+// --docs <dir>: every *.md in <dir> is listed with its line count; >130 is a hard violation.
+// <dir> is relative to the CWD, like [projectDir] — the gate measures template/ and budgets docs/.
 // Exit 0 = OK/WARN, 1 = OVER budget.
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 
-let budget = 2000, dir = process.cwd();
+let budget = 2000, dir = process.cwd(), docsDir = null;
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i++) {
   if (args[i] === "--budget") budget = Number(args[++i]) || 2000;
   else if (args[i].startsWith("--budget=")) budget = Number(args[i].slice(9)) || 2000;
+  else if (args[i] === "--docs") docsDir = args[++i] || "docs";
   else dir = resolve(args[i]);
 }
 
@@ -71,6 +74,8 @@ if (existsSync(rulesDir)) {
   }
 }
 
+const SKILL_TOKENS = [4000, 5000]; // soft / hard: the platform re-attaches ≤5,000 tokens per skill after compaction (skills.md, raw, 2026-09-05)
+const skillRows = [];
 const skillsDir = join(dir, ".claude", "skills");
 if (existsSync(skillsDir)) {
   for (const d of readdirSync(skillsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -83,6 +88,10 @@ if (existsSync(skillsDir)) {
     const fmEnd = text.startsWith("---") ? text.indexOf("\n---", 3) : -1;
     const bodyStart = fmEnd >= 0 ? text.indexOf("\n", fmEnd + 1) + 1 : 0;
     const bodyLines = text.slice(bodyStart).replace(/\n+$/, "").split("\n").length;
+    const bodyTokens = est(text.slice(bodyStart));
+    skillRows.push({ file: `.claude/skills/${d.name}/SKILL.md`, lines: bodyLines, tokens: bodyTokens });
+    if (bodyTokens > SKILL_TOKENS[1]) hardViolations.push(`.claude/skills/${d.name}/SKILL.md: body ${bodyTokens} est. tokens > hard cap ${SKILL_TOKENS[1]} — cut after compaction; relocate detail to references/`);
+    else if (bodyTokens > SKILL_TOKENS[0]) warns.push(`.claude/skills/${d.name}/SKILL.md: body ${bodyTokens} est. tokens > soft cap ${SKILL_TOKENS[0]}.`);
     if (bodyLines > 120) hardViolations.push(`.claude/skills/${d.name}/SKILL.md: body ${bodyLines} lines > hard cap 120 — convert to a phase-table router`);
     else if (bodyLines > 100) warns.push(`.claude/skills/${d.name}/SKILL.md: body ${bodyLines} lines > soft cap 100 — trim.`);
     // disable-model-invocation: true removes the description from context
@@ -106,6 +115,28 @@ for (const r of rows) console.log(`${r.file.padEnd(w)}  ${String(r.lines).padSta
 if (!rows.length) console.log("(nothing always-loaded found — is this a harnessed project?)");
 console.log("-".repeat(w + 16));
 console.log(`${"TOTAL".padEnd(w)}  ${" ".repeat(5)}  ${String(total).padStart(7)}`);
+
+if (skillRows.length) {
+  const sw = Math.max(5, ...skillRows.map((r) => r.file.length));
+  console.log(`\nSkill bodies — loaded on invocation; re-attached after compaction at ≤${SKILL_TOKENS[1].toLocaleString("en-US")} tokens each (not in TOTAL)\n`);
+  console.log(`${"file".padEnd(sw)}  ${"lines".padStart(5)}  ${"est.tok".padStart(7)}`);
+  for (const r of skillRows) console.log(`${r.file.padEnd(sw)}  ${String(r.lines).padStart(5)}  ${String(r.tokens).padStart(7)}`);
+}
+if (docsDir) {
+  const DOC_LINES = 130; // AGENTS.md "docs ≤130" — measured here so the rule stops being decorative
+  const abs = resolve(docsDir); // cwd-relative, exactly like the positional project dir
+  if (!existsSync(abs)) hardViolations.push(`${docsDir}/: directory not found — a docs budget nobody can measure is not a budget`);
+  else {
+    const docs = readdirSync(abs).filter((n) => n.endsWith(".md")).sort();
+    const dw = Math.max(5, ...docs.map((n) => `${docsDir}/${n}`.length));
+    console.log(`\nDocs — ≤${DOC_LINES} lines each (not in TOTAL)\n`);
+    for (const n of docs) {
+      const lines = (read(join(abs, n)) ?? "").replace(/\n+$/, "").split("\n").length;
+      console.log(`${`${docsDir}/${n}`.padEnd(dw)}  ${String(lines).padStart(5)}`);
+      if (lines > DOC_LINES) hardViolations.push(`${docsDir}/${n}: ${lines} lines > ${DOC_LINES}`);
+    }
+  }
+}
 
 for (const msg of warns) console.log(`\n!! WARN ${msg}`);
 

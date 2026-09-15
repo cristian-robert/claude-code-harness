@@ -302,6 +302,11 @@ test('harness-init names an npx package + subcommand the CLI actually provides',
     packs('tools/context-ledger.mjs'),
     'tools/context-ledger.mjs is not covered by package.json files[]: ' + files.join(', ')
   );
+
+  // The mirror of the line above: self-harness syncs template/.claude -> THIS repo's root
+  // .claude/ and is framework-only. Shipping it hands adopters a tool that would overwrite
+  // their .claude/ from a template/ their install does not have.
+  assert.ok(!packs('tools/self-harness.mjs'), 'tools/self-harness.mjs is framework-only (root sync) and must not ship in the tarball');
 });
 
 // The placeholder gate. The pattern must be a GRAMMAR, not an enumeration: the shipped

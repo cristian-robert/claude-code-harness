@@ -32,8 +32,9 @@ Every brief has four elements — objective · output format + size cap · tool 
 
 ## Answers to the user
 
-- Never claim done/fixed/passing without the command and its real output. Applies to subagent reports too — re-run, don't relay.
+- Never claim done/fixed/passing without the command and its real output — output from the CONSUMER of the change (the hook fed its stdin JSON, the CLI, the test that reads the config), never a read-back of the file that declares it. Applies to subagent reports too — re-run, don't relay. (traces to: 2026-09-05 — a config read back as evidence for an autonomous-mode fix)
 - Concise by default: outcome first, each fact once, no narration of your own process or of paths not taken. Concise is NOT lossy — every decision, result, evidence line, and open question stays in; the walkthrough lives in the artifact (plan/report) and expands only when the user asks for detail. (traces to: 2026-09-05, a ~40-line fix recap — the operator asked for the short form)
+- Work that lands ends with the decisions taken without asking — each with what it costs if wrong — or says there were none. (traces to: 2026-09-05 — a version bump and a branch commit chosen unasked, mentioned in passing at the end)
 
 ## Memory
 

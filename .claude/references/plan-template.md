@@ -20,8 +20,8 @@ tier: deep                # implementer hint: `deep` (hard logic/architecture, d
 ## Context
 <!-- The PRP "curated codebase intelligence" — everything /implement needs, nothing more. -->
 - Knowledge to load first: <LOCAL: knowledge-base/architecture.md#Boundaries, knowledge-base/decisions.md · SHARED: wiki/stack/<tool>/…> # BOTH stores, every time. A store with nothing relevant gets the literal `none — <reason>`; an empty field is a bug. /implement reads these BEFORE Task 1 — they were in the planner's context and died at /clear
-- Read first: <file:line> — <why>
-- Pattern to follow: <file> — <what it demonstrates>
+- Read first: `<path>[:line]` · "<phrase that exists verbatim in that file>" — <why>   # the phrase is the anchor; the line is a hint. Same form for Pattern to follow. Checked by .claude/tooling/plan-anchors.mjs
+- Pattern to follow: `path[:N]` · "phrase that exists verbatim in that file" — <what it demonstrates>
 - Library versions: <name@version, pinned from lockfile>
 
 ## Out of scope
@@ -56,3 +56,4 @@ tier: deep                # implementer hint: `deep` (hard logic/architecture, d
 - Wave is opt-in and provable: tasks share a wave ONLY if their Files lists are pairwise disjoint — the planner decides once, `/implement` re-checks the intersection mechanically before dispatching.
 - A task that RETIRES or RENAMES a config key, role, or vocabulary term carries a repo-wide **enumeration grep** in its `Validate:` command — never an enumerated file list, which always misses one. (traces to: 2026-09-05 — four stale three-role lists survived enumerated briefs across three fix rounds)
 - A task adding a config key, model role, or required field states its **adopter-migration behaviour on `npx perfect-harness-engineering update`**: existing configs are kept verbatim, so a newly-required key throws for every current adopter. (traces to: 2026-09-05 — the `routine` role broke `update` for every existing Codex adopter until `cli/emit-codex.js` gained warn-and-fallback)
+- Every `Read first:` / `Pattern to follow:` entry anchors by `path` · "phrase"; `/plan-work` runs `node .claude/tooling/plan-anchors.mjs plans/<slug>-plan.md` before scoring confidence and `/implement` runs it before Task 1 — a MISS is a logged deviation, never a skipped read. (traces to: 2026-09-05 — two plans cited the autonomous-mode reference by line range; both ranges had moved)
