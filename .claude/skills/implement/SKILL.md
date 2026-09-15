@@ -76,7 +76,7 @@ Write `reports/<slug>-implementation-report.md` (slug from the plan filename), l
 | Knowledge | `knowledge-base/` files read before Task 1 (the plan's `Knowledge to load first:`) and every KB file this run changed. `none` is a valid value; an empty cell is not |
 | Deviations | Every departure from the plan, with why |
 | Decisions taken unasked | Numbered, each with its cost if wrong — or "none" |
-| Files changed | Paths, grouped by task |
+| Files changed | Paths, grouped by task; any count (commits, files, +/−) comes from `git rev-list --count <base>..HEAD` / `git diff --stat`, never typed (traces to: 2026-09-15 — two report amendments correcting a hand-typed commit count) |
 | Follow-ups | Out-of-scope discoveries — recorded, **not** fixed |
 | Plan | `plans/<slug>-plan.md` — the contract this report answers (consumers discover the plan through this row) |
 

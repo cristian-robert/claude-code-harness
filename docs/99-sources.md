@@ -108,10 +108,10 @@ engineeringexec.tech/posts/ai-scrum-can-proven-agile-principles-work-for-agent-t
 ## 18 · coleam00/skills — github.com/coleam00/skills (audited 2026-09-01, latest commit 2026-08-26)
 The packaged "AI Layer" from Medin's course — 33 skills + 6 Python hooks. Audited per ADR-020; most at parity with or exceeded by `template/` (expected: PHE distilled sources 5–7 from the same author). What it contributed: the env-dump + quote-fold guard coverage and its measured split-quote bypass; the stop-gate tamper check with its documented escape (agent rewrote a failing `2+2==5` test to finish — "argued past, through a door the guarantee itself held open"); the drift axis (wrong rules mislead; pruning only catches rules that stopped earning); the denied-tool-in-headless silent failure. Declined with reasons in docs/00 anti-scope. Its hooks README cites arXiv 2604.25850 (a self-written 9KB system prompt swapped in ALONE scored below baseline; the measured gains came from enforcement layers) — corroborates ADR-005/006.
 
-## Model policy (verified 2026-07-12)
+## Model policy (verified 2026-07-12; IDs and reasoning levels re-verified 2026-09-05 — `cli/model-tiers.js`)
 Evidence base for `docs/04-model-policy.md` and `.claude/harness.json` → `models`. Every model ID, price, window, and effort level in those two files was read from a primary source on this date — none of it from model memory, which predates the gpt-5.6 family (shipped 2026-07-09). The doctrine those numbers produced lives in docs/04; only the provenance is kept here.
 - **`openai/codex`** → `codex-rs/models-manager/models.json` — the shipping catalog: the three gpt-5.6 IDs (`-sol` / `-terra` / `-luna`), `context_window: 372000`, `supported_reasoning_levels`, and the effort-default contradiction docs/04 pins "never inherit effort" against. `codex-rs/model-provider/src/models_endpoint.rs` is the catalog endpoint `/models` re-verifies against.
-- **developers.openai.com/api/docs/pricing** — per-1M in/cached-in/out: sol $5/$0.50/$30 · terra $2.50/$0.25/$15 · luna $1/$0.10/$6. Cross-checked against the installed `codex-cli 0.144.0`.
+- **developers.openai.com/api/docs/pricing** — per-1M in/cached-in/out: sol $5/$0.50/$30 · terra $2.50/$0.25/$15 · luna $1/$0.10/$6. Cross-checked against the installed `codex-cli 0.144.0` (prices) and `0.144.3` (IDs, 2026-09-05).
 - **Anthropic model reference** — Claude per-1M in/out (opus-4-8 $5/$25 · sonnet-5 $3/$15 · haiku-4-5 $1/$5 · fable-5 $10/$50).
 
 ## Claims we deliberately labeled as unverified
